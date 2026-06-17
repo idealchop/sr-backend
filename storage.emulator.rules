@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// Emulator-only permissive rules for local API/file tests.
+// Production Storage rules (canonical): smartrefill/frontend/storage.rules
+// Deploy: DEPLOY_STORAGE_RULES=1 ./deploy.sh (from smartrefill/backend or sales-portal/backend)
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if true;
+    }
+  }
+}

@@ -1,0 +1,140 @@
+import { db } from "../../config/firebase-admin";
+import { logger } from "../observability/logging/logger";
+import { CustomerService } from "../customers/customer-service";
+import type { RawSubmissionType } from "../portal/raw-submission-types";
+import { resolveNotificationPreferencesFromUiConfig } from "../../utils/notification-preferences";
+import {
+  deleteOwnerDevicesByTokens,
+  listOwnerDevices,
+} from "./owner-device-service";
+import { sendFcmMulticast } from "./fcm-push-service";
+
+const REVIEW_SUBMISSION_TYPES = new Set<RawSubmissionType>([
+  "PLACE_ORDER",
+  "REQUEST_COLLECTION",
+  "MARK_TX_COMPLETE",
+  "COMPLETE_TX",
+  "PORTAL_PAY_BALANCE",
+]);
+
+export type NewOrderPushCopy = {
+  title: string;
+  body: string;
+};
+
+export function submissionTypeNeedsReviewPush(
+  submissionType: RawSubmissionType,
+): boolean {
+  return REVIEW_SUBMISSION_TYPES.has(submissionType);
+}
+
+export function buildNewOrderPushCopy(
+  submissionType: RawSubmissionType,
+  customerName: string,
+  referenceId: string,
+): NewOrderPushCopy {
+  const name = customerName.trim() || "A customer";
+  const ref = referenceId.trim();
+
+  switch (submissionType) {
+  case "REQUEST_COLLECTION":
+    return {
+      title: "Collection request",
+      body: `${name} submitted a collection request${ref ? ` (${ref})` : ""}.`,
+    };
+  case "PORTAL_PAY_BALANCE":
+    return {
+      title: "Portal payment",
+      body: `${name} sent a balance payment${ref ? ` (${ref})` : ""}.`,
+    };
+  case "MARK_TX_COMPLETE":
+  case "COMPLETE_TX":
+    return {
+      title: "Order completion",
+      body: `${name} marked an order complete${ref ? ` (${ref})` : ""}.`,
+    };
+  default:
+    return {
+      title: "New portal order",
+      body: `${name} placed an order${ref ? ` (${ref})` : ""}.`,
+    };
+  }
+}
+
+/**
+ * Sends immediate FCM when a reviewable raw_submission is created (portal / future channels).
+ * @param {string} businessId Business that owns the submission.
+ * @param {object} opts Submission context for copy and routing.
+ * @param {string} opts.submissionId Raw submission document id.
+ * @param {RawSubmissionType} opts.submissionType Portal submission type.
+ * @param {string} opts.customerId Customer linked to the submission.
+ * @param {string} opts.referenceId Human-readable reference for push body.
+ * @return {Promise<{ sent: boolean }>} Whether at least one device received the push.
+ */
+export async function sendNewOrderPushForSubmission(
+  businessId: string,
+  opts: {
+    submissionId: string;
+    submissionType: RawSubmissionType;
+    customerId: string;
+    referenceId: string;
+  },
+): Promise<{ sent: boolean }> {
+  if (!submissionTypeNeedsReviewPush(opts.submissionType)) {
+    return { sent: false };
+  }
+
+  const businessDoc = await db.collection("businesses").doc(businessId).get();
+  if (!businessDoc.exists) return { sent: false };
+
+  const uiConfig = (businessDoc.data()?.uiConfig ?? {}) as Record<string, unknown>;
+  const prefs = resolveNotificationPreferencesFromUiConfig(uiConfig);
+  if (prefs.newOrderPushEnabled !== true) {
+    return { sent: false };
+  }
+
+  const [customer, devices] = await Promise.all([
+    CustomerService.getCustomer(businessId, opts.customerId),
+    listOwnerDevices(businessId),
+  ]);
+
+  const tokens = devices.map((d) => d.fcmToken).filter(Boolean);
+  if (tokens.length === 0) {
+    return { sent: false };
+  }
+
+  const copy = buildNewOrderPushCopy(
+    opts.submissionType,
+    customer?.name ?? "Customer",
+    opts.referenceId,
+  );
+
+  const { successCount, invalidTokens } = await sendFcmMulticast(tokens, {
+    title: copy.title,
+    body: copy.body,
+    data: {
+      type: "new_order",
+      businessId,
+      submissionId: opts.submissionId,
+      referenceId: opts.referenceId,
+      deepLink: "/dashboard?proactive=orders",
+    },
+  });
+
+  if (invalidTokens.length > 0) {
+    await deleteOwnerDevicesByTokens(businessId, invalidTokens);
+  }
+
+  if (successCount <= 0) {
+    return { sent: false };
+  }
+
+  logger.info("new_order push sent", {
+    businessId,
+    submissionId: opts.submissionId,
+    submissionType: opts.submissionType,
+    successCount,
+  });
+
+  return { sent: true };
+}

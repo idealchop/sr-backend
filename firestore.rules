@@ -1,0 +1,312 @@
+rules_version = '2';
+
+// riverdb — shared Firestore security rules (SmartRefill V3 + Sales Portal)
+//
+// Canonical file (edit here): smartrefill/frontend/firestore.rules
+//
+// Keep copies in sync:
+//   cd smartrefill/backend && npm run sync:firestore
+//   cd sales-portal/backend && npm run sync:firestore
+//   cd sales-portal/backend && npm run check:firestore
+//
+// Deploy production:
+//   cd smartrefill/frontend && firebase deploy --only firestore:rules,firestore:indexes
+//
+// Architecture:
+//   - SmartRefill frontend: client SDK — tenant-scoped reads on allowlisted paths.
+//   - Sales Portal frontend: client SDK — sales collections (proposals, clients, …).
+//   - Cloud Functions (Admin SDK): all privileged writes; rules do not apply.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // Shared helpers
+    // -------------------------------------------------------------------------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // -------------------------------------------------------------------------
+    // SmartRefill helpers
+    // -------------------------------------------------------------------------
+
+    function businessDoc(businessId) {
+      return get(/databases/$(database)/documents/businesses/$(businessId));
+    }
+
+    function memberDoc(businessId) {
+      return get(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid));
+    }
+
+    function memberExists(businessId) {
+      return exists(/databases/$(database)/documents/businesses/$(businessId)/members/$(request.auth.uid));
+    }
+
+    function isBusinessOwner(businessId) {
+      return isSignedIn() && businessDoc(businessId).data.ownerId == request.auth.uid;
+    }
+
+    function isActiveMember(businessId) {
+      return isSignedIn()
+        && memberExists(businessId)
+        && memberDoc(businessId).data.isActive != false;
+    }
+
+    function canAccessBusiness(businessId) {
+      return isBusinessOwner(businessId) || isActiveMember(businessId);
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.superadmin == true;
+    }
+
+    // Client listeners (workspace-operational-provider, inventory, riders, team hub).
+    function isClientReadableSubcollection(name) {
+      return name in [
+        'customers',
+        'inventory_items',
+        'transactions',
+        'raw_submissions',
+        'riders',
+        'members',
+        'team_invites',
+      ];
+    }
+
+    // -------------------------------------------------------------------------
+    // Sales Portal helpers
+    // -------------------------------------------------------------------------
+
+    function isSalesPortalAdmin() {
+      return request.auth.token.email == 'admin@smartrefill.io';
+    }
+
+    function isSalesManager() {
+      return get(/databases/$(database)/documents/sales/$(request.auth.uid)).data.role == 'manager';
+    }
+
+    function isSalesManagerOf(userId) {
+      let managerProfile = get(/databases/$(database)/documents/sales/$(request.auth.uid)).data;
+      let userProfile = get(/databases/$(database)/documents/sales/$(userId)).data;
+      let managerTeamName = managerProfile.location + " (" + managerProfile.displayName + ")";
+      return userProfile.team == managerTeamName;
+    }
+
+    // -------------------------------------------------------------------------
+    // users/{uid} — SmartRefill profile + Sales Portal notifications
+    // -------------------------------------------------------------------------
+
+    match /users/{userId} {
+      allow read: if isSelf(userId) || isSuperAdmin();
+      allow write: if false;
+
+      // Sales Portal — in-app notifications (must be before the catch-all below).
+      match /notifications/{notificationId} {
+        allow read, write: if isSelf(userId);
+      }
+
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // businesses/{businessId} — SmartRefill tenant root + operational reads
+    // -------------------------------------------------------------------------
+
+    match /businesses/{businessId} {
+      allow read: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid
+        || canAccessBusiness(businessId)
+      );
+      allow write: if false;
+
+      match /{subcollection}/{docId} {
+        allow read: if canAccessBusiness(businessId)
+          && isClientReadableSubcollection(subcollection);
+        allow write: if false;
+      }
+
+      match /team_chats/{conversationId} {
+        allow read: if canAccessBusiness(businessId)
+          && request.auth.uid in resource.data.participantIds;
+        allow write: if false;
+
+        match /messages/{messageId} {
+          allow read: if canAccessBusiness(businessId)
+            && request.auth.uid in get(
+              /databases/$(database)/documents/businesses/$(businessId)/team_chats/$(conversationId)
+            ).data.participantIds;
+          allow write: if false;
+        }
+      }
+
+      match /team_presence/{userId} {
+        allow read: if canAccessBusiness(businessId);
+        allow create, update: if canAccessBusiness(businessId)
+          && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(['lastSeenAt'])
+          && request.resource.data.lastSeenAt is timestamp;
+        allow delete: if false;
+      }
+
+      // All other subcollections (audit_logs, subscriptions, payment_info,
+      // notifications, chat_sessions, ai_tool_runs, expenses, …) — API / Admin SDK only.
+      match /{subcollection}/{docId}/{nested=**} {
+        allow read, write: if false;
+      }
+    }
+
+    // Workspace resolve: collectionGroup('members').where('userId', '==', uid)
+    match /{path=**}/members/{memberId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Platform catalog — signed-in read
+    // -------------------------------------------------------------------------
+
+    match /apps/{appId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /subscription_plans/{planId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /subscription_addons/{addonId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /vouchers_affiliates/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Sales Portal — sales reps, proposals, clients, commissions
+    // -------------------------------------------------------------------------
+
+    match /sales/{userId} {
+      // Peer profiles for team lists and proposal rep names.
+      allow read: if isSignedIn();
+      allow create, update: if isSelf(userId) || isSalesPortalAdmin();
+
+      match /qr_campaigns/{campaignId} {
+        allow read, write: if isSignedIn() && isSelf(userId) && isSalesManager();
+      }
+    }
+
+    match /counters/{counterId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /sales_materials/{materialId} {
+      allow get: if true;
+      allow list, write: if isSalesPortalAdmin();
+    }
+
+    match /shareable_links/{linkId} {
+      allow get: if true;
+      allow create: if isSignedIn();
+      allow list, update, delete: if false;
+    }
+
+    match /proposals/{proposalId} {
+      allow read: if isSignedIn()
+        || (
+          exists(/databases/$(database)/documents/shareable_links/{linkId})
+          && get(/databases/$(database)/documents/shareable_links/{linkId}).data.proposalId == proposalId
+        );
+      allow list: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || isSalesPortalAdmin() || isSalesManager());
+      allow delete: if false;
+    }
+
+    match /commissions/{commissionId} {
+      allow read: if isSignedIn()
+        && (
+          isSalesPortalAdmin()
+          || resource.data.userId == request.auth.uid
+          || (isSalesManager() && isSalesManagerOf(resource.data.userId))
+        );
+      allow create: if isSignedIn();
+      allow update, delete: if isSalesPortalAdmin()
+        || resource.data.userId == request.auth.uid;
+    }
+
+    match /clients/{clientId} {
+      allow read: if isSignedIn()
+        || (
+          exists(/databases/$(database)/documents/shareable_links/{linkId})
+          && get(/databases/$(database)/documents/shareable_links/{linkId}).data.clientId == clientId
+        );
+      allow list: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || isSalesPortalAdmin() || isSalesManager());
+      allow delete: if false;
+
+      match /remarks/{remarkId} {
+        allow read, create: if isSignedIn();
+      }
+
+      match /proposals/{proposalId} {
+        allow read: if isSignedIn()
+          || (
+            exists(/databases/$(database)/documents/shareable_links/{linkId})
+            && get(/databases/$(database)/documents/shareable_links/{linkId}).data.proposalId == proposalId
+            && get(/databases/$(database)/documents/shareable_links/{linkId}).data.clientId == clientId
+          );
+        allow write: if isSignedIn();
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Root collections — API / Admin SDK writes only
+    // -------------------------------------------------------------------------
+
+    match /inquiries/{inquiryId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /apps_feedback/{feedbackId} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
+
+    match /deliveryTrackers/{docId} {
+      allow read, write: if false;
+    }
+
+    match /files/{fileId} {
+      allow read, write: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // DataForge bypass / default deny
+    // -------------------------------------------------------------------------
+
+    match /{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == 'ueDUKLIVdWS4zI7rFsGfQgEZgGj2';
+    }
+  }
+}

@@ -1,0 +1,1572 @@
+{
+  "info": {
+    "_postman_id": "smartrefill-v3-api-1780591201805",
+    "name": "SmartRefill V3 API Gateway",
+    "description": "Auto-generated from OpenAPI 3.0 (npm run docs:generate). GET requests include x-frontend-read-model (firestore-primary, api-fallback, etc.). See smartrefill/frontend/docs/hybrid-read-model.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "API Health Check",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ],
+              "variable": []
+            },
+            "description": "Checks if the Express Gateway is up and detects emulator status."
+          }
+        },
+        {
+          "name": "Sign Up / Register Client Access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/signup",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ],
+              "variable": []
+            },
+            "description": "Registers the authenticated Firebase user into the local database."
+          }
+        },
+        {
+          "name": "Verify Active Auth Session",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "status"
+              ],
+              "variable": []
+            },
+            "description": "Decodes the Firebase token and returns user details.\n\nRead model: api-only"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Business",
+      "item": [
+        {
+          "name": "List Business Tenants",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business"
+              ],
+              "variable": []
+            },
+            "description": "Retrieves all business profiles owned or managed by the authenticated user."
+          }
+        },
+        {
+          "name": "Create a New Business Tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/create",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                "create"
+              ],
+              "variable": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Downtown Refill Hub\",\n  \"address\": \"123 Main St\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Provisions a new business, creating standard collections and initial state."
+          }
+        },
+        {
+          "name": "Get Business Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Business Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"sample_name\",\n  \"address\": \"sample_address\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Submit platform product feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/platform-feedback",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "platform-feedback"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"appId\": \"smartrefill\",\n  \"source\": \"dashboard-profile-popover\",\n  \"rating\": 0,\n  \"feedback\": \"sample_feedback\",\n  \"recommend\": false,\n  \"nextUpdateSuggestion\": \"sample_nextUpdateSuggestion\",\n  \"plan\": \"sample_plan\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Writes a document to root collection apps_feedback (appId smartrefill) and merges businesses/{businessId}.userFeedback. Client SDK cannot read apps_feedback."
+          }
+        },
+        {
+          "name": "Get latest platform feedback for current user",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/platform-feedback/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "platform-feedback",
+                "me"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "description": "Returns the most recent apps_feedback row for this business and authenticated user.\n\nRead model: api-only"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "List Customers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/customers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "customers"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "description": "Returns all customers for the tenant. Dashboard reads Firestore; use this GET for Postman, exports, and API reconcile fallback.\n\nRead model: firestore-primary"
+          }
+        },
+        {
+          "name": "Create Customer Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/customers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "customers"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Alice Johnson\",\n  \"phone\": \"+15550199\",\n  \"address\": \"Suite 4B\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Single Customer Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/customers/:customerId/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "customers",
+                ":customerId",
+                "stats"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                },
+                {
+                  "key": "customerId",
+                  "value": "{{customerId}}",
+                  "description": "Path variable: customerId"
+                }
+              ]
+            },
+            "description": "Aggregated stats for one customer (profile dialog).\n\nRead model: api-only"
+          }
+        },
+        {
+          "name": "Customer Aggregate Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/customers/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "customers",
+                "stats"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "description": "Read model: api-only"
+          }
+        },
+        {
+          "name": "Get Customer Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/customers/:customerId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "customers",
+                ":customerId"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                },
+                {
+                  "key": "customerId",
+                  "value": "{{customerId}}",
+                  "description": "Path variable: customerId"
+                }
+              ]
+            },
+            "description": "Single customer record. Dashboard uses Firestore; GET used for cold-start fallback (e.g. statement print).\n\nRead model: api-fallback"
+          }
+        },
+        {
+          "name": "Update Customer Details",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/customers/:customerId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "customers",
+                ":customerId"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                },
+                {
+                  "key": "customerId",
+                  "value": "{{customerId}}",
+                  "description": "Path variable: customerId"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"sample_name\",\n  \"phone\": \"sample_phone\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete Customer",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/customers/:customerId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "customers",
+                ":customerId"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                },
+                {
+                  "key": "customerId",
+                  "value": "{{customerId}}",
+                  "description": "Path variable: customerId"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "item": [
+        {
+          "name": "List Transactions Ledger",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/transactions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "transactions"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "description": "Lists ledger entries. Optional query customerId filters by customer. Dashboard reads Firestore; use for Postman, integrations, and reconcile fallback.\n\nRead model: firestore-primary"
+          }
+        },
+        {
+          "name": "Record Ledger Mutation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/transactions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "transactions"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"sample_customerId\",\n  \"type\": \"sale\",\n  \"amount\": 0,\n  \"waterRefills\": 0,\n  \"paymentAmount\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Processes water sale refills, cash payments, container deposits, or balance updates."
+          }
+        },
+        {
+          "name": "Transaction Audit History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/transactions/:id/history",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "transactions",
+                ":id",
+                "history"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                },
+                {
+                  "key": "id",
+                  "value": "{{id}}",
+                  "description": "Path variable: id"
+                }
+              ]
+            },
+            "description": "Immutable audit log for a transaction (ledger detail panel).\n\nRead model: api-only"
+          }
+        },
+        {
+          "name": "Get Transaction Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/transactions/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "transactions",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                },
+                {
+                  "key": "id",
+                  "value": "{{id}}",
+                  "description": "Path variable: id"
+                }
+              ]
+            },
+            "description": "Single transaction. Dashboard resolves from Firestore; GET used when linked row missing from snapshot.\n\nRead model: api-fallback"
+          }
+        },
+        {
+          "name": "Amend Transaction Data",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/transactions/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "transactions",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                },
+                {
+                  "key": "id",
+                  "value": "{{id}}",
+                  "description": "Path variable: id"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deliveryStatus\": \"pending\",\n  \"riderId\": \"sample_riderId\",\n  \"notes\": \"sample_notes\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Updates delivery status, payments, line items, etc. Server sets `arrivedAt` when status first becomes `in-transit`, and `deliveredAt` when first `delivered`/`collected`/`completed`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Deliveries",
+      "item": [
+        {
+          "name": "List Delivery Routes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/deliveries",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "deliveries"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "description": "Read model: hybrid-gated"
+          }
+        },
+        {
+          "name": "Provision Delivery Route Sheet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/deliveries",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "deliveries"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"riderId\": \"sample_riderId\",\n  \"transactionIds\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Share Public Route Tracker",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/deliveries/share",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "deliveries",
+                "share"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "description": "Creates a `deliveryTrackers` document and returns its id for `/c?id=…`. Include `riderId` in the body for live rider GPS on the public map."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Riders",
+      "item": [
+        {
+          "name": "List Business Riders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/riders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "riders"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "description": "Read model: hybrid-gated"
+          }
+        },
+        {
+          "name": "Create Rider Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/riders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "riders"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"sample_name\",\n  \"phone\": \"sample_phone\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get Rider Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/riders/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "riders",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                },
+                {
+                  "key": "id",
+                  "value": "{{id}}",
+                  "description": "Path variable: id"
+                }
+              ]
+            },
+            "description": "Read model: hybrid-gated"
+          }
+        },
+        {
+          "name": "Update Rider Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/riders/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "riders",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                },
+                {
+                  "key": "id",
+                  "value": "{{id}}",
+                  "description": "Path variable: id"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Rider Live GPS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/riders/:id/location",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "riders",
+                ":id",
+                "location"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                },
+                {
+                  "key": "id",
+                  "value": "{{id}}",
+                  "description": "Path variable: id"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 14.4081,\n  \"longitude\": 121.0415,\n  \"accuracy\": 0,\n  \"heading\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Persists `lastLocation` on `businesses/{businessId}/riders/{id}` for My Area, customer track order, and shared route `/c`. Caller must be the linked rider, owner, or admin."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "item": [
+        {
+          "name": "List Inventory Items",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/inventory/:businessId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inventory",
+                ":businessId"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "description": "Station product catalog. Dashboard: one gated load via InventoryProvider (shared across page and dialogs).\n\nRead model: hybrid-gated"
+          }
+        },
+        {
+          "name": "Create Inventory Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/inventory/:businessId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "inventory",
+                ":businessId"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Submissions",
+      "item": [
+        {
+          "name": "List Pending Portal Submissions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/raw-submissions/pending",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "raw-submissions",
+                "pending"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "description": "Pending_review queue. Dashboard reads Firestore; GET for Postman and integrations.\n\nRead model: firestore-primary"
+          }
+        },
+        {
+          "name": "Get Submission Detail (Triage)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/business/:businessId/raw-submissions/:submissionId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "business",
+                ":businessId",
+                "raw-submissions",
+                ":submissionId"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                },
+                {
+                  "key": "submissionId",
+                  "value": "{{submissionId}}",
+                  "description": "Path variable: submissionId"
+                }
+              ]
+            },
+            "description": "Submission payload, linked customer, and candidate matches for triage.\n\nRead model: api-only"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "List Notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/notifications",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications"
+              ],
+              "variable": []
+            },
+            "description": "In-app feed; dashboard polls ~60s with jitter.\n\nRead model: api-primary"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Subscriptions",
+      "item": [
+        {
+          "name": "Subscription Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/subscriptions/:businessId/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "subscriptions",
+                ":businessId",
+                "status"
+              ],
+              "variable": [
+                {
+                  "key": "businessId",
+                  "value": "{{businessId}}",
+                  "description": "Path variable: businessId"
+                }
+              ]
+            },
+            "description": "Read model: api-only"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Public",
+      "item": [
+        {
+          "name": "Search Track Orders (Customer Portal)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/public/portal/track/search",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "public",
+                "portal",
+                "track",
+                "search"
+              ],
+              "variable": []
+            },
+            "description": "Lookup open orders when the customer does not know their reference ID. Query `b` = businessId; provide any one of `name`, `email`, `company`, `phone` (each min 2 chars, OR logic). Includes pending `raw_submissions` and open transactions."
+          }
+        },
+        {
+          "name": "Track Order (Customer Portal)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/public/portal/track/:referenceId",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "public",
+                "portal",
+                "track",
+                ":referenceId"
+              ],
+              "variable": [
+                {
+                  "key": "referenceId",
+                  "value": "{{referenceId}}",
+                  "description": "Path variable: referenceId"
+                }
+              ]
+            },
+            "description": "Public order status for `/order` track tab. Query `b` = businessId. Returns rider location (in-transit), destination, ETAs fields, and other-active-stop count."
+          }
+        },
+        {
+          "name": "Get Shared Route Tracker",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/public/shared-route/:id",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "public",
+                "shared-route",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{id}}",
+                  "description": "Path variable: id"
+                }
+              ]
+            },
+            "description": "Public manifest for `/c?id=…`. Merges live rider GPS and per-stop `arrivedAt`/`deliveredAt` from transactions."
+          }
+        }
+      ]
+    }
+  ]
+}

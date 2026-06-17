@@ -1,0 +1,68 @@
+rules_version = '2';
+
+// smartrefill-singapore — shared Storage security rules (SmartRefill V3 + Sales Portal)
+//
+// Canonical file (edit here): smartrefill/frontend/storage.rules
+//
+// Sync copies to smartrefill/backend + sales-portal/backend:
+//   cd smartrefill/backend && npm run sync:firestore
+//   cd sales-portal/backend && npm run sync:firestore
+//
+// Verify all copies match:
+//   cd sales-portal/backend && npm run check:firestore
+//
+// SmartRefill uploads: POST /files/upload (Admin SDK) — client SDK writes denied.
+// Sales Portal avatars: salesPortalApi uploadUserAvatar (Admin SDK).
+// Legacy Sales Portal client uploads (payment proofs, marketing mats) remain until API migration.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // --- SmartRefill API uploads (FileService.uploadImage) ---
+    // {parentId}/images/{category}/{timestamp}_{name}-{variant}.webp
+    match /{parentId}/images/{category}/{fileName} {
+      allow read;
+      allow write: if false;
+    }
+
+    // --- SmartRefill legacy paths (read-only) ---
+    match /users/{userId}/{allPaths=**} {
+      allow read;
+      allow write: if false;
+    }
+
+    match /partner_applications/{userId}/{allPaths=**} {
+      allow read;
+      allow write: if false;
+    }
+
+    match /public_assets/{allPaths=**} {
+      allow read;
+      allow write: if false;
+    }
+
+    // --- Sales Portal — user avatars (salesPortalApi Admin SDK) ---
+    match /user-avatars/{userId}/{allPaths=**} {
+      allow read;
+      allow write: if false;
+    }
+
+    // --- Sales Portal — marketing materials (legacy client upload) ---
+    match /sales_portal/marketing_mats/{allPaths=**} {
+      allow read;
+      allow write: if request.auth != null;
+    }
+
+    // --- Shared brand assets ---
+    match /Brand%20Logo/{allPaths=**} {
+      allow read;
+      allow write: if false;
+    }
+
+    // --- Sales Portal — proposal payment proofs (legacy client upload) ---
+    match /payment_proofs/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+  }
+}

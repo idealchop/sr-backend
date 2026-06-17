@@ -1,0 +1,5 @@
+lib/
+node_modules/
+.eslintrc.js
+playwright.config.ts
+vitest.config.ts
