@@ -125,6 +125,18 @@ export function isManilaMonday(now = new Date()): boolean {
 
 /**
  * @param {Date} now Current instant.
+ * @return {boolean} True when the calendar day is Sunday in Asia/Manila.
+ */
+export function isManilaSunday(now = new Date()): boolean {
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: PHILIPPINE_TIMEZONE,
+    weekday: "long",
+  }).format(now);
+  return weekday === "Sunday";
+}
+
+/**
+ * @param {Date} now Current instant.
  * @return {string} Calendar date `yyyy-MM-dd` in Asia/Manila.
  */
 export function manilaDateKey(now = new Date()): string {

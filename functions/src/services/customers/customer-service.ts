@@ -19,6 +19,11 @@ export interface Customer {
   email?: string;
   /** Opt-in from portal track completion for order email updates. */
   portalEmailNotifications?: boolean;
+  /** NT-35 / NT-36 — SMS transaction status updates. */
+  portalSmsOptIn?: boolean;
+  /** NT-34 / NT-35 — Web Push on portal track page. */
+  portalWebPushEnabled?: boolean;
+  portalWebPushTokens?: string[];
   phone: string;
   address: string;
   latitude?: number;

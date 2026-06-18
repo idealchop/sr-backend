@@ -28,7 +28,6 @@ export function normalizeProductionShiftCalendarDate(
 
 export function normalizeNonNegativeNumber(
   raw: unknown,
-  _fallback = 0,
 ): number | null {
   const n = Number(raw);
   if (!Number.isFinite(n) || n < 0) return null;
@@ -61,7 +60,7 @@ export function parseProductionShiftInput(
     return { ok: false, error: "gallonsProduced must be a non-negative number" };
   }
 
-  const gallonsRejected = normalizeNonNegativeNumber(body.gallonsRejected ?? 0, 0);
+  const gallonsRejected = normalizeNonNegativeNumber(body.gallonsRejected ?? 0);
   if (gallonsRejected == null) {
     return { ok: false, error: "gallonsRejected must be a non-negative number" };
   }

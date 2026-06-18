@@ -1,18 +1,15 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
-import { db } from "../config/firebase-admin";
 import {
   isMorningAlertHour,
   listBusinessesForMorningAlerts,
 } from "../services/notifications/morning-alerts-business-list";
-import { runAutoMorningBriefForBusiness } from
-  "../services/notifications/morning-brief-scheduler-service";
-import { sendDormantDigestEmailForBusiness } from
-  "../services/notifications/dormant-digest-email-service";
+import { runProactiveAlertsForBusiness } from
+  "../services/notifications/proactive-alert-runner-service";
 import { manilaHour } from "../utils/philippine-datetime";
 
 /**
- * BL-07 + BL-16 — hourly morning owner intelligence (AI brief + weekly email).
+ * BL-07 + BL-16 + NT-70 — hourly morning owner intelligence via unified alert runner.
  */
 export const morningOwnerIntelligence = onSchedule(
   {
@@ -34,31 +31,30 @@ export const morningOwnerIntelligence = onSchedule(
     const businessIds = await listBusinessesForMorningAlerts();
     let briefsRun = 0;
     let emailsSent = 0;
+    let morningBriefEmailsSent = 0;
+    let paymentReminderEmailsSent = 0;
+    let maintenanceEmailsSent = 0;
+    let collectionsPulseRun = 0;
 
     for (const businessId of businessIds) {
       try {
-        let briefSummary: string | null = null;
-
-        const briefResult = await runAutoMorningBriefForBusiness(businessId);
-        if (briefResult.ran && briefResult.runId) {
-          briefsRun += 1;
-          const runDoc = await db
-            .collection("businesses")
-            .doc(businessId)
-            .collection("ai_tool_runs")
-            .doc(briefResult.runId)
-            .get();
-          const summary = runDoc.data()?.summary;
-          if (typeof summary === "string" && summary.trim()) {
-            briefSummary = summary.trim();
+        const results = await runProactiveAlertsForBusiness(businessId);
+        for (const r of results) {
+          if (r.contributorId === "morning_brief" && r.sent) briefsRun += 1;
+          if (r.contributorId === "dormant_email" && r.sent) emailsSent += 1;
+          if (r.contributorId === "morning_brief_email" && r.sent) {
+            morningBriefEmailsSent += 1;
+          }
+          if (r.contributorId === "payment_reminder_email" && r.sent) {
+            paymentReminderEmailsSent += 1;
+          }
+          if (r.contributorId === "maintenance_overdue_email" && r.sent) {
+            maintenanceEmailsSent += 1;
+          }
+          if (r.contributorId === "collections_pulse" && r.sent) {
+            collectionsPulseRun += 1;
           }
         }
-
-        const emailResult = await sendDormantDigestEmailForBusiness(
-          businessId,
-          briefSummary,
-        );
-        if (emailResult.sent) emailsSent += 1;
       } catch (error) {
         logger.error("morningOwnerIntelligence business failed", {
           businessId,
@@ -72,6 +68,10 @@ export const morningOwnerIntelligence = onSchedule(
       scanned: businessIds.length,
       briefsRun,
       emailsSent,
+      morningBriefEmailsSent,
+      paymentReminderEmailsSent,
+      maintenanceEmailsSent,
+      collectionsPulseRun,
     });
   },
 );

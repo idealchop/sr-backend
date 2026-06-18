@@ -16,4 +16,15 @@ describe("product-documentation-knowledge", () => {
     expect(entry?.content).toMatch(/Facebook|Messenger|Instagram/i);
     expect(entry?.content).toMatch(/Safari|Chrome/i);
   });
+
+  it("documents River AI vs profile Chat support entry points", () => {
+    expect(SUPPORT_PRODUCT_DOCUMENTATION).toMatch(/Header River AI/i);
+    expect(SUPPORT_PRODUCT_DOCUMENTATION).toMatch(/Chat support/i);
+
+    const entry = SUPPORT_PRODUCT_DOC_ENTRIES.find(
+      (row) => row.id === "doc-river-ai-vs-live-support",
+    );
+    expect(entry).toBeDefined();
+    expect(entry?.content).toMatch(/Profile menu/i);
+  });
 });

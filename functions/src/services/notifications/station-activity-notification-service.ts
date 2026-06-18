@@ -7,6 +7,7 @@ import {
   NotificationService,
   type NotificationPayload,
 } from "./notification-service";
+import { maybeSendCustomerTxnNotification } from "../portal/customer-transaction-notifier";
 
 type NotifyType = NotificationPayload["type"];
 
@@ -354,6 +355,18 @@ export async function notifyTransactionUpdated(
     }
 
     await notifyManagement(businessId, { title, message, type, metadata: meta });
+
+    void maybeSendCustomerTxnNotification({
+      businessId,
+      transaction: { ...after, id: transactionId },
+      beforeStatus: before.deliveryStatus,
+    }).catch((err) => {
+      logger.warn("customer_txn_notification_failed", {
+        businessId,
+        transactionId,
+        err,
+      });
+    });
   }
 
   if (riderChanged && after.riderId) {

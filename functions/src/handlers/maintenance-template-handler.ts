@@ -3,6 +3,7 @@ import { logger } from "firebase-functions";
 import { MaintenanceTemplateService } from "../services/plant/maintenance-template-service";
 import { summarizeMaintenanceOverdue } from "../services/plant/maintenance-template-utils";
 import { checkBusinessAccess } from "../utils/auth-utils";
+import { ensureStaffQrToken } from "../utils/plant-staff-token";
 
 export const listMaintenanceTemplates = async (req: Request, res: Response) => {
   const { businessId } = req.params;
@@ -35,8 +36,42 @@ export const completeMaintenanceTemplate = async (req: Request, res: Response) =
       return;
     }
 
-    const record = await MaintenanceTemplateService.complete(businessId, templateId);
-    res.json({ data: record });
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const expenseRaw =
+      body.expense && typeof body.expense === "object" ?
+        (body.expense as Record<string, unknown>) :
+        null;
+
+    const result = await MaintenanceTemplateService.complete(
+      businessId,
+      templateId,
+      {
+        userId: user?.uid ?? "",
+        checklistChecked: Array.isArray(body.checklistChecked) ?
+          body.checklistChecked.map((v) => v === true) :
+          undefined,
+        proofUrl:
+          typeof body.proofUrl === "string" && body.proofUrl.trim() ?
+            body.proofUrl.trim() :
+            undefined,
+        notes:
+          typeof body.notes === "string" && body.notes.trim() ?
+            body.notes.trim().slice(0, 500) :
+            undefined,
+        decrementConsumables: body.decrementConsumables === true,
+        expense:
+          expenseRaw && Number(expenseRaw.amount) > 0 ?
+            {
+              amount: Number(expenseRaw.amount),
+              note:
+                typeof expenseRaw.note === "string" ?
+                  expenseRaw.note.trim().slice(0, 200) :
+                  undefined,
+            } :
+            undefined,
+      },
+    );
+    res.json({ data: result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     if (message === "Maintenance template not found") {
@@ -44,6 +79,25 @@ export const completeMaintenanceTemplate = async (req: Request, res: Response) =
       return;
     }
     logger.error(`Error completing maintenance template ${templateId}`, error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getPlantStaffQrToken = async (req: Request, res: Response) => {
+  const { businessId } = req.params;
+  const user = (req as { user?: { uid: string } }).user;
+
+  try {
+    const { hasAccess, role } = await checkBusinessAccess(user?.uid ?? "", businessId);
+    if (!hasAccess || role === "member") {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+
+    const token = await ensureStaffQrToken(businessId);
+    res.json({ data: { token } });
+  } catch (error) {
+    logger.error(`Error resolving staff QR for ${businessId}`, error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };

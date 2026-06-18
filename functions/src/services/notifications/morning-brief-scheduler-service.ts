@@ -12,7 +12,12 @@ export function shouldRunAutoMorningBriefNow(
   now = new Date(),
 ): boolean {
   const prefs = resolveNotificationPreferencesFromUiConfig(uiConfig);
-  if (prefs.autoMorningBriefEnabled !== true) return false;
+  if (
+    prefs.autoMorningBriefEnabled !== true &&
+    prefs.morningBriefEmailEnabled !== true
+  ) {
+    return false;
+  }
   if (manilaHour(now) !== Number(prefs.dormantPushHour)) return false;
   return manilaDateKey(now) !== lastRunDate;
 }

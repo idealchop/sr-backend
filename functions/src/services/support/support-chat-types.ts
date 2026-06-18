@@ -1,3 +1,36 @@
+export type SupportStructuredBadgeTone = "info" | "success" | "warning" | "urgent";
+
+export type SupportStructuredHighlightVariant = "tip" | "warning" | "action" | "note";
+
+export type SupportStructuredStepPriority = "high" | "medium" | "low";
+
+export type SupportStructuredBadge = {
+  label: string;
+  tone?: SupportStructuredBadgeTone;
+};
+
+export type SupportStructuredHighlight = {
+  title: string;
+  body: string;
+  variant?: SupportStructuredHighlightVariant;
+};
+
+export type SupportStructuredStep = {
+  title: string;
+  body?: string;
+  priority?: SupportStructuredStepPriority;
+  tags?: string[];
+};
+
+export type SupportStructuredReply = {
+  sectionLabel?: string;
+  summary: string;
+  badges?: SupportStructuredBadge[];
+  highlights?: SupportStructuredHighlight[];
+  steps?: SupportStructuredStep[];
+  evidence?: string;
+};
+
 export type SupportSessionStatus = "ai_active" | "escalated" | "resolved";
 
 export type SupportMessageRole = "user" | "ai" | "system";
@@ -10,7 +43,7 @@ export type SupportChatSession = {
   subject?: string;
   escalatedAt?: string;
   resolvedAt?: string;
-  closureReason?: "user_resolved" | "inactive_timeout" | "user_away";
+  closureReason?: "user_resolved" | "inactive_timeout" | "user_away" | "daily_rollover";
   feedbackRating?: number;
   feedbackComment?: string;
   feedbackSubmittedAt?: string;
@@ -42,6 +75,7 @@ export type SupportChatMessage = {
     attachments?: SupportMessageAttachment[];
     presencePrompt?: boolean;
     inactiveClose?: boolean;
+    structuredReply?: SupportStructuredReply;
   };
 };
 
@@ -57,6 +91,8 @@ export type SupportAiTurnResult = {
   topicOutOfScope?: boolean;
   /** Short memory of this session for the next turn (issues, names, steps tried). */
   sessionSummary?: string;
+  /** Card-style layout for the dashboard UI. */
+  structured?: SupportStructuredReply;
 };
 
 export type SupportAiKnowledgeDoc = {

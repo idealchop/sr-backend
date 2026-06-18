@@ -15,6 +15,8 @@ import subscriptionRoutes from "./routes/subscription-routes";
 import inventoryRoutes from "./routes/inventory-routes";
 import productionShiftRoutes from "./routes/production-shift-routes";
 import maintenanceTemplateRoutes from "./routes/maintenance-template-routes";
+import waterQualityLogRoutes from "./routes/water-quality-log-routes";
+import plantOpsRoutes from "./routes/plant-ops-routes";
 import fileRoutes from "./routes/file-routes";
 import publicRoutes from "./routes/public-routes";
 
@@ -57,6 +59,8 @@ app.use("/subscriptions", subscriptionRoutes);
 app.use("/inventory", inventoryRoutes);
 app.use("/plant/production-shifts", productionShiftRoutes);
 app.use("/plant/maintenance-templates", maintenanceTemplateRoutes);
+app.use("/plant/water-quality", waterQualityLogRoutes);
+app.use("/plant", plantOpsRoutes);
 app.use("/files", fileRoutes);
 app.use("/public", publicRoutes);
 
@@ -99,4 +103,6 @@ export { backfillCustomerLastFulfilled } from "./jobs/backfill-customer-last-ful
 export { dormantDigestNotification } from "./jobs/dormant-digest-notification";
 export { morningOwnerIntelligence } from "./jobs/morning-owner-intelligence";
 export { proactiveInsightPushNotification } from "./jobs/proactive-insight-push-notification";
+export { pmRecurrenceScheduler } from "./jobs/pm-recurrence-scheduler";
+export { ownerDataWarehouseExport } from "./jobs/owner-data-warehouse-export";
 export { onSubscriptionUpdated } from "./triggers/subscription-triggers";

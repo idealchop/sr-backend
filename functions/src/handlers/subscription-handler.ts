@@ -1002,6 +1002,30 @@ export const seedSubscriptionCatalog = async (req: Request, res: Response) => {
     );
 
     batch.set(
+      db.collection("subscription_addons").doc("addon_ext_business"),
+      {
+        code: "EXT_BUSINESS",
+        name: "Additional business",
+        description:
+          "Add another water refilling station to your account. Unlocks Owner hub rollup and station clone.",
+        price: 990,
+        unit: 1,
+        currency: "PHP",
+        billingModel: "recurring",
+        billingInterval: "monthly",
+        isActive: true,
+        sortOrder: 30,
+        featureKey: "extra_business",
+        extendsPlanLimitation: "extra_business",
+        applicablePlanCodes: ["pro", "scale", "enterprise"],
+        maxUnitsPerBusiness: 10,
+        createdAt: ts,
+        updatedAt: ts,
+      },
+      { merge: true },
+    );
+
+    batch.set(
       db.collection("vouchers_affiliates").doc("voucher_discount100"),
       {
         kind: "voucher",

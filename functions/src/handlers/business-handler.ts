@@ -544,11 +544,13 @@ export const updateBusinessUIConfig = async (req: Request, res: Response) => {
     const incoming = (uiConfig || {}) as Record<string, unknown>;
     const merged = mergeUiConfigPatch(oldConfig, incoming);
 
-    await db.collection("businesses").doc(businessId).update({
+    const updatePayload: Record<string, unknown> = {
       uiConfig: merged,
       ownerMorningAlertsEnabled: resolveOwnerMorningAlertsEnabled(merged),
       updatedAt: FieldValue.serverTimestamp(),
-    });
+    };
+
+    await db.collection("businesses").doc(businessId).update(updatePayload);
 
     logAuditEvent(
       "BUSINESS_UI_UPDATED",

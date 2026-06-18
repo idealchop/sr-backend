@@ -26,6 +26,7 @@ import teamHubRoutes from "./team-hub-routes";
 import supportRoutes from "./support-routes";
 import aiToolRoutes from "./ai-tool-routes";
 import proactiveScheduleWeekRoutes from "./proactive-schedule-week-routes";
+import scaleRoutes from "./scale-routes";
 import ownerDeviceRoutes from "./owner-device-routes";
 import analyticsRoutes from "./analytics-routes";
 import globalAnalyticsRoutes from "./global-analytics-routes";
@@ -104,6 +105,12 @@ router.use("/:businessId/deliveries", deliveryRoutes);
 router.use("/:businessId/raw-submissions", rawSubmissionRoutes);
 router.use("/:businessId/ai-tools", aiToolRoutes);
 router.use("/:businessId/proactive-schedule-week", proactiveScheduleWeekRoutes);
+router.use(
+  "/:businessId/scale",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  scaleRoutes,
+);
 router.use(
   "/:businessId/owner-devices",
   ownerDeviceRoutes,

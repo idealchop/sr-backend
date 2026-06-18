@@ -63,4 +63,24 @@ describe("subscription-addon-limit-boosts", () => {
     expect(merged?.aiToolsMonthlyMax).toBe(520);
     expect(merged?.transactionsDailyMax).toBe(100);
   });
+
+  it("sums extra business add-on slots", () => {
+    const catalog = buildAddonCatalogLookup([
+      {
+        id: "addon_ext_business",
+        code: "EXT_BUSINESS",
+        extendsPlanLimitation: "extra_business",
+        unit: 1,
+      },
+    ]);
+
+    const boosts = resolveAddonLimitBoostsFromLines(
+      {
+        addonLineItems: [{ addonId: "addon_ext_business", quantity: 2 }],
+      },
+      catalog,
+    );
+
+    expect(boosts.extraBusiness).toBe(2);
+  });
 });

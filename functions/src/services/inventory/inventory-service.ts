@@ -479,6 +479,15 @@ export class InventoryService {
           item.stock.unit || "units",
           item.id,
         );
+        const { maybeSendLowStockInstantPush } = await import(
+          "../notifications/proactive-insight-push-service"
+        );
+        await maybeSendLowStockInstantPush(
+          businessId,
+          item.name,
+          currentStock,
+          item.stock.unit || "units",
+        );
         logger.info(
           `Low stock alert triggered for ${item.name} in business ${businessId}`,
         );

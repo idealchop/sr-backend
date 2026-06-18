@@ -25,6 +25,7 @@ export const SUPPORT_CONVERSATION_RULES = [
   "  3) what to check after each step.",
   "- Ask at most one focused follow-up question only when a missing detail blocks progress.",
   "- Keep answers concise and specific to the user's screen/context.",
+  "- Write every reply in **Taglish** by default unless the user clearly prefers another language.",
 ].join("\n");
 
 export type GeminiChatContent = {

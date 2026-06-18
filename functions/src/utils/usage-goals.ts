@@ -5,6 +5,9 @@ export const INTEL_TOOL_IDS = [
   "collections_pulse",
   "dispatch_health",
   "warehouse_risk",
+  "plant_health",
+  "dashboard_qa",
+  "churn_risk",
 ] as const;
 
 export type IntelToolId = (typeof INTEL_TOOL_IDS)[number];

@@ -45,4 +45,12 @@ export const getBrevoApi = (): brevo.TransactionalEmailsApi => {
   return api;
 };
 
+/** NT-40 — Brevo transactional SMS (same API key as email). */
+export const getBrevoSmsApi = (): brevo.TransactionalSMSApi => {
+  const apiKey = resolveBrevoApiKey();
+  const api = new brevo.TransactionalSMSApi();
+  api.setApiKey(brevo.TransactionalSMSApiApiKeys.apiKey, apiKey);
+  return api;
+};
+
 export { brevo };

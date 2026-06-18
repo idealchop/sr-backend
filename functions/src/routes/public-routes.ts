@@ -9,7 +9,12 @@ import {
   trackOrder,
   searchTrackOrders,
   cancelPortalOrder,
+  patchPortalCustomerProfile,
 } from "../handlers/portal/portal-public-handler";
+import {
+  getPublicPlantMaintenanceTasks,
+  postPublicPlantMaintenanceComplete,
+} from "../handlers/plant-public-handler";
 import {
   getPublicTeamInvite,
   postAcceptTeamInvite,
@@ -62,6 +67,10 @@ router.get("/portal/track/search", portalLimiter, searchTrackOrders);
 router.get("/portal/track/:referenceId", portalLimiter, trackOrder);
 router.post("/portal/submissions", portalLimiter, postPortalSubmission);
 router.post("/portal/cancel", portalLimiter, cancelPortalOrder);
+router.patch("/portal/profile", portalLimiter, patchPortalCustomerProfile);
+
+router.get("/plant/maintenance/tasks", portalLimiter, getPublicPlantMaintenanceTasks);
+router.post("/plant/maintenance/complete", portalLimiter, postPublicPlantMaintenanceComplete);
 
 router.get("/team-invites/:token", getPublicTeamInvite);
 router.post(

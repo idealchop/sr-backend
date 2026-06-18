@@ -43,7 +43,8 @@ Google OAuth runs in the **frontend only** (Firebase Auth). The API receives the
 - **Unit:** `unit/utils/staff-seat-limit.unit.test.ts` — staff cap = rider + admin (owner excluded); add-on boosts
 - **Unit:** `unit/services/team/team-hub-staff-count.unit.test.ts` — occupied count excludes owner
 - **Unit:** `unit/services/team/workspace-member-access.unit.test.ts` — `isActiveStaffMemberForLimit`
-- **Unit:** `unit/utils/support-ai-plan-limits.unit.test.ts`, `unit/utils/subscription-addon-plan-limits.unit.test.ts`
+- **Unit:** `unit/utils/subscription-addon-limit-boosts.unit.test.ts` — includes `extra_business` boosts
+- **Unit:** `unit/utils/extra-business-addon-access.unit.test.ts` — Owner hub add-on slot reader
 - **Unit:** `unit/services/support/support-ai-usage-service.unit.test.ts`
 - **BDD:** `bdd/subscription.spec.ts`, `bdd/subscription-lifecycle.spec.ts`
 - **BDD reset:** `POST /subscriptions/:businessId/dev/reset-trial` (emulator only) via `resetBusinessSubscriptionsToTrial()` in `bdd-api.ts`

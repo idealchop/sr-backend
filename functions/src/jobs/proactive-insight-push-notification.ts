@@ -4,6 +4,8 @@ import { listBusinessIdsWithOwnerDevices } from
   "../services/notifications/owner-device-service";
 import { sendProactiveInsightPushesForBusiness } from
   "../services/notifications/proactive-insight-push-service";
+import { sendPendingSubmissionReminderForBusiness } from
+  "../services/notifications/pending-submission-reminder-service";
 import { manilaHour } from "../utils/philippine-datetime";
 import { DORMANT_PUSH_HOUR_OPTIONS } from "../utils/notification-preferences";
 
@@ -32,6 +34,8 @@ export const proactiveInsightPushNotification = onSchedule(
     let maintenanceSent = 0;
     let varianceSent = 0;
     let reorderSent = 0;
+    let slaSent = 0;
+    let pendingReminderSent = 0;
 
     for (const businessId of businessIds) {
       try {
@@ -40,6 +44,10 @@ export const proactiveInsightPushNotification = onSchedule(
         if (result.maintenance) maintenanceSent += 1;
         if (result.variance) varianceSent += 1;
         if (result.reorder) reorderSent += 1;
+        if (result.sla) slaSent += 1;
+
+        const pending = await sendPendingSubmissionReminderForBusiness(businessId);
+        if (pending.sent) pendingReminderSent += 1;
       } catch (error) {
         logger.error("proactiveInsightPushNotification business failed", {
           businessId,
@@ -55,6 +63,8 @@ export const proactiveInsightPushNotification = onSchedule(
       maintenanceSent,
       varianceSent,
       reorderSent,
+      slaSent,
+      pendingReminderSent,
     });
   },
 );

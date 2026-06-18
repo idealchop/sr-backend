@@ -49,7 +49,9 @@ function resolveOwnerMorningAlertsEnabledFromUi(
   const prefs = resolveNotificationPreferencesFromUiConfig(uiConfig);
   return (
     prefs.autoMorningBriefEnabled === true ||
-    prefs.dormantEmailDigestEnabled === true
+    prefs.dormantEmailDigestEnabled === true ||
+    prefs.morningBriefEmailEnabled === true ||
+    prefs.paymentReminderEmailEnabled === true
   );
 }
 

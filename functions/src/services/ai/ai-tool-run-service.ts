@@ -21,6 +21,15 @@ import {
 } from "../../utils/usage-goals";
 import { buildDormantSignalsSnapshot } from "../../utils/dormant-customers";
 import { buildLowHealthSample } from "../../utils/suki-health-score";
+import {
+  buildLowRatingSample,
+  lowRatingSampleNameKeys,
+} from "../../utils/low-rating-sample";
+import { computeDebtAgingBreakdown } from "../../utils/analytics-utils";
+import {
+  buildPaymentReminderQueue,
+  type PaymentReminderQueueRow,
+} from "../../utils/payment-reminder-queue";
 import { MaintenanceTemplateService } from "../plant/maintenance-template-service";
 import { summarizeMaintenanceOverdue } from "../plant/maintenance-template-utils";
 import { ProductionShiftService } from "../plant/production-shift-service";
@@ -29,6 +38,7 @@ import {
   sumPlantGallonsForCalendarDate,
 } from "../../utils/production-variance-alert";
 import { manilaDateKey } from "../../utils/philippine-datetime";
+import { enrichAiToolSnapshot, buildPaymentReminderScripts, buildVarianceRootCauseFacts, buildWaterQualityAnomalyFacts } from "./ai-tool-snapshot-enrichers";
 
 export const AI_TOOL_IDS = [
   "morning_brief",
@@ -37,6 +47,8 @@ export const AI_TOOL_IDS = [
   "dispatch_health",
   "warehouse_risk",
   "plant_health",
+  "dashboard_qa",
+  "churn_risk",
 ] as const;
 
 export type AiToolId = (typeof AI_TOOL_IDS)[number];
@@ -104,6 +116,10 @@ function toolLabel(tool: AiToolId): string {
     return "Dormant suki pulse";
   case "plant_health":
     return "Plant health brief";
+  case "dashboard_qa":
+    return "Dashboard Q&A";
+  case "churn_risk":
+    return "Churn risk pulse";
   default:
     return tool;
   }
@@ -167,6 +183,40 @@ function dormantSampleNameKeys(snapshot: Record<string, unknown>): Set<string> {
     const name = (row as { name?: unknown }).name;
     if (typeof name === "string" && name.trim()) {
       keys.add(name.trim().toLowerCase());
+    }
+  }
+  return keys;
+}
+
+function retentionOutreachNameKeys(snapshot: Record<string, unknown>): Set<string> {
+  const keys = dormantSampleNameKeys(snapshot);
+  for (const key of lowRatingSampleNameKeys(snapshot)) {
+    keys.add(key);
+  }
+  return keys;
+}
+
+function serializeReminderQueue(rows: PaymentReminderQueueRow[]) {
+  return rows.map((row) => ({
+    name: row.name,
+    amountPhp: Math.round(row.amount * 100) / 100,
+    oldestDebtDays: row.oldestDebtDays,
+    reminderTier: row.reminderTier,
+  }));
+}
+
+/** AI-02: names allowed in collections_pulse outreachPlan scripts. */
+function paymentReminderNameKeys(snapshot: Record<string, unknown>): Set<string> {
+  const keys = new Set<string>();
+  for (const field of ["reminderQueue30", "reminderQueue60", "reminderQueue90"] as const) {
+    const rows = snapshot[field];
+    if (!Array.isArray(rows)) continue;
+    for (const row of rows) {
+      if (!row || typeof row !== "object") continue;
+      const name = (row as { name?: unknown }).name;
+      if (typeof name === "string" && name.trim()) {
+        keys.add(name.trim().toLowerCase());
+      }
     }
   }
   return keys;
@@ -275,6 +325,35 @@ async function buildPlantHealthFacts(
     })
     .reduce((sum, row) => sum + row.gallonsProduced, 0);
 
+  const latestShift = shifts
+    .filter((row) => row.calendarDate)
+    .sort((a, b) => String(b.calendarDate).localeCompare(String(a.calendarDate)))[0];
+  let lastShiftLogAgeHours: number | null = null;
+  if (latestShift?.calendarDate) {
+    const shiftDay = parseManilaKey(String(latestShift.calendarDate));
+    lastShiftLogAgeHours = Math.round(
+      (now.getTime() - shiftDay.getTime()) / (1000 * 60 * 60),
+    );
+  }
+
+  let openDeliveriesToday = 0;
+  let walkInUnitsToday = 0;
+  for (const tx of transactions) {
+    if (tx.type === "delivery") {
+      const st = tx.deliveryStatus || "";
+      if (st && !isTerminalDelivery(st)) openDeliveriesToday += 1;
+    }
+    if (tx.type === "walkin" || tx.type === "direct_sale") {
+      const d = parseTxDate(tx);
+      if (manilaDateKey(d) === todayKey) {
+        walkInUnitsToday += (tx.waterRefills || []).reduce(
+          (sum, r) => sum + (Number(r.quantity) || 0),
+          0,
+        );
+      }
+    }
+  }
+
   return {
     plantHealth: {
       todayPlantGallons: sumPlantGallonsForCalendarDate(shifts, todayKey),
@@ -286,11 +365,14 @@ async function buildPlantHealthFacts(
       productionVariancePct: Math.round(variance.variancePct * 10) / 10,
       plantGallonsToday: variance.plantGallons,
       soldRefillUnitsToday: variance.soldUnits,
+      lastShiftLogAgeHours,
+      openDeliveriesToday,
+      walkInUnitsToday,
     },
   };
 }
 
-function buildCompactContext(params: {
+export function buildCompactContext(params: {
   businessName: string;
   transactions: Transaction[];
   customers: Customer[];
@@ -410,6 +492,29 @@ function buildCompactContext(params: {
   const goalIds = new Set(usageGoals.ids);
   const dormantSignals = buildDormantSignalsSnapshot(customers, transactions, now);
   const lowHealthSample = buildLowHealthSample(customers, transactions, now);
+  const lowRatingSample = buildLowRatingSample(customers, transactions, now);
+  const debtAging = computeDebtAgingBreakdown(transactions, customers);
+  const reminderPrefs = {
+    paymentReminderEnabled: true,
+    paymentReminder30Enabled: true,
+    paymentReminder60Enabled: true,
+    paymentReminder90Enabled: true,
+  };
+  const reminderQueue = buildPaymentReminderQueue(
+    debtAging.rows,
+    customers,
+    reminderPrefs,
+    now,
+  );
+  const reminderQueue30 = serializeReminderQueue(
+    reminderQueue.filter((row) => row.reminderTier === 30).slice(0, 10),
+  );
+  const reminderQueue60 = serializeReminderQueue(
+    reminderQueue.filter((row) => row.reminderTier === 60).slice(0, 10),
+  );
+  const reminderQueue90 = serializeReminderQueue(
+    reminderQueue.filter((row) => row.reminderTier === 90).slice(0, 10),
+  );
 
   return {
     businessName,
@@ -444,6 +549,10 @@ function buildCompactContext(params: {
       .length,
     dormantSignals,
     lowHealthSample,
+    lowRatingSample,
+    reminderQueue30,
+    reminderQueue60,
+    reminderQueue90,
     goalRelevantSignals:
       usageGoals.ids.length > 0 ?
         {
@@ -533,7 +642,13 @@ function systemPromptForTool(
   case "collections_pulse":
     return (
       `${common} Focus: collections & accounts receivable — who owes, partial payments, ` +
-      `and concrete follow-up cadence.${customersNote}${salesNote}`
+      "and concrete follow-up cadence. Use reminderQueue30/60/90 only — never invent debtor names. " +
+      "Return JSON with title, summary, highlights, actionItems, riskLevel, " +
+      "and outreachPlan (array, max 12). Each outreachPlan item: name (exact match from reminder queues), " +
+      "priority (high for 90d tier, medium for 60d, low for 30d), " +
+      "reason (short — include tier, amountPhp, oldestDebtDays from JSON), " +
+      "suggestedMessage (≤280 chars, friendly Taglish payment reminder / call script, no invented promos)." +
+      `${customersNote}${salesNote}`
     );
   case "dispatch_health":
     return (
@@ -547,13 +662,14 @@ function systemPromptForTool(
     );
   case "retention_pulse":
     return (
-      `${common} Focus: dormant suki retention — customers with no fulfilled order in 7+ days. ` +
-      "Use dormantSignals.sample only — never invent customer names or phones. " +
+      `${common} Focus: dormant suki retention AND low-rating recovery. ` +
+      "Use dormantSignals.sample for win-back scripts and lowRatingSample for apology/recovery scripts — " +
+      "never invent customer names or phones. " +
       "Prioritize who to call today based on daysSilent, historicalOrders, " +
-      "avgCadenceDays, cadenceLate, and unpaidBalancePhp. " +
+      "avgCadenceDays, cadenceLate, unpaidBalancePhp, and low ratings with feedback. " +
       "Return JSON with title, summary, highlights, actionItems, riskLevel, " +
-      "and outreachPlan (array, max 10). " +
-      "Each outreachPlan item: name (exact match from dormantSignals.sample), " +
+      "and outreachPlan (array, max 12). " +
+      "Each outreachPlan item: name (exact match from dormantSignals.sample OR lowRatingSample), " +
       "priority (high|medium|low), reason (short why today), " +
       "suggestedMessage (≤280 chars, friendly Taglish SMS/call script, no invented promos). " +
       "actionItems should include concrete call/SMS steps. Set riskLevel high when " +
@@ -564,8 +680,22 @@ function systemPromptForTool(
     return (
       `${common} Focus: plant operations — overdue preventive maintenance, ` +
       "today's production gallons vs sold refill units, and variance flags in plantHealth. " +
+      "When productionVarianceActive is true, include varianceHypotheses (array of strings, max 5): " +
+      "ranked plausible causes using ONLY plantHealth facts (unlogged walk-ins, open deliveries, " +
+      "stale shift log, meter drift, leak) — no invented numbers. " +
+      "When aiEnrichments.ai06_waterQualityAnomaly.anomalyActive is true, mention water quality trend. " +
       "Give practical next steps (replace filter, log shift, reconcile walk-ins). " +
       "Use only plantHealth and maintenance task names from JSON — do not invent readings."
+    );
+  case "churn_risk":
+    return (
+      `${common} Focus: churn risk beyond dormant rules — use aiEnrichments.ai15_churnRisk sample. ` +
+      "Explain top 5 at-risk suki with scores and drivers. No invented names."
+    );
+  case "dashboard_qa":
+    return (
+      `${common} Focus: answer owner dashboard questions from snapshot facts only. ` +
+      "Be concise and cite numbers from JSON."
     );
   default:
     return common;
@@ -658,7 +788,32 @@ export class AiToolRunService {
         now,
       );
       Object.assign(snapshot, plantFacts);
+      const variance = buildVarianceRootCauseFacts(
+        (snapshot.plantHealth || {}) as Record<string, unknown>,
+      );
+      if (variance.active) {
+        (snapshot.plantHealth as Record<string, unknown>).varianceHypotheses =
+          variance.hypotheses;
+      }
+      const wq = await buildWaterQualityAnomalyFacts(businessId);
+      if (wq) {
+        (snapshot.plantHealth as Record<string, unknown>).waterQualityAnomaly = wq;
+      }
     }
+
+    if (tool === "collections_pulse") {
+      snapshot.paymentReminderScripts = buildPaymentReminderScripts(snapshot);
+    }
+
+    await enrichAiToolSnapshot(tool, snapshot, {
+      businessId,
+      businessName,
+      transactions,
+      customers,
+      inventory: inventoryItems,
+      uiConfig,
+      now,
+    });
 
     const modelErrorSummary =
       "River AI could not reach the model right now. Your live counts are still saved in the " +
@@ -681,9 +836,14 @@ export class AiToolRunService {
       tool === "retention_pulse" ?
         normalizeOutreachPlan(
           ai?.outreachPlan,
-          dormantSampleNameKeys(snapshot),
+          retentionOutreachNameKeys(snapshot),
         ) :
-        undefined;
+        tool === "collections_pulse" ?
+          normalizeOutreachPlan(
+            ai?.outreachPlan,
+            paymentReminderNameKeys(snapshot),
+          ) :
+          undefined;
 
     const doc = {
       tool,

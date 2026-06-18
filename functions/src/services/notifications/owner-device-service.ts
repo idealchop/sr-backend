@@ -28,6 +28,9 @@ function devicesCollection(businessId: string) {
 
 /**
  * Registers or refreshes an owner FCM token for a business workspace.
+ * NT-72 (stub): per-role routing will filter `owner_devices` vs future
+ * `member_devices` / `rider_devices` before broadcast — today all tokens here
+ * are treated as owner/admin financial alert recipients.
  * @param {string} businessId Business id.
  * @param {string} userId Owner user id.
  * @param {Object} input Registration payload.

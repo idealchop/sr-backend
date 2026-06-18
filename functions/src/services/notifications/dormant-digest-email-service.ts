@@ -19,14 +19,15 @@ const TX_LIMIT = 2000;
 
 export function shouldSendDormantEmailDigestNow(
   uiConfig: Record<string, unknown> | undefined,
-  lastSentWeekKey: string | undefined,
+  lastSentKey: string | undefined,
   now = new Date(),
 ): boolean {
   const prefs = resolveNotificationPreferencesFromUiConfig(uiConfig);
   if (prefs.dormantEmailDigestEnabled !== true) return false;
-  if (!isManilaMonday(now)) return false;
+  const frequency = prefs.dormantEmailFrequency === "daily" ? "daily" : "weekly";
+  if (frequency === "weekly" && !isManilaMonday(now)) return false;
   if (manilaHour(now) !== Number(prefs.dormantPushHour)) return false;
-  return manilaDateKey(now) !== lastSentWeekKey;
+  return manilaDateKey(now) !== lastSentKey;
 }
 
 async function resolveOwnerEmail(
@@ -75,12 +76,18 @@ export async function sendDormantDigestEmailForBusiness(
 
   const data = businessDoc.data() ?? {};
   const uiConfig = (data.uiConfig ?? {}) as Record<string, unknown>;
-  const lastSentWeekKey =
-    typeof data.dormantEmailDigestLastSentWeek === "string" ?
-      data.dormantEmailDigestLastSentWeek :
-      undefined;
+  const prefs = resolveNotificationPreferencesFromUiConfig(uiConfig);
+  const frequency = prefs.dormantEmailFrequency === "daily" ? "daily" : "weekly";
+  const lastSentKey =
+    frequency === "daily" ?
+      (typeof data.dormantEmailDigestLastSentDate === "string" ?
+        data.dormantEmailDigestLastSentDate :
+        undefined) :
+      (typeof data.dormantEmailDigestLastSentWeek === "string" ?
+        data.dormantEmailDigestLastSentWeek :
+        undefined);
 
-  if (!shouldSendDormantEmailDigestNow(uiConfig, lastSentWeekKey, now)) {
+  if (!shouldSendDormantEmailDigestNow(uiConfig, lastSentKey, now)) {
     return { sent: false, dormantCount: 0 };
   }
 
@@ -105,6 +112,12 @@ export async function sendDormantDigestEmailForBusiness(
     return { sent: false, dormantCount };
   }
 
+  const dateKey = manilaDateKey(now);
+  const idempotencyPatch =
+    frequency === "daily" ?
+      { dormantEmailDigestLastSentDate: dateKey } :
+      { dormantEmailDigestLastSentWeek: dateKey };
+
   if (process.env.FUNCTIONS_EMULATOR) {
     logger.info("EMULATOR: Skipping dormant digest email", {
       businessId,
@@ -113,7 +126,7 @@ export async function sendDormantDigestEmailForBusiness(
     });
     await businessRef.set(
       {
-        dormantEmailDigestLastSentWeek: manilaDateKey(now),
+        ...idempotencyPatch,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
@@ -148,7 +161,7 @@ export async function sendDormantDigestEmailForBusiness(
 
   await businessRef.set(
     {
-      dormantEmailDigestLastSentWeek: manilaDateKey(now),
+      ...idempotencyPatch,
       updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: true },

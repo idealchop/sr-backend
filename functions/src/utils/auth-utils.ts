@@ -14,6 +14,10 @@ export const checkBusinessAccess = async (
   role?: string;
   businessDoc?: any;
 }> => {
+  if (!uid?.trim() || !businessId?.trim()) {
+    return { hasAccess: false };
+  }
+
   const businessRef = db.collection("businesses").doc(businessId);
   const businessDoc = await businessRef.get();
 

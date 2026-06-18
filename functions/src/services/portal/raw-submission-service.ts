@@ -13,6 +13,7 @@ import { sendNewOrderPushForSubmission } from "../notifications/new-order-push-s
 import {
   notifyPortalSubmissionCreated,
 } from "../notifications/station-activity-notification-service";
+import { maybeSendPortalOrderReceivedEmail } from "./portal-order-received-notifier";
 import { CustomerService } from "../customers/customer-service";
 
 function col(businessId: string) {
@@ -192,6 +193,20 @@ export class RawSubmissionService {
           error: err,
         });
       });
+
+    void maybeSendPortalOrderReceivedEmail({
+      businessId,
+      customerId,
+      submissionType,
+      referenceId,
+      payload,
+    }).catch((err) => {
+      logger.warn("portal order received email failed", {
+        businessId,
+        submissionId: ref.id,
+        error: err,
+      });
+    });
 
     return { id: ref.id, referenceId, walkInQueueNumber };
   }

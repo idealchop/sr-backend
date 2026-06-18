@@ -5,6 +5,9 @@ import {
   requireBusinessOwner,
 } from "../middleware/business-middleware";
 import { createAiToolRun, listAiToolRuns } from "../handlers/ai-tool-handler";
+import { postParseOrderText } from "../handlers/order-parse-handler";
+import { postDashboardQa } from "../handlers/ai-dashboard-qa-handler";
+import { postRunWorkflow } from "../handlers/ai-workflow-handler";
 import {
   postDuplicatesDetect,
   postDuplicatesMerge,
@@ -48,6 +51,30 @@ router.post(
   validateBusinessAccess,
   requireBusinessOwner,
   createAiToolRun,
+);
+
+router.post(
+  "/parse-order",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  requireBusinessOwner,
+  postParseOrderText,
+);
+
+router.post(
+  "/dashboard-qa",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  requireBusinessOwner,
+  postDashboardQa,
+);
+
+router.post(
+  "/run-workflow",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  requireBusinessOwner,
+  postRunWorkflow,
 );
 
 router.post(

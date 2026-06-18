@@ -10,16 +10,23 @@ import { buildProductionVarianceAlert } from "../../utils/production-variance-al
 import {
   buildInventoryReorderAlert,
   resolveReorderAlertDaysAhead,
-} from "../../utils/inventory-reorder-alert";
+  listLowStockItems } from "../../utils/inventory-reorder-alert";
 import { computePeakDemandSummary } from "../../utils/peak-demand-analytics";
 import { InventoryService } from "../inventory/inventory-service";
-import { resolveNotificationPreferencesFromUiConfig } from "../../utils/notification-preferences";
+import { buildContainerDeficitAlerts } from "../../utils/container-deficit-alert";
+import { buildAtRiskDeliverySnapshot } from "../../utils/at-risk-delivery-alert";
+import { buildSubscriptionLifecycleSnapshot } from "../../utils/subscription-lifecycle-alert";
+import { resolveNotificationPreferencesFromUiConfig, resolveQuietHoursFromUiConfig } from "../../utils/notification-preferences";
 import { manilaDateKey, manilaHour } from "../../utils/philippine-datetime";
 import {
   deleteOwnerDevicesByTokens,
   listOwnerDevices,
 } from "./owner-device-service";
 import { sendFcmMulticast } from "./fcm-push-service";
+import {
+  computeDeliverySlaMetrics,
+  slaBreachAlertActive,
+} from "../../utils/delivery-sla-metrics";
 
 const TX_LIMIT = 2000;
 
@@ -30,11 +37,18 @@ async function sendOwnerPush(
   copy: { title: string; body: string; deepLink: string; type: string },
   lastSentField: string,
   now: Date,
+  uiConfig?: Record<string, unknown>,
 ): Promise<PushResult> {
   const devices = await listOwnerDevices(businessId);
   const tokens = devices.map((d) => d.fcmToken).filter(Boolean);
   if (tokens.length === 0) return { sent: false };
 
+  let config = uiConfig;
+  if (!config) {
+    const snap = await db.collection("businesses").doc(businessId).get();
+    config = (snap.data()?.uiConfig ?? {}) as Record<string, unknown>;
+  }
+  const quietHours = resolveQuietHoursFromUiConfig(config);
   const { successCount, invalidTokens } = await sendFcmMulticast(tokens, {
     title: copy.title,
     body: copy.body,
@@ -43,6 +57,9 @@ async function sendOwnerPush(
       businessId,
       deepLink: copy.deepLink,
     },
+  }, {
+    quietHoursStart: quietHours.start,
+    quietHoursEnd: quietHours.end,
   });
 
   if (invalidTokens.length > 0) {
@@ -138,6 +155,7 @@ export async function sendPaymentReminderPushForBusiness(
     },
     "paymentReminderPushLastSentDate",
     now,
+    uiConfig,
   );
 }
 
@@ -185,6 +203,7 @@ export async function sendMaintenanceOverduePushForBusiness(
     },
     "maintenancePushLastSentDate",
     now,
+    uiConfig,
   );
 }
 
@@ -235,6 +254,7 @@ export async function sendProductionVariancePushForBusiness(
     },
     "productionVariancePushLastSentDate",
     now,
+    uiConfig,
   );
 }
 
@@ -286,6 +306,286 @@ export async function sendInventoryReorderPushForBusiness(
     },
     "reorderPushLastSentDate",
     now,
+    uiConfig,
+  );
+}
+
+/** NT-05 — SLA breach push when >25% deliveries exceed 24h (weekly max).
+ * @param {string} businessId Business id.
+ * @param {Date} [now] Reference time (defaults to now).
+ * @return {Promise<PushResult>} Send outcome.
+ */
+export async function sendSlaBreachPushForBusiness(
+  businessId: string,
+  now = new Date(),
+): Promise<PushResult> {
+  const businessRef = db.collection("businesses").doc(businessId);
+  const businessDoc = await businessRef.get();
+  if (!businessDoc.exists) return { sent: false };
+
+  const data = businessDoc.data() ?? {};
+  const uiConfig = (data.uiConfig ?? {}) as Record<string, unknown>;
+  if (uiConfig.slaBreachPushEnabled !== true) return { sent: false };
+  if (!usesDormantPushHour(uiConfig, now)) return { sent: false };
+
+  const lastSent =
+    typeof data.slaBreachPushLastSentWeek === "string" ?
+      data.slaBreachPushLastSentWeek :
+      undefined;
+  const weekKey = manilaDateKey(now);
+  if (lastSent === weekKey) return { sent: false };
+
+  const transactions = await TransactionService.getTransactionsByBusiness(
+    businessId,
+    { limit: TX_LIMIT },
+  );
+  const metrics = computeDeliverySlaMetrics(transactions, now);
+  if (!slaBreachAlertActive(metrics)) return { sent: false };
+
+  return sendOwnerPush(
+    businessId,
+    {
+      title: "Delivery SLA breach",
+      body:
+        `${metrics.slaOver24hPct}% of stops took over 24h last ${metrics.periodDays} days ` +
+        `(${metrics.slaBreachOver24hCount} stops) — check rider staffing.`,
+      deepLink: "/dashboard",
+      type: "sla_breach",
+    },
+    "slaBreachPushLastSentWeek",
+    now,
+    uiConfig,
+  );
+}
+
+/** NT-07 — container deficit push (max 1/day).
+ * @param {string} businessId Business id.
+ * @param {Date} [now] Reference time (defaults to now).
+ * @return {Promise<PushResult>} Send outcome.
+ */
+export async function sendContainerDeficitPushForBusiness(
+  businessId: string,
+  now = new Date(),
+): Promise<PushResult> {
+  const businessRef = db.collection("businesses").doc(businessId);
+  const businessDoc = await businessRef.get();
+  if (!businessDoc.exists) return { sent: false };
+
+  const data = businessDoc.data() ?? {};
+  const uiConfig = (data.uiConfig ?? {}) as Record<string, unknown>;
+  if (uiConfig.containerDeficitPushEnabled !== true) return { sent: false };
+  if (!usesDormantPushHour(uiConfig, now)) return { sent: false };
+
+  const lastSent =
+    typeof data.containerDeficitPushLastSentDate === "string" ?
+      data.containerDeficitPushLastSentDate :
+      undefined;
+  if (lastSent === manilaDateKey(now)) return { sent: false };
+
+  const minQty = Number(uiConfig.containerDeficitAlertMin);
+  const threshold = Number.isFinite(minQty) && minQty >= 1 ? minQty : 1;
+
+  const [customers, transactions] = await Promise.all([
+    CustomerService.getCustomersByBusiness(businessId),
+    TransactionService.getTransactionsByBusiness(businessId, { limit: TX_LIMIT }),
+  ]);
+
+  const snapshot = buildContainerDeficitAlerts(
+    transactions,
+    customers,
+    now,
+    undefined,
+    threshold,
+  );
+  if (snapshot.count <= 0) return { sent: false };
+
+  return sendOwnerPush(
+    businessId,
+    {
+      title: `${snapshot.count} suki${snapshot.count === 1 ? "" : "s"} owe containers`,
+      body:
+        `${snapshot.totalDeficitQty} container${snapshot.totalDeficitQty === 1 ? "" : "s"} ` +
+        "outstanding from recent deliveries — prioritize collection.",
+      deepLink: "/customers",
+      type: "container_deficit",
+    },
+    "containerDeficitPushLastSentDate",
+    now,
+    uiConfig,
+  );
+}
+
+/** NT-08 — at-risk delivery push (max 1/day).
+ * @param {string} businessId Business id.
+ * @param {Date} [now] Reference time (defaults to now).
+ * @return {Promise<PushResult>} Send outcome.
+ */
+export async function sendAtRiskDeliveryPushForBusiness(
+  businessId: string,
+  now = new Date(),
+): Promise<PushResult> {
+  const businessRef = db.collection("businesses").doc(businessId);
+  const businessDoc = await businessRef.get();
+  if (!businessDoc.exists) return { sent: false };
+
+  const data = businessDoc.data() ?? {};
+  const uiConfig = (data.uiConfig ?? {}) as Record<string, unknown>;
+  if (uiConfig.atRiskDeliveryPushEnabled !== true) return { sent: false };
+  if (!usesDormantPushHour(uiConfig, now)) return { sent: false };
+
+  const lastSent =
+    typeof data.atRiskDeliveryPushLastSentDate === "string" ?
+      data.atRiskDeliveryPushLastSentDate :
+      undefined;
+  if (lastSent === manilaDateKey(now)) return { sent: false };
+
+  const [customers, transactions] = await Promise.all([
+    CustomerService.getCustomersByBusiness(businessId),
+    TransactionService.getTransactionsByBusiness(businessId, { limit: TX_LIMIT }),
+  ]);
+
+  const snapshot = buildAtRiskDeliverySnapshot(transactions, customers);
+  if (snapshot.count <= 0) return { sent: false };
+
+  const hint =
+    snapshot.rows[0]?.reasons[0] ?
+      ` ${snapshot.rows[0].reasons[0]}` :
+      "";
+
+  return sendOwnerPush(
+    businessId,
+    {
+      title: `${snapshot.count} at-risk deliver${snapshot.count === 1 ? "y" : "ies"}`,
+      body:
+        "Clear open deliveries and pending orders before win-back calls." +
+        hint,
+      deepLink: "/dashboard",
+      type: "at_risk_delivery",
+    },
+    "atRiskDeliveryPushLastSentDate",
+    now,
+    uiConfig,
+  );
+}
+
+/** NT-09 — low stock push when any SKU at/below minimum (max 1/day).
+ * @param {string} businessId Business id.
+ * @param {Date} [now] Reference time (defaults to now).
+ * @return {Promise<PushResult>} Send outcome.
+ */
+export async function sendLowStockPushForBusiness(
+  businessId: string,
+  now = new Date(),
+): Promise<PushResult> {
+  const businessRef = db.collection("businesses").doc(businessId);
+  const businessDoc = await businessRef.get();
+  if (!businessDoc.exists) return { sent: false };
+
+  const data = businessDoc.data() ?? {};
+  const uiConfig = (data.uiConfig ?? {}) as Record<string, unknown>;
+  if (uiConfig.lowStockPushEnabled !== true) return { sent: false };
+
+  const lastSent =
+    typeof data.lowStockPushLastSentDate === "string" ?
+      data.lowStockPushLastSentDate :
+      undefined;
+  if (lastSent === manilaDateKey(now)) return { sent: false };
+
+  const inventory = await InventoryService.listItems(businessId);
+  const lowStock = listLowStockItems(inventory);
+  if (lowStock.length === 0) return { sent: false };
+
+  const label =
+    lowStock.length === 1 ?
+      lowStock[0].name :
+      `${lowStock.length} items`;
+
+  return sendOwnerPush(
+    businessId,
+    {
+      title: "Restock needed",
+      body: `${label} at or below minimum — open Inventory to reorder.`,
+      deepLink: "/inventory",
+      type: "low_stock",
+    },
+    "lowStockPushLastSentDate",
+    now,
+    uiConfig,
+  );
+}
+
+/** NT-10 — subscription lifecycle push (expiring / expired).
+ * @param {string} businessId Business id.
+ * @param {Date} [now] Reference time (defaults to now).
+ * @return {Promise<PushResult>} Send outcome.
+ */
+export async function sendSubscriptionLifecyclePushForBusiness(
+  businessId: string,
+  now = new Date(),
+): Promise<PushResult> {
+  const businessRef = db.collection("businesses").doc(businessId);
+  const businessDoc = await businessRef.get();
+  if (!businessDoc.exists) return { sent: false };
+
+  const data = businessDoc.data() ?? {};
+  const uiConfig = (data.uiConfig ?? {}) as Record<string, unknown>;
+  if (uiConfig.subscriptionPushEnabled !== true) return { sent: false };
+
+  const lifecycle = await buildSubscriptionLifecycleSnapshot(businessId, now);
+  if (!lifecycle.active || !lifecycle.headline) return { sent: false };
+
+  const lastSent =
+    typeof data.subscriptionPushLastSentDate === "string" ?
+      data.subscriptionPushLastSentDate :
+      undefined;
+  if (lastSent === manilaDateKey(now)) return { sent: false };
+
+  const title =
+    lifecycle.phase === "expired" ?
+      "Subscription expired" :
+      lifecycle.phase === "expiring_1d" ?
+        "Plan expires tomorrow" :
+        "Plan expiring soon";
+
+  return sendOwnerPush(
+    businessId,
+    {
+      title,
+      body: lifecycle.headline,
+      deepLink: "/account",
+      type: "subscription_lifecycle",
+    },
+    "subscriptionPushLastSentDate",
+    now,
+    uiConfig,
+  );
+}
+
+/** NT-74 — optional instant low-stock FCM when inventory drops below minimum. */
+export async function maybeSendLowStockInstantPush(
+  businessId: string,
+  itemName: string,
+  currentStock: number,
+  unit: string,
+): Promise<void> {
+  const businessDoc = await db.collection("businesses").doc(businessId).get();
+  if (!businessDoc.exists) return;
+
+  const data = businessDoc.data() ?? {};
+  const uiConfig = (data.uiConfig ?? {}) as Record<string, unknown>;
+  if (uiConfig.lowStockPushEnabled !== true) return;
+
+  await sendOwnerPush(
+    businessId,
+    {
+      title: "Restock needed",
+      body: `${itemName} is at ${currentStock} ${unit} — below minimum.`,
+      deepLink: "/inventory",
+      type: "low_stock",
+    },
+    "lowStockInstantPushLastSentAt",
+    new Date(),
+    uiConfig,
   );
 }
 
@@ -297,17 +597,42 @@ export async function sendProactiveInsightPushesForBusiness(
   maintenance: boolean;
   variance: boolean;
   reorder: boolean;
+  sla: boolean;
+  containerDeficit: boolean;
+  atRisk: boolean;
+  lowStock: boolean;
+  subscription: boolean;
 }> {
-  const [payment, maintenance, variance, reorder] = await Promise.all([
+  const [
+    payment,
+    maintenance,
+    variance,
+    reorder,
+    sla,
+    containerDeficit,
+    atRisk,
+    lowStock,
+    subscription,
+  ] = await Promise.all([
     sendPaymentReminderPushForBusiness(businessId, now),
     sendMaintenanceOverduePushForBusiness(businessId, now),
     sendProductionVariancePushForBusiness(businessId, now),
     sendInventoryReorderPushForBusiness(businessId, now),
+    sendSlaBreachPushForBusiness(businessId, now),
+    sendContainerDeficitPushForBusiness(businessId, now),
+    sendAtRiskDeliveryPushForBusiness(businessId, now),
+    sendLowStockPushForBusiness(businessId, now),
+    sendSubscriptionLifecyclePushForBusiness(businessId, now),
   ]);
   return {
     payment: payment.sent,
     maintenance: maintenance.sent,
     variance: variance.sent,
     reorder: reorder.sent,
+    sla: sla.sent,
+    containerDeficit: containerDeficit.sent,
+    atRisk: atRisk.sent,
+    lowStock: lowStock.sent,
+    subscription: subscription.sent,
   };
 }

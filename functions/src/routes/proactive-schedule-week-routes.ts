@@ -4,6 +4,7 @@ import { validateBusinessAccess } from "../middleware/business-middleware"; impo
   getProactiveScheduleWeekSnapshot,
   putProactiveScheduleWeekSnapshot,
 } from "../handlers/proactive-schedule-week-handler";
+import { postProactiveWeekAiGenerate } from "../handlers/proactive-week-ai-handler";
 
 const router = express.Router({ mergeParams: true }); // eslint-disable-line new-cap
 
@@ -18,6 +19,12 @@ router.put(
   validateFirebaseIdToken,
   validateBusinessAccess,
   putProactiveScheduleWeekSnapshot,
+);
+router.post(
+  "/generate-ai",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  postProactiveWeekAiGenerate,
 );
 
 export default router;

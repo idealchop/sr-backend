@@ -14,6 +14,7 @@ export type AddonLimitBoosts = {
   customers: number;
   transactionsDaily: number;
   onlineOrders: number;
+  extraBusiness: number;
 };
 
 export function emptyAddonLimitBoosts(): AddonLimitBoosts {
@@ -24,6 +25,7 @@ export function emptyAddonLimitBoosts(): AddonLimitBoosts {
     customers: 0,
     transactionsDaily: 0,
     onlineOrders: 0,
+    extraBusiness: 0,
   };
 }
 
@@ -180,6 +182,9 @@ export function resolveAddonLimitBoostsFromLines(
       break;
     case "online_orders":
       boosts.onlineOrders += inc;
+      break;
+    case "extra_business":
+      boosts.extraBusiness += inc;
       break;
     default:
       break;

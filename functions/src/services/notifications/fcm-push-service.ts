@@ -1,5 +1,6 @@
 import { getMessaging, type MulticastMessage } from "firebase-admin/messaging";
 import { logger } from "firebase-functions";
+import { manilaHour } from "../../utils/philippine-datetime";
 
 export type FcmPushPayload = {
   title: string;
@@ -7,19 +8,58 @@ export type FcmPushPayload = {
   data?: Record<string, string>;
 };
 
+export type FcmSendOptions = {
+  quietHoursStart?: number;
+  quietHoursEnd?: number;
+};
+
+/** NT-71 — block non-critical pushes outside configured Manila quiet hours. */
+export function isPushBlockedByQuietHours(
+  now: Date,
+  quietHoursStart?: number,
+  quietHoursEnd?: number,
+): boolean {
+  if (quietHoursStart == null || quietHoursEnd == null) return false;
+  const hour = manilaHour(now);
+  if (quietHoursStart === quietHoursEnd) return false;
+  if (quietHoursStart < quietHoursEnd) {
+    return hour < quietHoursStart || hour >= quietHoursEnd;
+  }
+  return hour >= quietHoursStart || hour < quietHoursEnd;
+}
+
+function isCriticalPushType(type: string | undefined): boolean {
+  return type === "new_order";
+}
+
 /**
  * Sends the same notification to multiple FCM registration tokens.
  * @param {Array<string>} tokens Device tokens.
  * @param {FcmPushPayload} payload Notification content.
+ * @param {FcmSendOptions} [options] Quiet-hours and delivery options.
  * @return {Promise<Object>} Send summary with successCount and invalidTokens.
  */
 export async function sendFcmMulticast(
   tokens: string[],
   payload: FcmPushPayload,
-): Promise<{ successCount: number; invalidTokens: string[] }> {
+  options?: FcmSendOptions,
+): Promise<{ successCount: number; invalidTokens: string[]; skippedQuietHours?: boolean }> {
   const unique = [...new Set(tokens.map((t) => t.trim()).filter(Boolean))];
   if (unique.length === 0) {
     return { successCount: 0, invalidTokens: [] };
+  }
+
+  const pushType = payload.data?.type;
+  if (
+    !isCriticalPushType(pushType) &&
+    isPushBlockedByQuietHours(
+      new Date(),
+      options?.quietHoursStart,
+      options?.quietHoursEnd,
+    )
+  ) {
+    logger.info("FCM push skipped (quiet hours)", { type: pushType ?? "unknown" });
+    return { successCount: 0, invalidTokens: [], skippedQuietHours: true };
   }
 
   const message: MulticastMessage = {

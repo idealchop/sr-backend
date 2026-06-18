@@ -1106,3 +1106,52 @@ export const cancelPortalOrder = async (req: Request, res: Response) => {
     return res.status(500).json({ error: "Server error" });
   }
 };
+
+/** NT-35 — update customer portal notification preferences. */
+export const patchPortalCustomerProfile = async (req: Request, res: Response) => {
+  const businessId = parseBodyString(req.body?.businessId ?? req.query.b);
+  const customerId = parseBodyString(req.body?.customerId ?? req.query.c);
+  const token = parseBodyString(req.body?.token ?? req.query.t);
+
+  if (!businessId || !customerId || !token) {
+    return res.status(400).json({ error: "businessId, customerId, and token are required" });
+  }
+
+  try {
+    await QrCustomerService.assertValidPortalToken(businessId, customerId, token);
+
+    const updates: Record<string, unknown> = {};
+    if (typeof req.body?.portalEmailNotifications === "boolean") {
+      updates.portalEmailNotifications = req.body.portalEmailNotifications;
+    }
+    if (typeof req.body?.portalSmsOptIn === "boolean") {
+      updates.portalSmsOptIn = req.body.portalSmsOptIn;
+    }
+    if (typeof req.body?.portalWebPushEnabled === "boolean") {
+      updates.portalWebPushEnabled = req.body.portalWebPushEnabled;
+    }
+    if (typeof req.body?.portalWebPushToken === "string" && req.body.portalWebPushToken.trim()) {
+      updates.portalWebPushTokens = FieldValue.arrayUnion(
+        req.body.portalWebPushToken.trim(),
+      );
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "No valid preference fields" });
+    }
+
+    await CustomerService.updateCustomer(
+      businessId,
+      customerId,
+      updates as Partial<import("../../services/customers/customer-service").Customer>,
+    );
+
+    return res.json({ success: true });
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message === "INVALID_TOKEN") {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+    logger.error("patchPortalCustomerProfile failed", e);
+    return res.status(500).json({ error: "Server error" });
+  }
+};

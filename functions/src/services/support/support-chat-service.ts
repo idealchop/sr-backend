@@ -37,7 +37,19 @@ import type {
   SupportChatSession,
   SupportSessionStatus,
   SupportMessageAttachment,
+  SupportStructuredReply,
 } from "./support-chat-types";
+import {
+  buildWorkspacePrerequisiteTurn,
+  formatSupportWorkspaceContextBlock,
+  loadSupportWorkspaceContext,
+  type SupportWorkspaceContext,
+} from "./support-workspace-context";
+import {
+  normalizeStructuredReply,
+  plainTextToStructuredFallback,
+  structuredReplyToPlainText,
+} from "./support-structured-reply";
 import { SubscriptionService } from "../subscriptions/subscription-service";
 import {
   resolveSupportAiPlanLimits,
@@ -45,6 +57,10 @@ import {
   type SupportAiUsageSnapshot,
 } from "../../utils/support-ai-plan-limits";
 import { SupportAiUsageService } from "./support-ai-usage-service";
+import {
+  coerceToDate,
+  manilaDateKey,
+} from "../../utils/philippine-datetime";
 
 const SESSIONS = "chat_sessions";
 const MESSAGES = "messages";
@@ -62,8 +78,16 @@ function normalizeSupportAiTurn(
   const o = raw as Record<string, unknown>;
   const reply = typeof o.reply === "string" ? o.reply.trim() : "";
   const topicOutOfScope = o.topicOutOfScope === true;
+  const structured =
+    normalizeStructuredReply(o.structured) ||
+    (reply ? plainTextToStructuredFallback(reply) : undefined);
+  const normalizedReply =
+    reply || (structured ? structuredReplyToPlainText(structured) : fallback.reply);
+  const normalizedStructured =
+    structured || plainTextToStructuredFallback(normalizedReply || fallback.reply);
   return {
-    reply: reply || fallback.reply,
+    reply: normalizedReply || fallback.reply,
+    structured: normalizedStructured,
     askSatisfaction: o.askSatisfaction === false ? false : true,
     suggestHuman: o.suggestHuman === true,
     suggestResolve: o.suggestResolve === true,
@@ -199,80 +223,226 @@ async function loadStoredKnowledge(
   });
 }
 
+function finishRuleTurn(
+  structured: SupportStructuredReply,
+  overrides: Partial<SupportAiTurnResult> = {},
+): SupportAiTurnResult {
+  return {
+    reply: structuredReplyToPlainText(structured),
+    structured,
+    askSatisfaction: true,
+    suggestHuman: false,
+    suggestResolve: false,
+    detectedSatisfied: false,
+    detectedDissatisfied: false,
+    detectedHumanRequest: false,
+    topicOutOfScope: false,
+    ...overrides,
+  };
+}
+
+const GREETING_STRUCTURED: SupportStructuredReply = {
+  sectionLabel: "SAGOT",
+  summary:
+    "Hi! Ako si **River AI** — makakatulong ako sa **water refilling & water station** topics " +
+    "(operations, suki, deliveries, hygiene tips) at sa buong **Smart Refill** dashboard. " +
+    "Ano ang kailangan mo today?",
+  badges: [
+    { label: "Smart Refill", tone: "info" },
+    { label: "Taglish", tone: "success" },
+  ],
+  highlights: [
+    {
+      title: "Puwede kang mag-send ng screenshot o screen recording",
+      body:
+        "I-upload ang photo/video kung may error sa screen — titingnan ko at bibigyan ka ng fix steps.",
+      variant: "tip",
+    },
+    {
+      title: "Scope: tubig/refill at Smart Refill lang",
+      body:
+        "Kung ibang topic, sasabihin ko politely na doon lang ako magaling.",
+      variant: "note",
+    },
+  ],
+};
+
 function ruleBasedReply(
   userText: string,
   history: SupportChatMessage[],
+  workspaceCtx?: SupportWorkspaceContext,
 ): SupportAiTurnResult {
+  if (workspaceCtx) {
+    const blocked = buildWorkspacePrerequisiteTurn(userText, workspaceCtx);
+    if (blocked) return blocked;
+  }
+
   const lower = userText.toLowerCase();
   const priorAi = [...history].reverse().find((m) => m.role === "ai");
   const isFollowUp = history.filter((m) => m.role === "user").length > 1;
 
-  let reply =
-    "I'm **River AI**. I can help with your **water refilling / water station** questions " +
-    "and the **Smart Refill** app. Ano ang kailangan mo?";
-
   if (isFollowUp && priorAi) {
-    reply =
-      "Salamat sa follow-up. Based on our chat so far—can you tell me which step failed or " +
-      "what you see on screen now? I'll pick up from there.";
+    return finishRuleTurn({
+      sectionLabel: "SAGOT",
+      summary:
+        "Salamat sa follow-up. Based sa usapan natin—sabihin mo kung aling step ang nag-fail o " +
+        "ano ang nakikita mo sa screen ngayon, para doon ako mag-pick up.",
+      badges: [{ label: "Follow-up", tone: "info" }],
+    }, {
+      detectedSatisfied: SATISFIED_PATTERNS.test(userText),
+      detectedDissatisfied: DISSATISFIED_PATTERNS.test(userText),
+    });
   }
 
   if (lower.includes("delivery") || lower.includes("deliver")) {
-    reply =
-      "To create a delivery: open **Transactions** → **Add Delivery**, choose the customer, " +
-      "refill items, date, and payment method, then save. " +
-      "Need step-by-step help on a specific screen?";
-  } else if (lower.includes("collection") || lower.includes("pickup")) {
-    reply =
-      "For collections: go to **Transactions** → **Add Collection**, select the customer " +
-      "and containers to pick up, then assign a rider if needed.";
-  } else if (lower.includes("rider") || lower.includes("my area")) {
-    reply =
-      "Riders use **My Area** to view jobs on the map, update status, and complete deliveries " +
-      "with proof and signature.";
-  } else if (lower.includes("invite") || lower.includes("team")) {
-    reply =
-      "Owners can invite staff from **Team Hub** (Grow plan and above): " +
-      "profile menu → Team Hub → Invite; teammate accepts the email link.";
-  } else if (
+    return finishRuleTurn({
+      sectionLabel: "SAGOT",
+      summary:
+        "Para mag-create ng delivery, gamitin ang **Transactions** flow sa dashboard.",
+      badges: [{ label: "Operations", tone: "info" }],
+      steps: [
+        {
+          title: "Buksan ang Transactions → Add Delivery",
+          body: "Piliin ang customer, refill items, date, at payment method.",
+          priority: "high",
+          tags: ["Transactions"],
+        },
+        {
+          title: "I-save at i-assign ang rider kung kailangan",
+          priority: "medium",
+          tags: ["Operations"],
+        },
+      ],
+    }, {
+      detectedSatisfied: SATISFIED_PATTERNS.test(userText),
+      detectedDissatisfied: DISSATISFIED_PATTERNS.test(userText),
+    });
+  }
+
+  if (lower.includes("collection") || lower.includes("pickup")) {
+    return finishRuleTurn({
+      sectionLabel: "SAGOT",
+      summary: "Para sa collections, gamitin ang **Add Collection** sa Transactions page.",
+      badges: [{ label: "Operations", tone: "info" }],
+      steps: [
+        {
+          title: "Transactions → Add Collection",
+          body: "Piliin ang customer at containers na kukunin.",
+          priority: "high",
+          tags: ["Transactions"],
+        },
+        {
+          title: "I-assign ang rider kung kailangan",
+          priority: "medium",
+          tags: ["My Area"],
+        },
+      ],
+    }, {
+      detectedSatisfied: SATISFIED_PATTERNS.test(userText),
+      detectedDissatisfied: DISSATISFIED_PATTERNS.test(userText),
+    });
+  }
+
+  if (lower.includes("rider") || lower.includes("my area")) {
+    return finishRuleTurn({
+      sectionLabel: "SAGOT",
+      summary:
+        "Ang riders ay gumagamit ng **My Area** para makita ang jobs, i-update ang status, " +
+        "at i-complete ang deliveries with proof at signature.",
+      badges: [{ label: "My Area", tone: "success" }],
+      highlights: [
+        {
+          title: "Live map at route",
+          body: "Makikita ang assigned jobs, driving route, at ETAs sa My Area.",
+          variant: "action",
+        },
+      ],
+    }, {
+      detectedSatisfied: SATISFIED_PATTERNS.test(userText),
+      detectedDissatisfied: DISSATISFIED_PATTERNS.test(userText),
+    });
+  }
+
+  if (lower.includes("invite") || lower.includes("team")) {
+    return finishRuleTurn({
+      sectionLabel: "SAGOT",
+      summary:
+        "Pwede mag-invite ng staff ang owners mula sa **Team Hub** (Grow plan pataas).",
+      badges: [{ label: "Team Hub", tone: "info" }],
+      steps: [
+        {
+          title: "Profile menu → Team Hub → Invite",
+          priority: "high",
+          tags: ["Team Hub"],
+        },
+        {
+          title: "Hintayin ang teammate na tanggapin ang email link",
+          priority: "medium",
+        },
+      ],
+    }, {
+      detectedSatisfied: SATISFIED_PATTERNS.test(userText),
+      detectedDissatisfied: DISSATISFIED_PATTERNS.test(userText),
+    });
+  }
+
+  if (
     lower.includes("error") ||
     lower.includes("not working") ||
     lower.includes("still") ||
     lower.includes("failed") ||
     lower.includes("bug")
   ) {
-    reply =
-      "Got it. Let's troubleshoot this quickly:\n" +
-      "1) Tell me the exact page + button you clicked.\n" +
-      "2) Share the exact error text (or screenshot).\n" +
-      "3) I'll give exact fix steps for that specific issue.\n\n" +
-      "If you already tried refresh/logout-login, mention that so I skip repeated steps.";
-  } else if (HUMAN_ESCALATION_PATTERNS.test(userText)) {
-    reply =
-      "I'll connect you with our human helpdesk team. Tap **Talk to human agent** below " +
-      "to open live chat with Smart Refill support.";
-    return {
-      reply,
-      askSatisfaction: false,
-      suggestHuman: true,
-      suggestResolve: false,
-      detectedSatisfied: false,
-      detectedDissatisfied: false,
-      detectedHumanRequest: true,
-      topicOutOfScope: false,
-    };
+    return finishRuleTurn({
+      sectionLabel: "SAGOT",
+      summary: "Sige, i-troubleshoot natin step-by-step para mahanap ang root cause.",
+      badges: [{ label: "Troubleshoot", tone: "urgent" }],
+      steps: [
+        {
+          title: "Sabihin ang exact page + button na na-click mo",
+          priority: "high",
+        },
+        {
+          title: "I-share ang exact error text o screenshot",
+          priority: "high",
+        },
+        {
+          title: "Susunod: bibigyan kita ng exact fix steps",
+          priority: "medium",
+        },
+      ],
+      evidence:
+        "Kung na-try mo na ang refresh/logout-login, sabihin mo para hindi na uulit ang steps.",
+    }, {
+      detectedSatisfied: SATISFIED_PATTERNS.test(userText),
+      detectedDissatisfied: DISSATISFIED_PATTERNS.test(userText),
+    });
   }
 
-  return {
-    reply,
-    askSatisfaction: true,
-    suggestHuman: false,
-    suggestResolve: false,
+  if (HUMAN_ESCALATION_PATTERNS.test(userText)) {
+    return finishRuleTurn({
+      sectionLabel: "SAGOT",
+      summary:
+        "Pasensya — kailangan pa ng mas detalyedong tulong. I-describe ang exact screen o error, " +
+        "o mag-**New topic** para fresh start. Kung billing o account issue, check **Account → Subscription**.",
+      badges: [{ label: "Need more detail", tone: "warning" }],
+    }, {
+      askSatisfaction: false,
+      suggestHuman: false,
+      detectedHumanRequest: true,
+    });
+  }
+
+  return finishRuleTurn({
+    ...GREETING_STRUCTURED,
+    summary:
+      "Hi! Ako si **River AI** — makakatulong ako sa **water refilling / water station** questions " +
+      "mo pati sa **Smart Refill** app. Ano ang kailangan mo?",
+    highlights: undefined,
+  }, {
     detectedSatisfied: SATISFIED_PATTERNS.test(userText),
     detectedDissatisfied: DISSATISFIED_PATTERNS.test(userText),
-    detectedHumanRequest: false,
-    topicOutOfScope: false,
-  };
+  });
 }
 
 async function generateAiTurn(input: {
@@ -283,6 +453,13 @@ async function generateAiTurn(input: {
   sessionSummary?: string;
   currentAttachments?: SupportMessageAttachment[];
 }): Promise<SupportAiTurnResult> {
+  const workspaceCtx = await loadSupportWorkspaceContext(input.businessId);
+  const prerequisiteTurn = buildWorkspacePrerequisiteTurn(
+    input.userText,
+    workspaceCtx,
+  );
+  if (prerequisiteTurn) return prerequisiteTurn;
+
   const knowledge = buildSupportKnowledgeContext(
     input.storedKnowledge,
     input.userText,
@@ -291,11 +468,22 @@ async function generateAiTurn(input: {
   const attachments = input.currentAttachments || [];
   const attachmentNote = buildAttachmentNote(attachments);
 
-  const fallback = ruleBasedReply(input.userText, input.history);
+  const fallback = ruleBasedReply(input.userText, input.history, workspaceCtx);
+  const workspaceBlock = formatSupportWorkspaceContextBlock(workspaceCtx);
 
   const jsonSchema = [
     "{",
-    "  \"reply\": \"string — helpful answer in the user's language\",",
+    "  \"reply\": \"string — plain-text fallback of the same answer (Taglish)\",",
+    "  \"structured\": {",
+    "    \"sectionLabel\": \"string — uppercase label e.g. SAGOT\",",
+    "    \"summary\": \"string — main answer paragraph in Taglish\",",
+    "    \"badges\": [{ \"label\": \"string\", \"tone\": \"info|success|warning|urgent\" }],",
+    "    \"highlights\": [{ \"title\": \"string\", \"body\": \"string\",",
+    "      \"variant\": \"tip|warning|action|note\" }],",
+    "    \"steps\": [{ \"title\": \"string\", \"body\": \"string\",",
+    "      \"priority\": \"high|medium|low\", \"tags\": [\"string\"] }],",
+    "    \"evidence\": \"string — optional extra detail for collapsible section\"",
+    "  },",
     "  \"sessionSummary\": \"string — brief memory for next turn: topic, names, " +
     "steps tried, what's still unresolved (max ~120 words)\",",
     "  \"askSatisfaction\": boolean — true after answering unless escalating,",
@@ -313,11 +501,19 @@ async function generateAiTurn(input: {
     "";
 
   const promptJson =
-    `${SUPPORT_AI_PERSONA}\n\n${SUPPORT_CONVERSATION_RULES}\n\n${knowledge}${memoryBlock}\n\n` +
+    `${SUPPORT_AI_PERSONA}\n\n${SUPPORT_CONVERSATION_RULES}\n\n${workspaceBlock}\n\n${knowledge}${memoryBlock}\n\n` +
     "## Output style\n" +
+    "- Always fill **structured** with a card-style layout (summary + optional badges, " +
+    "highlights, steps).\n" +
+    "- **summary** = short intro only (1–2 sentences). NEVER put numbered steps in summary.\n" +
+    "- Put ALL numbered instructions in **steps[]** (one step per item). Use **highlights** for tips.\n" +
+    "- Use **steps** for fix flows with priority (high/medium/low) and screen tags " +
+    "(e.g. Transactions, My Area).\n" +
+    "- Put optional long context in **evidence** (collapsible). Keep **reply** as plain text " +
+    "mirror of the same content.\n" +
     "- Be concise but concrete.\n" +
-    "- For troubleshooting, provide numbered steps and one clear validation check.\n" +
-    "- If uncertain, say what detail is missing and ask one focused question.\n\n" +
+    "- For troubleshooting, put the fix flow in **steps** with one clear validation check.\n" +
+    "- If uncertain, ask one focused question in **summary**.\n\n" +
     `Respond ONLY with valid JSON matching this schema:\n${jsonSchema}`;
 
   const mediaParts: GeminiContentPart[] = [];
@@ -347,10 +543,56 @@ async function generateAiTurn(input: {
   const parsed = normalizeSupportAiTurn(rawTurn, fallback);
   const hasAttachments = (input.currentAttachments?.length || 0) > 0;
 
-  return applySupportTurnHeuristics(parsed, input.userText, hasAttachments);
+  const withStructured: SupportAiTurnResult = {
+    ...applySupportTurnHeuristics(parsed, input.userText, hasAttachments),
+    structured:
+      parsed.structured ||
+      plainTextToStructuredFallback(parsed.reply || fallback.reply),
+  };
+  withStructured.reply =
+    withStructured.reply ||
+    structuredReplyToPlainText(withStructured.structured!);
+
+  return withStructured;
 }
 
 export class SupportChatService {
+  /**
+   * Persists learnings and closes a session (messages remain in Firestore).
+   * @param {string} businessId Business id.
+   * @param {string} sessionId Session id.
+   * @param {string} userId Firebase uid.
+   * @param {string} closureReason Why the session was archived.
+   * @return {Promise<void>}
+   */
+  static async archiveSessionWithLearnings(
+    businessId: string,
+    sessionId: string,
+    userId: string,
+    closureReason: "user_resolved" | "inactive_timeout" | "user_away" | "daily_rollover",
+  ): Promise<void> {
+    const sessionRef = sessionsCol(businessId).doc(sessionId);
+    const sessionSnap = await sessionRef.get();
+    if (!sessionSnap.exists) return;
+    if (sessionSnap.data()?.userId !== userId) throw new Error("FORBIDDEN");
+
+    const messages = await this.listMessages(businessId, sessionId);
+    await this.persistConversationLearnings(
+      businessId,
+      sessionId,
+      userId,
+      messages,
+    );
+
+    await sessionRef.update({
+      status: "resolved",
+      resolvedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      resolutionConfirmed: true,
+      closureReason,
+    });
+  }
+
   // eslint-disable-next-line valid-jsdoc
   // eslint-disable-next-line valid-jsdoc
   /** Closes open sessions and starts a fresh River AI conversation. */
@@ -364,23 +606,19 @@ export class SupportChatService {
   }> {
     const col = sessionsCol(businessId);
     const existing = await col.where("userId", "==", userId).limit(20).get();
-    const batch = db.batch();
-    let hasActive = false;
 
     for (const doc of existing.docs) {
       const status = doc.data().status as string;
       if (status === "ai_active" || status === "escalated") {
-        hasActive = true;
-        batch.update(doc.ref, {
-          status: "resolved",
-          resolvedAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-          resolutionConfirmed: true,
-        });
+        await this.archiveSessionWithLearnings(
+          businessId,
+          doc.id,
+          userId,
+          "user_resolved",
+        );
       }
     }
 
-    if (hasActive) await batch.commit();
     return this.getOrCreateActiveSession(businessId, userId);
   }
 
@@ -413,13 +651,31 @@ export class SupportChatService {
       })[0];
 
     if (activeDoc) {
-      const doc = activeDoc;
-      const messages = await this.listMessages(businessId, doc.id);
-      return {
-        session: serializeSession(doc.id, businessId, doc.data()),
-        messages,
-        supportAiUsage: await loadSupportAiUsage(businessId),
-      };
+      const docData = activeDoc.data();
+      const status = docData.status as string;
+      const updated =
+        coerceToDate(docData.updatedAt) ?? coerceToDate(docData.createdAt);
+      const todayKey = manilaDateKey();
+      const sessionDayKey = updated ? manilaDateKey(updated) : todayKey;
+
+      if (
+        sessionDayKey < todayKey &&
+        (status === "ai_active" || status === "escalated")
+      ) {
+        await this.archiveSessionWithLearnings(
+          businessId,
+          activeDoc.id,
+          userId,
+          "daily_rollover",
+        );
+      } else {
+        const messages = await this.listMessages(businessId, activeDoc.id);
+        return {
+          session: serializeSession(activeDoc.id, businessId, docData),
+          messages,
+          supportAiUsage: await loadSupportAiUsage(businessId),
+        };
+      }
     }
 
     const ref = col.doc();
@@ -435,13 +691,8 @@ export class SupportChatService {
       updatedAt: now,
     });
 
-    const greeting =
-      "Hi! I'm **River AI**. I can help with **water refilling & water station** topics " +
-      "(operations, suki, deliveries, hygiene tips) and the full **Smart Refill** dashboard. " +
-      "You can chat in **Filipino** or English—or send a **screenshot or screen recording**. " +
-      "What do you need?\n\n" +
-      "Para sa ibang topic na hindi tungkol sa tubig/refill o Smart Refill, sabihin ko nang " +
-      "maayos na hanggang doon lang ang matutulong ko.";
+    const greetingStructured = GREETING_STRUCTURED;
+    const greeting = structuredReplyToPlainText(greetingStructured);
 
     await ref.collection(MESSAGES).add({
       role: "ai",
@@ -451,6 +702,7 @@ export class SupportChatService {
         askSatisfaction: false,
         suggestHuman: false,
         suggestResolve: false,
+        structuredReply: greetingStructured,
       },
     });
 
@@ -564,6 +816,7 @@ export class SupportChatService {
         askSatisfaction: turn.askSatisfaction,
         suggestHuman: turn.suggestHuman,
         suggestResolve: turn.suggestResolve,
+        ...(turn.structured ? { structuredReply: turn.structured } : {}),
       },
     });
 

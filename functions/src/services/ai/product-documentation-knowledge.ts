@@ -59,8 +59,11 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 
 ### Plans & support channels
 - **Starter / Grow / Scale / Enterprise** — team hub and live human chat on higher tiers.
-- **River AI** (this chat): Smart Refill app + water station operations.
-- **Human agent**: Grow+ live chat via Brevo when you tap Talk to human agent.
+- **Header River AI** (orb button): AI help for Smart Refill app + water station operations (plan chat caps).
+- **Profile → Chat support**: live Brevo helpdesk for billing and account issues (Grow+ when enabled)—
+  separate from the header River AI button.
+- **Talk to human agent** inside River AI chat: escalates the same dialog to Brevo when on Grow+.
+- **Analytic Hub / owner AI tools**: separate aiTools quota—not the same as River AI support chat.
 `;
 
 /** FAQ-style entries derived from docs (indexed for retrieval in prompt). */
@@ -146,5 +149,14 @@ export const SUPPORT_PRODUCT_DOC_ENTRIES: Array<{
     content:
       "Mas mabilis na dashboard lists, mas stable sa peak hours, ayos sa onboarding loop, " +
       "at mas consistent na My Area para sa riders. Walang change sa paraan ng pag-record ng sale/delivery.",
+  },
+  {
+    id: "doc-river-ai-vs-live-support",
+    topic: "River AI vs Chat support — saan pumunta?",
+    content:
+      "Header **River AI** (orb): tanong tungkol sa app at operasyon ng station—AI ang sumasagot. " +
+      "Profile menu → **Chat support**: live helpdesk para sa billing, account, at escalated issues. " +
+      "Sa loob ng River AI, pwede ring **Talk to human agent** kung Grow+ plan. " +
+      "Hiwalay ang Analytic Hub AI tools sa River AI support chat quota.",
   },
 ];

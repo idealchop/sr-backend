@@ -4,6 +4,7 @@ import {
   InsufficientStockError,
 } from "../../services/transactions/transaction-service";
 import { logger } from "../../services/observability/logging/logger";
+import { maybeSendCustomerTxnNotification } from "../../services/portal/customer-transaction-notifier";
 
 import {
   claimNearbyStopForRider,
@@ -108,12 +109,41 @@ export const transactionHandler = {
     const { businessId, id } = req.params;
     const user = (req as any).user;
     try {
+      const before = await TransactionService.getTransaction(businessId, id);
       await TransactionService.updateTransaction(
         businessId,
         id,
         req.body,
         user?.uid,
       );
+
+      // NT-33 — staff ledger terminal delivery/collection customer receipt
+      if (before) {
+        const after = await TransactionService.getTransaction(businessId, id);
+        const terminal = new Set(["delivered", "collected", "completed"]);
+        const becameTerminal =
+          after?.deliveryStatus &&
+          terminal.has(after.deliveryStatus) &&
+          !terminal.has(String(before.deliveryStatus || ""));
+        if (
+          becameTerminal &&
+          after &&
+          (after.type === "delivery" || after.type === "collection")
+        ) {
+          void maybeSendCustomerTxnNotification({
+            businessId,
+            transaction: { ...after, id },
+            beforeStatus: before.deliveryStatus,
+            event: "completed",
+          }).catch((err) => {
+            logger.warn("customer_txn_notification_handler_failed", {
+              businessId,
+              transactionId: id,
+              err,
+            });
+          });
+        }
+      }
 
       res.json({ success: true });
     } catch (error) {

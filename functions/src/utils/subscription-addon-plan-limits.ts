@@ -13,6 +13,7 @@ export type AddonLimitationExtension =
   | "customers"
   | "transactions_daily"
   | "online_orders"
+  | "extra_business"
   | "none";
 
 export type PlanLimitFrequency = "daily" | "monthly";
@@ -174,6 +175,8 @@ export function addonExtensionMatchesPlan(
     return quotaIsCapped(q.transactionsDailyMax);
   case "online_orders":
     return q.onlineOrders !== null;
+  case "extra_business":
+    return true;
   default:
     return true;
   }

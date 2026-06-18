@@ -39,7 +39,8 @@ export function resolveReorderAlertDaysAhead(
   return DEFAULT_REORDER_ALERT_DAYS_AHEAD;
 }
 
-function listLowStockItems(inventory: InventoryItem[]): LowStockInventoryRow[] {
+/** Shared low-stock detector for NT-09 / NT-27 / NT-74. */
+export function listLowStockItems(inventory: InventoryItem[]): LowStockInventoryRow[] {
   return inventory
     .filter((item) => {
       const current = item.stock?.current ?? 0;
