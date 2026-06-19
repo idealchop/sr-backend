@@ -3,6 +3,13 @@ import { logger } from "../observability/logging/logger";
 import { RiderService } from "../riders/rider-service";
 import type { Transaction } from "../transactions/transaction-service";
 import type { RawSubmissionType } from "../portal/raw-submission-types";
+import type { PortalCustomerStatus } from "../portal/portal-profile-diff";
+import {
+  mapPortalOrderKindToSource,
+  notificationTitleWithOrderSource,
+  resolveTransactionOrderSource,
+  type TransactionOrderSource,
+} from "./transaction-order-source";
 import {
   NotificationService,
   type NotificationPayload,
@@ -70,6 +77,7 @@ function transactionReviewMeta(
   tx: Partial<Transaction> & { id?: string },
   extra?: Record<string, unknown>,
 ): Record<string, unknown> {
+  const orderSource = resolveTransactionOrderSource(tx);
   return {
     reviewTab: "transactions",
     category: "transaction",
@@ -77,22 +85,76 @@ function transactionReviewMeta(
     referenceId: tx.referenceId,
     customerId: tx.customerId,
     customerName: tx.customerName,
+    ...(orderSource ? { orderSource } : {}),
     ...extra,
   };
 }
 
-async function listManagementUserIds(businessId: string): Promise<string[]> {
+function portalReviewMeta(
+  extra: Record<string, unknown>,
+  portalOrderKind?: string,
+): Record<string, unknown> {
+  const orderSource = mapPortalOrderKindToSource(portalOrderKind);
+  return {
+    reviewTab: "submissions",
+    category: "portal",
+    ...(orderSource ? { orderSource } : {}),
+    ...extra,
+  };
+}
+
+function orderSourceToPortalKind(
+  source: TransactionOrderSource,
+): "delivery" | "walkin" | "collection" {
+  switch (source) {
+  case "qr_walkin":
+    return "walkin";
+  case "qr_collection":
+    return "collection";
+  case "qr_order":
+  default:
+    return "delivery";
+  }
+}
+
+function prefixTitleForTransaction(
+  baseTitle: string,
+  tx: Partial<Transaction>,
+): string {
+  return notificationTitleWithOrderSource(
+    baseTitle,
+    resolveTransactionOrderSource(tx),
+  );
+}
+
+/**
+ * Owner + active management seats that receive in-app station notifications.
+ * Always includes `businesses.ownerId` even when the owner member doc is missing
+ * or has no explicit role (legacy workspaces).
+ * @param {string} businessId Business id.
+ * @return {Promise<string[]>} Distinct Firebase Auth user ids.
+ */
+export async function listManagementUserIds(
+  businessId: string,
+): Promise<string[]> {
   const [membersSnap, businessDoc] = await Promise.all([
     db.collection("businesses").doc(businessId).collection("members").get(),
     db.collection("businesses").doc(businessId).get(),
   ]);
-  const ownerId = businessDoc.data()?.ownerId as string | undefined;
+  const ownerId = String(businessDoc.data()?.ownerId || "").trim();
   const ids = new Set<string>();
   if (ownerId) ids.add(ownerId);
   for (const doc of membersSnap.docs) {
-    const role = String(doc.data()?.role || "").toLowerCase();
-    if (MANAGEMENT_ROLES.has(role) && doc.data()?.isActive !== false) {
-      ids.add(doc.id);
+    const data = doc.data();
+    if (data?.isActive === false) continue;
+    const role = String(data?.role || "").toLowerCase();
+    const memberUid = String(data?.userId || doc.id).trim();
+    if (!memberUid) continue;
+    if (MANAGEMENT_ROLES.has(role)) {
+      ids.add(memberUid);
+    }
+    if (ownerId && memberUid === ownerId) {
+      ids.add(ownerId);
     }
   }
   return [...ids];
@@ -126,10 +188,8 @@ async function sendToUsers(
   businessId: string,
   userIds: string[],
   payload: Omit<NotificationPayload, "userId" | "businessId">,
-  excludeUserIds: string[] = [],
 ): Promise<void> {
-  const exclude = new Set(excludeUserIds.filter(Boolean));
-  const unique = [...new Set(userIds.filter((id) => id && !exclude.has(id)))];
+  const unique = [...new Set(userIds.filter(Boolean))];
   await Promise.all(
     unique.map((userId) =>
       NotificationService.send({
@@ -151,10 +211,9 @@ async function sendToUsers(
 async function notifyManagement(
   businessId: string,
   payload: Omit<NotificationPayload, "userId" | "businessId">,
-  opts?: { excludeUserIds?: string[] },
 ): Promise<void> {
   const userIds = await listManagementUserIds(businessId);
-  await sendToUsers(businessId, userIds, payload, opts?.excludeUserIds);
+  await sendToUsers(businessId, userIds, payload);
 }
 
 async function notifyRiderUser(
@@ -209,6 +268,7 @@ export async function notifyTransactionCreated(
   const amountLine = buildAmountLine(tx);
   const typeLabel = transactionTypeLabel(tx.type);
   const riderName = cleanLabel(tx.riderName, "");
+  const orderSource = resolveTransactionOrderSource(tx);
 
   let title: string;
   let message: string;
@@ -228,36 +288,63 @@ export async function notifyTransactionCreated(
     type = "warning";
     break;
   case "walkin":
-  case "direct_sale":
-    title = typeLabel;
-    message = `${customer} — ${amountLine || "completed"} (${ref}).`;
+  case "direct_sale": {
+    const baseTitle =
+      orderSource === "qr_walkin" ? "Counter check-in accepted" : typeLabel;
+    title = notificationTitleWithOrderSource(baseTitle, orderSource);
+    message =
+      orderSource === "qr_walkin" ?
+        `${customer} scanned walk-in QR — ${amountLine || "completed"} (${ref}).` :
+        `${customer} — ${amountLine || "completed"} (${ref}).`;
     type = "success";
     break;
-  case "collection":
-    title = "Collection scheduled";
-    message = `${customer} — ${amountLine || "collection"} (${ref})${
-      riderName ? ` · Rider: ${riderName}` : ""
-    }.`;
+  }
+  case "collection": {
+    const baseTitle =
+      orderSource === "qr_collection" ?
+        "Portal collection scheduled" :
+        "Collection scheduled";
+    title = notificationTitleWithOrderSource(baseTitle, orderSource);
+    message =
+      orderSource === "qr_collection" ?
+        `${customer} requested pickup via QR — ${amountLine || "collection"} (${ref})${
+          riderName ? ` · Rider: ${riderName}` : ""
+        }.` :
+        `${customer} — ${amountLine || "collection"} (${ref})${
+          riderName ? ` · Rider: ${riderName}` : ""
+        }.`;
     break;
+  }
   case "delivery":
-  default:
-    title = "New delivery order";
-    message = `${customer} — ${amountLine || "order"} (${ref})${
-      riderName ? ` · Assigned to ${riderName}` : ""
-    }.`;
-    if (tx.deliveryStatus === "placed") {
-      title = "Portal order accepted";
-    }
+  default: {
+    const baseTitle =
+      orderSource === "qr_order" ?
+        (tx.deliveryStatus === "placed" ? "Portal order accepted" : "QR delivery order") :
+        "New delivery order";
+    title = notificationTitleWithOrderSource(baseTitle, orderSource);
+    message =
+      orderSource === "qr_order" ?
+        `${customer} ordered via QR — ${amountLine || "order"} (${ref})${
+          riderName ? ` · Assigned to ${riderName}` : ""
+        }.` :
+        `${customer} — ${amountLine || "order"} (${ref})${
+          riderName ? ` · Assigned to ${riderName}` : ""
+        }.`;
     if (tx.paymentStatus === "unpaid" || tx.paymentStatus === "partial") {
       type = "warning";
     }
     break;
+  }
   }
 
   const meta = transactionReviewMeta(tx, {
     transactionType: tx.type,
     deliveryStatus: tx.deliveryStatus,
     riderId: tx.riderId,
+    ...(orderSource === "qr_order" || orderSource === "qr_walkin" ||
+      orderSource === "qr_collection" ?
+      { portalOrderKind: orderSourceToPortalKind(orderSource) } :
+      {}),
   });
 
   await notifyManagement(businessId, {
@@ -265,7 +352,7 @@ export async function notifyTransactionCreated(
     message,
     type,
     metadata: meta,
-  }, { excludeUserIds: actorUserId ? [actorUserId] : [] });
+  });
 
   if (tx.riderId && (tx.type === "delivery" || tx.type === "collection")) {
     await notifyRiderUser(businessId, tx.riderId, {
@@ -323,7 +410,7 @@ export async function notifyTransactionUpdated(
   if (statusChanged && after.deliveryStatus) {
     const status = deliveryStatusLabel(after.deliveryStatus);
     const riderName = cleanLabel(after.riderName, "");
-    let title = "Order status updated";
+    let title = prefixTitleForTransaction("Order status updated", after);
     let type: NotifyType = "info";
     let message = `${customer} is now ${status} (${ref})${
       riderName ? ` · ${riderName}` : ""
@@ -334,8 +421,10 @@ export async function notifyTransactionUpdated(
       after.deliveryStatus === "collected" ||
       after.deliveryStatus === "completed"
     ) {
-      title =
-        after.type === "collection" ? "Collection completed" : "Delivery completed";
+      title = prefixTitleForTransaction(
+        after.type === "collection" ? "Collection completed" : "Delivery completed",
+        after,
+      );
       message = `${riderName || actor} completed ${customer} (${ref})${
         buildAmountLine(after) ? ` · ${buildAmountLine(after)}` : ""
       }.`;
@@ -343,13 +432,13 @@ export async function notifyTransactionUpdated(
     } else if (
       after.deliveryStatus === "in-transit"
     ) {
-      title = "Rider en route";
+      title = prefixTitleForTransaction("Rider en route", after);
       message = `${riderName || "Rider"} is on the way to ${customer} (${ref}).`;
     } else if (
       after.deliveryStatus === "failed" ||
       after.deliveryStatus === "cancelled"
     ) {
-      title = "Order cancelled";
+      title = prefixTitleForTransaction("Order cancelled", after);
       message = `${customer} (${ref}) was marked ${status}.`;
       type = "warning";
     }
@@ -401,7 +490,7 @@ export async function notifyTransactionUpdated(
 
   if (paymentChanged && after.paymentStatus === "paid") {
     await notifyManagement(businessId, {
-      title: "Payment received",
+      title: prefixTitleForTransaction("Payment received", after),
       message: `${customer} paid ${formatPeso(after.totalAmount ?? 0)} (${ref}).`,
       type: "success",
       metadata: meta,
@@ -411,7 +500,7 @@ export async function notifyTransactionUpdated(
     (after.paymentStatus === "partial" || after.paymentStatus === "unpaid")
   ) {
     await notifyManagement(businessId, {
-      title: "Balance updated",
+      title: prefixTitleForTransaction("Balance updated", after),
       message: `${customer} now has ${formatPeso(after.balanceDue ?? 0)} outstanding (${ref}).`,
       type: "warning",
       metadata: meta,
@@ -427,8 +516,12 @@ export async function notifyTransactionUpdated(
       message: `${actor} updated ${fields.join(" and ")} for ${customer} (${ref}).`,
       type: "info",
       metadata: meta,
-    }, { excludeUserIds: actorUserId ? [actorUserId] : [] });
+    });
   }
+}
+
+function portalCustomerStatusLabel(status: PortalCustomerStatus | undefined): string {
+  return status === "recognized" ? "recognized suki" : "new customer";
 }
 
 export async function notifyPortalSubmissionCreated(
@@ -440,37 +533,53 @@ export async function notifyPortalSubmissionCreated(
     customerName: string;
     referenceId: string;
     portalOrderKind?: string;
+    portalCustomerStatus?: PortalCustomerStatus;
   },
 ): Promise<void> {
   const name = cleanLabel(opts.customerName, "A customer");
   const ref = opts.referenceId.trim() || "Portal request";
-  let title = "New portal order";
-  let message = `${name} placed an order (${ref}).`;
+  const statusSuffix =
+    opts.portalCustomerStatus === "recognized" ?
+      " (recognized suki)" :
+      opts.portalCustomerStatus === "new" ?
+        " (new customer)" :
+        "";
+  let title = notificationTitleWithOrderSource(
+    "New portal order",
+    mapPortalOrderKindToSource(opts.portalOrderKind) ?? "qr_order",
+  );
+  let message = `${name} placed an order (${ref})${statusSuffix}.`;
 
   switch (opts.submissionType) {
   case "REQUEST_COLLECTION":
-    title = "Collection request (QR)";
-    message = `${name} requested a container pickup (${ref}).`;
+    title = notificationTitleWithOrderSource(
+      "Collection request",
+      "qr_collection",
+    );
+    message = `${name} requested a container pickup via QR (${ref})${statusSuffix}.`;
     break;
   case "PORTAL_PAY_BALANCE":
     title = "Portal payment";
-    message = `${name} sent a balance payment (${ref}).`;
+    message = `${name} sent a balance payment (${ref})${statusSuffix}.`;
     break;
   case "MARK_TX_COMPLETE":
   case "COMPLETE_TX":
     title = "Customer marked order complete";
-    message = `${name} confirmed completion (${ref}).`;
+    message = `${name} confirmed completion (${ref})${statusSuffix}.`;
     break;
   case "PLACE_ORDER":
     if (opts.portalOrderKind === "walkin") {
-      title = "Counter QR walk-in";
-      message = `${name} checked in at the counter (${ref}).`;
+      title = notificationTitleWithOrderSource("Counter check-in", "qr_walkin");
+      message = `${name} scanned walk-in QR at the counter (${ref})${statusSuffix}.`;
     } else if (opts.portalOrderKind === "collection") {
-      title = "Portal collection request";
-      message = `${name} requested collection (${ref}).`;
+      title = notificationTitleWithOrderSource(
+        "Collection request",
+        "qr_collection",
+      );
+      message = `${name} requested collection via QR (${ref})${statusSuffix}.`;
     } else {
-      title = "New QR order";
-      message = `${name} placed a delivery order (${ref}).`;
+      title = notificationTitleWithOrderSource("New delivery order", "qr_order");
+      message = `${name} placed a delivery order via QR (${ref})${statusSuffix}.`;
     }
     break;
   default:
@@ -481,13 +590,197 @@ export async function notifyPortalSubmissionCreated(
     title,
     message,
     type: "info",
+    metadata: portalReviewMeta(
+      {
+        submissionId: opts.submissionId,
+        customerId: opts.customerId,
+        referenceId: opts.referenceId,
+        ...(opts.portalOrderKind ? { portalOrderKind: opts.portalOrderKind } : {}),
+        ...(opts.portalCustomerStatus ?
+          { portalCustomerStatus: opts.portalCustomerStatus } :
+          {}),
+      },
+      opts.portalOrderKind,
+    ),
+  });
+}
+
+/**
+ * Notifies management when a recognized suki submits changed profile fields.
+ * @param {string} businessId Business id.
+ * @param {object} opts Notification context.
+ * @return {Promise<void>}
+ */
+export async function notifyPortalRecognizedProfileUpdated(
+  businessId: string,
+  opts: {
+    submissionId: string;
+    customerId: string;
+    customerName: string;
+    referenceId: string;
+    changedSummary: string;
+  },
+): Promise<void> {
+  const name = cleanLabel(opts.customerName, "Customer");
+  const ref = opts.referenceId.trim() || "Portal request";
+  await notifyManagement(businessId, {
+    title: "Portal profile update",
+    message:
+      `${name} (recognized suki) updated ${opts.changedSummary} via QR portal (${ref}).`,
+    type: "info",
     metadata: {
-      reviewTab: "transactions",
+      reviewTab: "submissions",
       category: "portal",
       submissionId: opts.submissionId,
       customerId: opts.customerId,
       referenceId: opts.referenceId,
+      portalCustomerStatus: "recognized",
+      portalProfileUpdated: true,
     },
+  });
+}
+
+/**
+ * Notifies when staff links a portal submission to an existing suki.
+ * @param {string} businessId Business id.
+ * @param {object} opts Notification context.
+ * @param {string} [opts.actorUserId] Staff user id.
+ * @return {Promise<void>}
+ */
+export async function notifyPortalSukiIdentified(
+  businessId: string,
+  opts: {
+    submissionId: string;
+    customerId: string;
+    customerName: string;
+    referenceId: string;
+    changedSummary?: string;
+  },
+  actorUserId?: string,
+): Promise<void> {
+  const actor = await resolveActorLabel(businessId, actorUserId);
+  const name = cleanLabel(opts.customerName, "Customer");
+  const ref = opts.referenceId.trim() || "Portal request";
+  const updateLine = opts.changedSummary ?
+    ` — updated ${opts.changedSummary}` :
+    "";
+  await notifyManagement(businessId, {
+    title: "Portal suki identified",
+    message: `${actor} matched ${name} to this portal request (${ref})${updateLine}.`,
+    type: "info",
+    metadata: {
+      reviewTab: "submissions",
+      category: "portal",
+      submissionId: opts.submissionId,
+      customerId: opts.customerId,
+      referenceId: opts.referenceId,
+      portalCustomerStatus: "recognized",
+    },
+  });
+}
+
+/**
+ * Notifies when a new suki is registered from a portal submission.
+ * @param {string} businessId Business id.
+ * @param {object} opts Notification context.
+ * @param {string} [opts.actorUserId] Staff user id.
+ * @return {Promise<void>}
+ */
+export async function notifyPortalSukiRegistered(
+  businessId: string,
+  opts: {
+    submissionId: string;
+    customerId: string;
+    customerName: string;
+    referenceId: string;
+  },
+  actorUserId?: string,
+): Promise<void> {
+  const actor = await resolveActorLabel(businessId, actorUserId);
+  const name = cleanLabel(opts.customerName, "New suki");
+  const ref = opts.referenceId.trim() || "Portal request";
+  await notifyManagement(businessId, {
+    title: "New suki from portal",
+    message: `${actor} registered ${name} from a portal request (${ref}).`,
+    type: "success",
+    metadata: {
+      reviewTab: "submissions",
+      category: "portal",
+      submissionId: opts.submissionId,
+      customerId: opts.customerId,
+      referenceId: opts.referenceId,
+      portalCustomerStatus: "new",
+    },
+  });
+}
+
+/**
+ * Notifies when a portal submission is accepted into the transaction ledger.
+ * @param {string} businessId Business id.
+ * @param {object} opts Notification context.
+ * @param {string} [opts.actorUserId] Staff user id.
+ * @return {Promise<void>}
+ */
+export async function notifyPortalSubmissionFulfilled(
+  businessId: string,
+  opts: {
+    submissionId: string;
+    submissionType: RawSubmissionType;
+    customerId: string;
+    customerName: string;
+    referenceId: string;
+    transactionId?: string;
+    portalOrderKind?: string;
+    portalCustomerStatus?: PortalCustomerStatus;
+  },
+  actorUserId?: string,
+): Promise<void> {
+  const actor = await resolveActorLabel(businessId, actorUserId);
+  const name = cleanLabel(opts.customerName, "Customer");
+  const ref = opts.referenceId.trim() || "Portal request";
+  const statusLabel = portalCustomerStatusLabel(opts.portalCustomerStatus);
+  let title = "Portal request recorded";
+  let message =
+    `${actor} proceeded ${name} (${statusLabel}) to the ledger (${ref}).`;
+
+  if (opts.submissionType === "PLACE_ORDER") {
+    if (opts.portalOrderKind === "walkin") {
+      title = notificationTitleWithOrderSource("Walk-in recorded", "qr_walkin");
+      message =
+        `${actor} recorded QR walk-in for ${name} (${statusLabel}) (${ref}).`;
+    } else if (opts.portalOrderKind === "collection") {
+      title = notificationTitleWithOrderSource("Collection recorded", "qr_collection");
+      message =
+        `${actor} recorded QR collection for ${name} (${statusLabel}) (${ref}).`;
+    } else {
+      title = notificationTitleWithOrderSource("Portal order recorded", "qr_order");
+      message =
+        `${actor} recorded QR delivery for ${name} (${statusLabel}) (${ref}).`;
+    }
+  } else if (opts.submissionType === "REQUEST_COLLECTION") {
+    title = notificationTitleWithOrderSource("Collection recorded", "qr_collection");
+    message =
+      `${actor} recorded QR collection for ${name} (${statusLabel}) (${ref}).`;
+  }
+
+  await notifyManagement(businessId, {
+    title,
+    message,
+    type: "success",
+    metadata: portalReviewMeta(
+      {
+        submissionId: opts.submissionId,
+        customerId: opts.customerId,
+        referenceId: opts.referenceId,
+        ...(opts.transactionId ? { transactionId: opts.transactionId } : {}),
+        ...(opts.portalOrderKind ? { portalOrderKind: opts.portalOrderKind } : {}),
+        ...(opts.portalCustomerStatus ?
+          { portalCustomerStatus: opts.portalCustomerStatus } :
+          {}),
+        portalFulfilled: true,
+      },
+      opts.portalOrderKind,
+    ),
   });
 }
 
@@ -510,7 +803,28 @@ export async function notifyCustomerProfileUpdated(
       customerId,
       customerName: name,
     },
-  }, { excludeUserIds: actorUserId ? [actorUserId] : [] });
+  });
+}
+
+export async function notifyCustomerRemoved(
+  businessId: string,
+  customerId: string,
+  customerName: string,
+  actorUserId?: string,
+): Promise<void> {
+  const actor = await resolveActorLabel(businessId, actorUserId);
+  const name = cleanLabel(customerName, "A customer");
+  await notifyManagement(businessId, {
+    title: "Customer removed",
+    message: `${actor} removed ${name} from your suki list.`,
+    type: "warning",
+    metadata: {
+      reviewTab: "customers",
+      category: "customer",
+      customerId,
+      customerName: name,
+    },
+  });
 }
 
 export async function notifyRiderProfileUpdated(
@@ -530,7 +844,7 @@ export async function notifyRiderProfileUpdated(
       category: "rider",
       riderId,
     },
-  }, { excludeUserIds: actorUserId ? [actorUserId] : [] });
+  });
 
   await notifyRiderUser(businessId, riderId, {
     title: "Your rider profile was updated",
@@ -586,7 +900,7 @@ export async function notifyInventoryStockAdjusted(
       itemId,
       itemName: name,
     },
-  }, { excludeUserIds: actorUserId ? [actorUserId] : [] });
+  });
 }
 
 /** @deprecated Prefer notifyManagement — kept for gradual migration.

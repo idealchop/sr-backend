@@ -83,6 +83,46 @@ export const completeMaintenanceTemplate = async (req: Request, res: Response) =
   }
 };
 
+export const updateMaintenanceTemplate = async (req: Request, res: Response) => {
+  const { businessId, templateId } = req.params;
+  const user = (req as { user?: { uid: string } }).user;
+
+  try {
+    const { hasAccess, role } = await checkBusinessAccess(user?.uid ?? "", businessId);
+    if (!hasAccess || role === "member") {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    if (!("dueAfterGallons" in body)) {
+      res.status(400).json({ error: "dueAfterGallons is required" });
+      return;
+    }
+
+    const raw = body.dueAfterGallons;
+    const dueAfterGallons =
+      raw === null || raw === "" ?
+        null :
+        Number(raw);
+
+    const template = await MaintenanceTemplateService.updateDueAfterGallons(
+      businessId,
+      templateId,
+      dueAfterGallons,
+    );
+    res.json({ data: template });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    if (message === "Maintenance template not found") {
+      res.status(404).json({ error: message });
+      return;
+    }
+    logger.error(`Error updating maintenance template ${templateId}`, error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
 export const getPlantStaffQrToken = async (req: Request, res: Response) => {
   const { businessId } = req.params;
   const user = (req as { user?: { uid: string } }).user;

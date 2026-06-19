@@ -3,6 +3,7 @@ import {
   completeMaintenanceTemplate,
   getPlantStaffQrToken,
   listMaintenanceTemplates,
+  updateMaintenanceTemplate,
 } from "../handlers/maintenance-template-handler";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
 
@@ -18,6 +19,11 @@ router.post(
   "/:businessId/:templateId/complete",
   validateFirebaseIdToken,
   completeMaintenanceTemplate,
+);
+router.patch(
+  "/:businessId/:templateId",
+  validateFirebaseIdToken,
+  updateMaintenanceTemplate,
 );
 
 export default router;

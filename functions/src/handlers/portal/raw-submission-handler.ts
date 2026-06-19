@@ -18,6 +18,15 @@ import {
   RawSubmissionService,
 } from "../../services/portal/raw-submission-service";
 import type { RawSubmission } from "../../services/portal/raw-submission-types";
+import {
+  listPortalProfileChanges,
+  summarizePortalProfileChanges,
+} from "../../services/portal/portal-profile-diff";
+import {
+  notifyPortalSubmissionFulfilled,
+  notifyPortalSukiIdentified,
+  notifyPortalSukiRegistered,
+} from "../../services/notifications/station-activity-notification-service";
 
 async function respondIfBeyondOnlineOrderLimit(
   res: Response,
@@ -491,6 +500,33 @@ export const markSubmissionFulfilled = async (req: Request, res: Response) => {
       processedByUid: user.uid,
     });
 
+    if (transactionId) {
+      const customer = submission.customerId ?
+        await CustomerService.getCustomer(businessId, submission.customerId) :
+        null;
+      void notifyPortalSubmissionFulfilled(
+        businessId,
+        {
+          submissionId,
+          submissionType: submission.submissionType,
+          customerId: submission.customerId || "",
+          customerName: customer?.name || "Customer",
+          referenceId: submission.referenceId || "",
+          transactionId,
+          portalOrderKind: submission.metadata?.portalOrderKind,
+          portalCustomerStatus:
+            submission.metadata?.customerRegisteredAt != null ?
+              "new" :
+              submission.customerId ?
+                "recognized" :
+                "new",
+        },
+        user.uid,
+      ).catch((err) =>
+        console.error("notifyPortalSubmissionFulfilled failed", err),
+      );
+    }
+
     const txInfo = transactionId ? ` · linked ${transactionId}` : "";
     const summary =
       `Portal submission closed as fulfilled (${submissionId})${txInfo}`.slice(
@@ -616,6 +652,10 @@ export const mergeSubmissionProfileToCustomer = async (
       );
     }
 
+    const changedSummary = summarizePortalProfileChanges(
+      listPortalProfileChanges(customer, submission.payload),
+    );
+
     const refreshed =
       (await CustomerService.getCustomer(businessId, targetId)) ?? customer;
     await ensureCustomerActiveForPortalAcceptance(businessId, refreshed);
@@ -630,6 +670,18 @@ export const mergeSubmissionProfileToCustomer = async (
       businessId,
       submissionId,
     );
+
+    void notifyPortalSukiIdentified(
+      businessId,
+      {
+        submissionId,
+        customerId: targetId,
+        customerName: refreshed.name || customer.name || "Customer",
+        referenceId: submission.referenceId || "",
+        ...(changedSummary ? { changedSummary } : {}),
+      },
+      user.uid,
+    ).catch((err) => console.error("notifyPortalSukiIdentified failed", err));
 
     const summary = `Merged portal profile to customer ${targetId}`.slice(
       0,
@@ -742,6 +794,17 @@ export const registerNewSukiFromSubmission = async (
       businessId,
       submissionId,
     );
+
+    void notifyPortalSukiRegistered(
+      businessId,
+      {
+        submissionId,
+        customerId: newId,
+        customerName: customer.name || "New suki",
+        referenceId: submission.referenceId || "",
+      },
+      user.uid,
+    ).catch((err) => console.error("notifyPortalSukiRegistered failed", err));
 
     const summary =
       `Registered new suki from portal submission ${submissionId}`.slice(

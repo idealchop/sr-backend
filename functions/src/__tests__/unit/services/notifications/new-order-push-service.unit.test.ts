@@ -11,9 +11,20 @@ describe("new-order-push-service", () => {
       "Maria Santos",
       "TX-260602-ABCD",
     );
-    expect(copy.title).toBe("New portal order");
+    expect(copy.title).toBe("New QR order");
     expect(copy.body).toContain("Maria Santos");
     expect(copy.body).toContain("TX-260602-ABCD");
+  });
+
+  it("builds copy for counter walk-in portal orders", () => {
+    const copy = buildNewOrderPushCopy(
+      "PLACE_ORDER",
+      "Juan Dela Cruz",
+      "TX-260602-WALK",
+      "walkin",
+    );
+    expect(copy.title).toBe("Counter walk-in");
+    expect(copy.body).toContain("checked in at the counter");
   });
 
   it("builds copy for collection requests", () => {

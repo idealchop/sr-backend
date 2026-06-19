@@ -13,6 +13,7 @@ import {
 import {
   notifyBusinessMembers,
   notifyCustomerProfileUpdated,
+  notifyCustomerRemoved,
 } from "../services/notifications/station-activity-notification-service";
 import {
   logAuditEvent,
@@ -310,16 +311,12 @@ export const deleteCustomer = async (req: Request, res: Response) => {
       null,
     );
 
-    await notifyBusinessMembers(businessId, {
-      title: "Customer removed",
-      message: `${oldCustomer?.name || "A customer"} was removed from your suki list.`,
-      type: "warning",
-      metadata: {
-        reviewTab: "customers",
-        category: "customer",
-        customerId,
-      },
-    });
+    await notifyCustomerRemoved(
+      businessId,
+      customerId,
+      oldCustomer?.name || "A customer",
+      user.uid,
+    );
 
     res.json({ success: true });
   } catch (error) {

@@ -1,28 +1,18 @@
-import { db } from "../../config/firebase-admin";
 import {
-  DEFAULT_GETTING_STARTED,
-  type GettingStartedKey,
-} from "../business/business-onboarding-defaults";
-import {
-  detectGettingStartedFromCollections,
-} from "../business/getting-started-sync-service";
-import {
-  TransactionService,
-  type Transaction,
-} from "../transactions/transaction-service";
-import { CustomerService, type Customer } from "../customers/customer-service";
-import { computeDebtAgingBreakdown } from "../../utils/analytics-utils";
-import { buildDormantSignalsSnapshot } from "../../utils/dormant-customers";
-import { buildPaymentReminderQueue } from "../../utils/payment-reminder-queue";
+  buildBusinessBuddySnapshot,
+  formatBusinessBuddyContextBlock,
+  loadBusinessBuddyFirestoreData,
+  type BusinessBuddySnapshot,
+  type BuddyScheduleStop,
+} from "./business-buddy-snapshot";
+import type { WorkspaceRevenueMetrics } from "../../utils/ledger-collected-revenue";
+import type { GettingStartedKey } from "../business/business-onboarding-defaults";
 import type { SupportAiTurnResult, SupportStructuredReply } from "./support-chat-types";
 import { structuredReplyToPlainText } from "./support-structured-reply";
 
-export type SupportWorkspaceOpsSnapshot = {
-  dormantCount: number;
-  unpaidTotalPhp: number;
-  openDeliveryCount: number;
+export type SupportWorkspaceOpsSnapshot = BusinessBuddySnapshot["ops"] & {
   revenuePhpLast7Days: number;
-  callTodayCount: number;
+  revenue: WorkspaceRevenueMetrics;
 };
 
 export type SupportWorkspaceContext = {
@@ -30,135 +20,41 @@ export type SupportWorkspaceContext = {
   gettingStarted: Record<GettingStartedKey, boolean>;
   activeRiderCount: number;
   ops: SupportWorkspaceOpsSnapshot;
+  buddy: BusinessBuddySnapshot;
 };
-
-function parseTxDate(t: Transaction): Date {
-  const raw = t.scheduledAt ?? t.createdAt;
-  if (!raw) return new Date(0);
-  if (typeof raw === "string") return new Date(raw);
-  if (typeof (raw as { toDate?: () => Date }).toDate === "function") {
-    return (raw as { toDate: () => Date }).toDate();
-  }
-  return new Date(0);
-}
-
-function isTerminalDelivery(status: string | undefined): boolean {
-  if (!status) return false;
-  return ["completed", "cancelled", "failed", "collected"].includes(status);
-}
-
-function buildOpsSnapshot(
-  transactions: Transaction[],
-  customers: Customer[],
-  now: Date,
-): SupportWorkspaceOpsSnapshot {
-  const sevenAgo = new Date(now.getTime() - 7 * 86400000);
-  let revenue7d = 0;
-  let openDeliveries = 0;
-
-  for (const tx of transactions) {
-    if (tx.type === "expense") continue;
-    if (tx.type === "collection") {
-      const d = parseTxDate(tx);
-      if (d >= sevenAgo) revenue7d += Number(tx.totalAmount) || 0;
-      continue;
-    }
-    const txDate = parseTxDate(tx);
-    if (txDate >= sevenAgo) {
-      revenue7d += Number(tx.totalAmount) || 0;
-    }
-    if (tx.type === "delivery") {
-      const st = tx.deliveryStatus || "";
-      if (!isTerminalDelivery(st)) openDeliveries += 1;
-    }
-  }
-
-  const dormantSignals = buildDormantSignalsSnapshot(customers, transactions, now);
-  const debt = computeDebtAgingBreakdown(transactions, customers);
-  const unpaidTotalPhp = Math.round(
-    debt.rows.reduce((sum, row) => sum + row.amount, 0) * 100,
-  ) / 100;
-  const callTodayCount = buildPaymentReminderQueue(debt.rows, customers, {
-    paymentReminderEnabled: true,
-    paymentReminder30Enabled: true,
-    paymentReminder60Enabled: true,
-    paymentReminder90Enabled: true,
-  }, now).length;
-
-  return {
-    dormantCount: Number(dormantSignals.dormantCount ?? 0),
-    unpaidTotalPhp,
-    openDeliveryCount: openDeliveries,
-    revenuePhpLast7Days: Math.round(revenue7d * 100) / 100,
-    callTodayCount,
-  };
-}
 
 export async function loadSupportWorkspaceContext(
   businessId: string,
 ): Promise<SupportWorkspaceContext> {
-  const bizRef = db.collection("businesses").doc(businessId);
-  const now = new Date();
-  const [bizSnap, detected, membersSnap, transactions, customers] = await Promise.all([
-    bizRef.get(),
-    detectGettingStartedFromCollections(businessId),
-    bizRef.collection("members").limit(40).get(),
-    TransactionService.getTransactionsByBusiness(businessId, { limit: 120 }),
-    CustomerService.getCustomersByBusiness(businessId).then((rows) => rows.slice(0, 150)),
-  ]);
-
-  let activeRiderCount = 0;
-  for (const doc of membersSnap.docs) {
-    const data = doc.data();
-    if (data.isActive === false) continue;
-    if (String(data.role || "").toLowerCase() === "rider") activeRiderCount++;
-  }
-
-  const gettingStarted: Record<GettingStartedKey, boolean> = { ...DEFAULT_GETTING_STARTED };
-  for (const key of Object.keys(DEFAULT_GETTING_STARTED) as GettingStartedKey[]) {
-    if (detected[key] === true) gettingStarted[key] = true;
-  }
-
+  const data = await loadBusinessBuddyFirestoreData(businessId);
+  const buddy = buildBusinessBuddySnapshot(data);
   return {
-    businessName: String(bizSnap.data()?.name || "your station").trim(),
-    gettingStarted,
-    activeRiderCount,
-    ops: buildOpsSnapshot(transactions, customers, now),
+    businessName: data.businessName,
+    gettingStarted: data.gettingStarted,
+    activeRiderCount: data.activeRiderCount,
+    buddy,
+    ops: {
+      ...buddy.ops,
+      revenuePhpLast7Days: buddy.revenue.last7DaysPhp,
+      revenue: buddy.revenue,
+    },
   };
 }
 
 export function formatSupportWorkspaceContextBlock(
   ctx: SupportWorkspaceContext,
 ): string {
-  const { ops } = ctx;
-  const lines = [
-    "## Live workspace snapshot (authoritative — read BEFORE giving app steps)",
-    `- Business name: ${ctx.businessName}`,
-    `- Has at least one customer: ${ctx.gettingStarted.addCustomer ? "yes" : "NO — prerequisite missing"}`,
-    `- Has recorded a delivery before: ${ctx.gettingStarted.addDelivery ? "yes" : "no"}`,
-    `- Has recorded a collection before: ${ctx.gettingStarted.addCollection ? "yes" : "no"}`,
-    `- Has inventory items: ${ctx.gettingStarted.addInventory ? "yes" : "no"}`,
-    `- Has payment account on file: ${ctx.gettingStarted.addPaymentAccount ? "yes" : "no"}`,
-    `- Active riders on team: ${ctx.activeRiderCount}`,
-    "",
-    "### Today's operational numbers (use when owner asks how the station is doing)",
-    `- Dormant sukis (7+ days silent): ${ops.dormantCount}`,
-    `- Total unpaid balance (PHP): ${ops.unpaidTotalPhp}`,
-    `- Open / in-flight deliveries: ${ops.openDeliveryCount}`,
-    `- Revenue last 7 days (PHP): ${ops.revenuePhpLast7Days}`,
-    `- Call-today payment reminders queued: ${ops.callTodayCount}`,
-    "",
+  const prerequisiteBlock = [
     "### Prerequisite rules (required)",
     "- If user asks about **delivery** or **collection** but **no customer yet**, do NOT jump to Transactions steps.",
     "  Encourage them warmly in Taglish to **Add Customer** first (Customers page → Add Customer).",
-    "  Then explain they can return to Transactions → Add Delivery / Add Collection.",
     "- If user asks to **assign a rider** but **active riders = 0**, tell them to invite a rider via **Team Hub** first (Grow+ plan).",
     "- If user asks about **inventory-linked** actions but **no inventory**, suggest **Inventory** setup first.",
     "- When a prerequisite is missing, set a **warning** badge like \"Setup needed\" and put the fix in **steps[]**.",
-    "- When prerequisites are satisfied, give the normal workflow steps.",
-    "- When owner asks **how am I doing** / **kumusta ang station**, lead with the operational numbers above in **highlights**.",
-  ];
-  return lines.join("\n");
+    "- When owner asks **how am I doing** / **kumusta ang station**, lead with operational + revenue numbers in **highlights**.",
+  ].join("\n");
+
+  return `${formatBusinessBuddyContextBlock(ctx.buddy, ctx.gettingStarted, ctx.activeRiderCount)}\n\n${prerequisiteBlock}`;
 }
 
 function mentionsDeliveryOrCollection(text: string): boolean {
@@ -219,10 +115,438 @@ function mentionsStationHealth(text: string): boolean {
   return (
     STATION_HEALTH_OVERVIEW_RE.test(lower) ||
     (lower.includes("dormant") && (lower.includes("how many") || lower.includes("ilan"))) ||
-    (lower.includes("utang") && lower.includes("magkano"))
+    (lower.includes("utang") && lower.includes("magkano") && !mentionsRevenueQuestion(text))
   );
 }
 
+const REVENUE_QUESTION_RE = new RegExp(
+  [
+    "magkano.*(kita|kinita|earnings|revenue|sales|benta|sale)",
+    "(kita|kinita|earnings|revenue|sales|benta).*(ngayon|today|kahapon|yesterday|linggo|week|araw)",
+    "how much.*(earn|made|collect|revenue|sales|sale)",
+    "kumita.*(ngayon|today|kahapon|yesterday)",
+    "sales (today|yesterday|kahapon|ngayon)",
+    "kita ko (ngayon|kahapon)",
+    "kinita ko (ngayon|kahapon)",
+    "my sales",
+    "total sales",
+    "gross sales",
+  ].join("|"),
+  "i",
+);
+
+const UNPAID_QUESTION_RE = new RegExp(
+  [
+    "magkano.*(utang|balance|outstanding|collectible)",
+    "(utang|balance due|outstanding).*(magkano|how much|total)",
+    "how much.*(owe|outstanding|unpaid|collect)",
+  ].join("|"),
+  "i",
+);
+
+const FORECAST_RE = new RegExp(
+  [
+    "forecast",
+    "predik",
+    "prediction",
+    "project",
+    "estimate",
+    "susunod na linggo",
+    "next week",
+    "future sales",
+    "magkano.*(kita|kinita).*(next|susunod|linggo|week)",
+    "tataas ba",
+    "bababa ba",
+  ].join("|"),
+  "i",
+);
+
+type RevenuePeriod = "today" | "yesterday" | "last7days";
+
+function mentionsRevenueQuestion(text: string): boolean {
+  return REVENUE_QUESTION_RE.test(text);
+}
+
+function mentionsUnpaidQuestion(text: string): boolean {
+  return UNPAID_QUESTION_RE.test(text);
+}
+
+function mentionsForecast(text: string): boolean {
+  return FORECAST_RE.test(text);
+}
+
+function resolveRevenuePeriod(text: string): RevenuePeriod {
+  const lower = text.toLowerCase();
+  if (
+    lower.includes("kahapon") ||
+    lower.includes("yesterday") ||
+    /sales yesterday|earn.*yesterday/i.test(lower)
+  ) {
+    return "yesterday";
+  }
+  if (
+    lower.includes("7 araw") ||
+    lower.includes("last 7") ||
+    lower.includes("last week") ||
+    lower.includes("this week") ||
+    lower.includes("linggong") ||
+    (lower.includes("linggo") && !lower.includes("susunod") && !lower.includes("next"))
+  ) {
+    return "last7days";
+  }
+  return "today";
+}
+
+function revenueAmountForPeriod(
+  revenue: WorkspaceRevenueMetrics,
+  period: RevenuePeriod,
+): number {
+  if (period === "yesterday") return revenue.yesterdayPhp;
+  if (period === "last7days") return revenue.last7DaysPhp;
+  return revenue.todayPhp;
+}
+
+function periodLabelTaglish(period: RevenuePeriod): string {
+  if (period === "yesterday") return "kahapon";
+  if (period === "last7days") return "sa nakaraang 7 araw";
+  return "ngayon";
+}
+
+function periodFilterLabel(period: RevenuePeriod): string {
+  if (period === "yesterday") return "Yesterday";
+  if (period === "last7days") return "This week";
+  return "Today";
+}
+
+function personalRevenueSummary(
+  period: RevenuePeriod,
+  amount: number,
+  businessName: string,
+): string {
+  const when = periodLabelTaglish(period);
+  if (amount <= 0) {
+    return (
+      `Sa records mo sa **${businessName}**, wala pang naka-log na collected payment **${when}** — ` +
+      "baka may hindi pa na-record na bayad, o talagang walang sale sa period na yun."
+    );
+  }
+  return (
+    `**Kumita ka ng ₱${formatPhp(amount)} ${when}** sa **${businessName}** — ` +
+    "base sa collected payments na naka-log na sa Smart Refill mo."
+  );
+}
+
+function appGuideStepForRevenue(period: RevenuePeriod): NonNullable<SupportStructuredReply["steps"]>[number] {
+  const filter = periodFilterLabel(period);
+  return {
+    title: `Upang makita ito sa app: buksan ang **Transactions** → time filter **${filter}**`,
+    body: "Doon makikita mo ang breakdown per payment (Cash, GCash, etc.) at individual rows.",
+    priority: "medium",
+    tags: ["Transactions"],
+  };
+}
+
+function formatBreakdownTip(
+  revenue: WorkspaceRevenueMetrics,
+  period: RevenuePeriod,
+): string | null {
+  if (period !== "today") return null;
+  const { cashPhp, onlinePhp } = revenue.todayBreakdown;
+  if (revenue.todayPhp <= 0) return null;
+  const parts: string[] = [];
+  if (cashPhp > 0) parts.push(`Cash ₱${formatPhp(cashPhp)}`);
+  if (onlinePhp > 0) parts.push(`Online ₱${formatPhp(onlinePhp)}`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+function buildRevenueContextHighlights(
+  period: RevenuePeriod,
+  revenue: WorkspaceRevenueMetrics,
+): NonNullable<SupportStructuredReply["highlights"]> {
+  const highlights: NonNullable<SupportStructuredReply["highlights"]> = [];
+  const breakdown = formatBreakdownTip(revenue, period);
+
+  if (period === "today" && breakdown) {
+    highlights.push({
+      title: "Breakdown ngayon",
+      body: breakdown,
+      variant: "note",
+    });
+  }
+
+  if (period !== "yesterday" && revenue.yesterdayPhp > 0) {
+    highlights.push({
+      title: "Para sa comparison",
+      body: `Kahapon: **₱${formatPhp(revenue.yesterdayPhp)}** · Last 7 days: **₱${formatPhp(revenue.last7DaysPhp)}**.`,
+      variant: "note",
+    });
+  } else if (period === "yesterday" && revenue.todayPhp > 0) {
+    highlights.push({
+      title: "Para sa comparison",
+      body: `Ngayon (so far): **₱${formatPhp(revenue.todayPhp)}** · Last 7 days: **₱${formatPhp(revenue.last7DaysPhp)}**.`,
+      variant: "note",
+    });
+  }
+
+  if (period === "today" && revenue.expensesTodayPhp > 0) {
+    highlights.push({
+      title: "Net ngayon",
+      body:
+        `Expenses today: **₱${formatPhp(revenue.expensesTodayPhp)}** · Net: **₱${formatPhp(revenue.netTodayPhp)}**.`,
+      variant: "note",
+    });
+  }
+
+  return highlights;
+}
+
+function buildRevenueTips(ctx: SupportWorkspaceContext): NonNullable<SupportStructuredReply["highlights"]> {
+  const tips: NonNullable<SupportStructuredReply["highlights"]> = [];
+  if (ctx.ops.unpaidTotalPhp > 0) {
+    tips.push({
+      title: "Tip para sa iyo",
+      body:
+        `May **₱${formatPhp(ctx.ops.unpaidTotalPhp)}** pa na outstanding — follow-up mo ang suki sa **Command Center → Unpaid** para tumaas ang kita.`,
+      variant: "tip",
+    });
+  } else if (ctx.ops.dormantCount > 0) {
+    tips.push({
+      title: "Tip para sa iyo",
+      body:
+        `**${ctx.ops.dormantCount}** dormant suki ang pwede mong i-call — mabilis na follow-up, posibleng dagdag sales.`,
+      variant: "tip",
+    });
+  } else {
+    tips.push({
+      title: "Tip para sa iyo",
+      body: "I-log agad ang bawat payment sa Transactions para accurate ang figures mo bukas.",
+      variant: "tip",
+    });
+  }
+  return tips;
+}
+
+function formatScheduleStopLine(stop: BuddyScheduleStop): string {
+  const gallons = stop.gallons > 0 ? ` · ${stop.gallons} gal` : "";
+  const rider = stop.riderName ? ` · ${stop.riderName}` : "";
+  return `**${stop.customerName}** (${stop.type}, ${stop.deliveryStatus}${gallons}${rider})`;
+}
+
+const DELIVERY_SCHEDULE_RE = new RegExp(
+  [
+    "sino.*(deliver|hatid|padala|refill)",
+    "(deliver|hatid|padala|refill).*(bukas|tomorrow|sino|kanino|who)",
+    "whom should i deliver",
+    "who should i deliver",
+    "delivery.*(bukas|tomorrow|schedule|list)",
+    "schedule.*(delivery|refill|bukas|tomorrow)",
+    "kanino.*(hatid|deliver)",
+    "listahan.*(delivery|hatid|bukas)",
+  ].join("|"),
+  "i",
+);
+
+function mentionsDeliverySchedule(text: string): boolean {
+  return DELIVERY_SCHEDULE_RE.test(text);
+}
+
+function resolveScheduleFocus(text: string): "tomorrow" | "week" {
+  const lower = text.toLowerCase();
+  if (lower.includes("bukas") || lower.includes("tomorrow")) return "tomorrow";
+  return "week";
+}
+
+/** Who to deliver/refill tomorrow (or this week) from live transaction schedule. */
+export function buildWorkspaceScheduleTurn(
+  userText: string,
+  ctx: SupportWorkspaceContext,
+): SupportAiTurnResult | null {
+  if (!mentionsDeliverySchedule(userText)) return null;
+
+  const focus = resolveScheduleFocus(userText);
+  const stops =
+    focus === "tomorrow" ?
+      ctx.buddy.schedule.tomorrow :
+      ctx.buddy.schedule.next7Days;
+
+  const periodLabel = focus === "tomorrow" ? "bukas" : "sa susunod na 7 araw";
+  let summary: string;
+  const highlights: NonNullable<SupportStructuredReply["highlights"]> = [];
+
+  if (stops.length === 0) {
+    summary =
+      `Wala kang naka-schedule na open delivery/collection **${periodLabel}** sa Firestore records mo. ` +
+      "Baka kailangan mo munang mag-**Add Delivery** o i-accept ang portal orders.";
+    if (ctx.buddy.cadenceLateSuki.length > 0) {
+      const names = ctx.buddy.cadenceLateSuki
+        .slice(0, 5)
+        .map((s) => s.name)
+        .join(", ");
+      highlights.push({
+        title: "Proactive refill candidates",
+        body:
+          `May **${ctx.buddy.cadenceLateSuki.length}** suki na late vs usual pattern: ${names}. ` +
+          "Pwede mo silang i-schedule kahit wala pa sa ledger bukas.",
+        variant: "tip",
+      });
+    }
+  } else {
+    const preview = stops
+      .slice(0, 8)
+      .map(formatScheduleStopLine)
+      .join("; ");
+    const extra = stops.length > 8 ? ` at ${stops.length - 8} pa` : "";
+    summary =
+      `May **${stops.length}** open stop ka **${periodLabel}**: ${preview}${extra}.`;
+    highlights.push({
+      title: "Sa ledger mo",
+      body: stops
+        .slice(0, 12)
+        .map(
+          (stop) =>
+            `${stop.customerName} — ${stop.referenceId || "ref n/a"} · ${stop.scheduledDay}`,
+        )
+        .join(" · "),
+      variant: "note",
+    });
+  }
+
+  if (ctx.buddy.pendingPortalOrders.length > 0) {
+    highlights.push({
+      title: "Pending portal orders",
+      body:
+        `May **${ctx.buddy.pendingPortalOrders.length}** portal submission na pending review — ` +
+        "i-accept mo sa **Submissions** bago maging official delivery.",
+      variant: "action",
+    });
+  }
+
+  return finishPrerequisiteTurn({
+    sectionLabel: "SAGOT",
+    summary,
+    badges: [{ label: "Live schedule", tone: "info" }],
+    highlights: highlights.length > 0 ? highlights : undefined,
+    steps: [
+      {
+        title:
+          focus === "tomorrow" ?
+            "Upang makita sa app: **Transactions** → filter **Upcoming** o **Tomorrow**" :
+            "Upang makita sa app: **Transactions** → **This week** / **Upcoming**",
+        body: "Pwede mo ring buksan ang **Command Center → Proactive → Scheduled** tab.",
+        priority: "medium",
+        tags: ["Transactions"],
+      },
+    ],
+  });
+}
+
+/** Direct data answer + app guide for sales / kinita questions (any period). */
+export function buildWorkspaceRevenueTurn(
+  userText: string,
+  ctx: SupportWorkspaceContext,
+): SupportAiTurnResult | null {
+  if (!mentionsRevenueQuestion(userText)) return null;
+
+  const period = resolveRevenuePeriod(userText);
+  const { revenue } = ctx.ops;
+  const amount = revenueAmountForPeriod(revenue, period);
+  const summary = personalRevenueSummary(period, amount, ctx.businessName);
+
+  return finishPrerequisiteTurn({
+    sectionLabel: "SAGOT",
+    summary,
+    badges: [{ label: "Live data", tone: "info" }],
+    highlights: [...buildRevenueContextHighlights(period, revenue), ...buildRevenueTips(ctx)],
+    steps: [appGuideStepForRevenue(period)],
+  });
+}
+
+/** Personal answer for outstanding balance questions. */
+export function buildWorkspaceUnpaidTurn(
+  userText: string,
+  ctx: SupportWorkspaceContext,
+): SupportAiTurnResult | null {
+  if (!mentionsUnpaidQuestion(userText)) return null;
+
+  const amount = ctx.ops.unpaidTotalPhp;
+  const summary =
+    amount > 0 ?
+      `May **₱${formatPhp(amount)}** kang outstanding balance sa **${ctx.businessName}** ` +
+      "base sa recent transactions — ito ang hindi pa fully na-collect." :
+      `Walang outstanding balance sa records mo ngayon sa **${ctx.businessName}** — updated ang collections mo.`;
+
+  const steps: NonNullable<SupportStructuredReply["steps"]> = [
+    {
+      title: "Upang makita sa app: **Command Center** → **Unpaid balance** card → See list",
+      body: "Pwede mong i-tap ang customer para mag-record ng payment.",
+      priority: "medium",
+      tags: ["Command Center"],
+    },
+  ];
+
+  if (ctx.ops.callTodayCount > 0) {
+    steps.unshift({
+      title: `May **${ctx.ops.callTodayCount}** suki sa **Call today** list — priority mo sila ngayon`,
+      priority: "high",
+      tags: ["Collections"],
+    });
+  }
+
+  return finishPrerequisiteTurn({
+    sectionLabel: "SAGOT",
+    summary,
+    badges: [{ label: "Live data", tone: amount > 0 ? "warning" : "success" }],
+    highlights:
+      amount > 0 && ctx.ops.dormantCount > 0 ?
+        [{
+          title: "Tip para sa iyo",
+          body: "Close AR muna — mas malaki ang impact kaysa sa bagong walk-in sales.",
+          variant: "tip",
+        }] :
+        undefined,
+    steps,
+  });
+}
+
+/** Light forecast from recent daily average — not a guarantee. */
+export function buildWorkspaceForecastTurn(
+  userText: string,
+  ctx: SupportWorkspaceContext,
+): SupportAiTurnResult | null {
+  if (!mentionsForecast(userText)) return null;
+
+  const { revenue } = ctx.ops;
+  const trend =
+    revenue.trendVsPriorWeekPct == null ?
+      "Kulang pa ang prior-week data para sa trend %" :
+      `${revenue.trendVsPriorWeekPct > 0 ? "mas mataas" : revenue.trendVsPriorWeekPct < 0 ? "mas mababa" : "pareho"} ng ~${Math.abs(revenue.trendVsPriorWeekPct)}% vs nakaraang 7 araw`;
+
+  return finishPrerequisiteTurn({
+    sectionLabel: "SAGOT",
+    summary:
+      "Rough forecast lang ito para sa **iyo** — from average daily collections ng last 7 days. Hindi guarantee, pero useful guide sa planning.",
+    badges: [{ label: "Forecast", tone: "info" }],
+    highlights: [
+      {
+        title: "Susunod na 7 araw (estimate)",
+        body:
+          `Kung magpapatuloy ang recent pace: mga **₱${formatPhp(revenue.forecastNext7DaysPhp)}** collected revenue. ` +
+          `Average per day: **₱${formatPhp(revenue.dailyAvgLast7DaysPhp)}**. ${trend}.`,
+        variant: "action",
+      },
+      {
+        title: "Tip",
+        body:
+          "Para tumaas ang forecast: follow-up sa dormant suki, close outstanding AR, at i-complete ang open deliveries on time.",
+        variant: "tip",
+      },
+    ],
+    evidence:
+      "Projection = (last 7 days collected revenue ÷ 7) × 7. Based on payment dates in your ledger.",
+  });
+}
+
+/** Wrap structured buddy replies for the support chat pipeline. */
 function finishPrerequisiteTurn(
   structured: SupportStructuredReply,
   overrides: Partial<SupportAiTurnResult> = {},
@@ -256,6 +580,12 @@ export function buildWorkspaceHealthTurn(
   if (!mentionsStationHealth(userText)) return null;
 
   const { ops } = ctx;
+  const { revenue } = ops;
+  const todayLine =
+    revenue.todayPhp > 0 ?
+      `Kumita ka ng **₱${formatPhp(revenue.todayPhp)} ngayon** (so far). ` :
+      "";
+
   const highlights: NonNullable<SupportStructuredReply["highlights"]> = [
     {
       title: "Dormant sukis",
@@ -281,7 +611,7 @@ export function buildWorkspaceHealthTurn(
       body:
         `**${ops.openDeliveryCount}** open delivery` +
         (ops.openDeliveryCount === 1 ? "" : "ies") +
-        ` · **₱${formatPhp(ops.revenuePhpLast7Days)}** revenue (7 araw).`,
+        ` · **₱${formatPhp(revenue.todayPhp)}** collected today · **₱${formatPhp(ops.revenuePhpLast7Days)}** (7 araw).`,
       variant: "note",
     },
   ];
@@ -319,7 +649,7 @@ export function buildWorkspaceHealthTurn(
   return finishPrerequisiteTurn({
     sectionLabel: "SAGOT",
     summary:
-      `Ito ang mabilis na snapshot ng **${ctx.businessName}** ngayon — base sa live data ng workspace mo.`,
+      `${todayLine}Ito ang personal snapshot ng **${ctx.businessName}** — base sa live data ng negosyo mo.`,
     badges: [{ label: "Live snapshot", tone: "info" }],
     highlights,
     steps,
@@ -331,6 +661,18 @@ export function buildWorkspacePrerequisiteTurn(
   userText: string,
   ctx: SupportWorkspaceContext,
 ): SupportAiTurnResult | null {
+  const revenueTurn = buildWorkspaceRevenueTurn(userText, ctx);
+  if (revenueTurn) return revenueTurn;
+
+  const scheduleTurn = buildWorkspaceScheduleTurn(userText, ctx);
+  if (scheduleTurn) return scheduleTurn;
+
+  const unpaidTurn = buildWorkspaceUnpaidTurn(userText, ctx);
+  if (unpaidTurn) return unpaidTurn;
+
+  const forecastTurn = buildWorkspaceForecastTurn(userText, ctx);
+  if (forecastTurn) return forecastTurn;
+
   const healthTurn = buildWorkspaceHealthTurn(userText, ctx);
   if (healthTurn) return healthTurn;
 

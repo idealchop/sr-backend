@@ -244,24 +244,23 @@ function finishRuleTurn(
 const GREETING_STRUCTURED: SupportStructuredReply = {
   sectionLabel: "SAGOT",
   summary:
-    "Hi! Ako si **River AI** — makakatulong ako sa **water refilling & water station** topics " +
-    "(operations, suki, deliveries, hygiene tips) at sa buong **Smart Refill** dashboard. " +
-    "Ano ang kailangan mo today?",
+    "Hi! Ako si **River AI Buddy** — kasama mo sa araw-araw na negosyo ng water station mo. " +
+    "Puwede kitang tulungan sa **kita ngayon**, utang, dormant suki, forecast, tips, at sa **Smart Refill** app. " +
+    "Ano ang gusto mong tingnan?",
   badges: [
-    { label: "Smart Refill", tone: "info" },
-    { label: "Taglish", tone: "success" },
+    { label: "Your WRS buddy", tone: "info" },
+    { label: "Live data", tone: "success" },
   ],
   highlights: [
     {
-      title: "Puwede kang mag-send ng screenshot o screen recording",
+      title: "Try asking",
       body:
-        "I-upload ang photo/video kung may error sa screen — titingnan ko at bibigyan ka ng fix steps.",
+        "\"Magkano kinita ko ngayon?\" · \"Magkano sales kahapon?\" · \"Kumusta ang station ko?\"",
       variant: "tip",
     },
     {
-      title: "Scope: tubig/refill at Smart Refill lang",
-      body:
-        "Kung ibang topic, sasabihin ko politely na doon lang ako magaling.",
+      title: "Screenshots & videos",
+      body: "I-upload kung may error sa screen — titingnan ko at bibigyan ka ng fix steps.",
       variant: "note",
     },
   ],
@@ -436,8 +435,8 @@ function ruleBasedReply(
   return finishRuleTurn({
     ...GREETING_STRUCTURED,
     summary:
-      "Hi! Ako si **River AI** — makakatulong ako sa **water refilling / water station** questions " +
-      "mo pati sa **Smart Refill** app. Ano ang kailangan mo?",
+      "Hi! Ako si **River AI Buddy** — kasama mo sa WRS business mo at sa **Smart Refill** app. " +
+      "Magkano kinita ngayon, forecast, tips, o app help — ano ang kailangan mo?",
     highlights: undefined,
   }, {
     detectedSatisfied: SATISFIED_PATTERNS.test(userText),
@@ -505,8 +504,10 @@ async function generateAiTurn(input: {
     "## Output style\n" +
     "- Always fill **structured** with a card-style layout (summary + optional badges, " +
     "highlights, steps).\n" +
-    "- **summary** = short intro only (1–2 sentences). NEVER put numbered steps in summary.\n" +
-    "- Put ALL numbered instructions in **steps[]** (one step per item). Use **highlights** for tips.\n" +
+    "- For **sales / kinita / utang** questions: **summary** MUST start with the personal data answer " +
+    "(e.g. \"Kumita ka ng ₱1,000 kahapon\") using snapshot numbers — never app-only replies.\n" +
+    "- **summary** = direct answer first (1–2 sentences). NEVER put numbered steps in summary.\n" +
+    "- Put ALL app navigation in **steps[]** after the data answer. Use **highlights** for tips.\n" +
     "- Use **steps** for fix flows with priority (high/medium/low) and screen tags " +
     "(e.g. Transactions, My Area).\n" +
     "- Put optional long context in **evidence** (collapsible). Keep **reply** as plain text " +

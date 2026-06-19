@@ -1818,14 +1818,16 @@ export class TransactionService {
       customerId?: string;
       startDate?: string;
       endDate?: string;
+      orderBy?: "scheduledAt" | "createdAt";
     } = {},
   ): Promise<Transaction[]> {
     try {
+      const orderField = options.orderBy ?? "scheduledAt";
       let query = db
         .collection("businesses")
         .doc(businessId)
         .collection("transactions")
-        .orderBy("scheduledAt", "desc");
+        .orderBy(orderField, "desc");
 
       if (options.customerId) {
         query = query.where("customerId", "==", options.customerId);

@@ -117,7 +117,7 @@ export const transactionHandler = {
         user?.uid,
       );
 
-      // NT-33 — staff ledger terminal delivery/collection customer receipt
+      // NT-33 — staff ledger terminal delivery/collection/walk-in customer receipt
       if (before) {
         const after = await TransactionService.getTransaction(businessId, id);
         const terminal = new Set(["delivered", "collected", "completed"]);
@@ -125,10 +125,17 @@ export const transactionHandler = {
           after?.deliveryStatus &&
           terminal.has(after.deliveryStatus) &&
           !terminal.has(String(before.deliveryStatus || ""));
+        const becamePaid =
+          (after?.paymentStatus || "").toLowerCase() === "paid" &&
+          (before.paymentStatus || "").toLowerCase() !== "paid";
+        const walkInType =
+          after?.type === "walkin" || after?.type === "direct_sale";
+
         if (
-          becameTerminal &&
           after &&
-          (after.type === "delivery" || after.type === "collection")
+          ((becameTerminal &&
+            (after.type === "delivery" || after.type === "collection")) ||
+            (becamePaid && walkInType))
         ) {
           void maybeSendCustomerTxnNotification({
             businessId,

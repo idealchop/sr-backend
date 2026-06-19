@@ -29,6 +29,11 @@ vi.mock("../../../../config/firebase-admin", () => ({
           doc: vi.fn(() => ({
             update: vi.fn().mockResolvedValue(undefined),
           })),
+          where: vi.fn(() => ({
+            limit: vi.fn(() => ({
+              get: vi.fn().mockResolvedValue({ docs: [] }),
+            })),
+          })),
         })),
         update: vi.fn().mockResolvedValue(undefined),
       })),
@@ -67,6 +72,10 @@ vi.mock("../../../../services/observability/logging/logger", () => ({
 vi.mock("../../../../services/portal/portal-completion-receipt-notifier", () => ({
   maybeSendPortalCompletionReceiptEmail: vi.fn(),
   mergePortalProfileFromSubmission: vi.fn(),
+}));
+
+vi.mock("../../../../services/notifications/station-activity-notification-service", () => ({
+  notifyPortalSubmissionFulfilled: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { RawSubmissionProcessor } from "../../../../services/portal/raw-submission-processor";

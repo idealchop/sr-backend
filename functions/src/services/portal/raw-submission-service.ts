@@ -11,10 +11,16 @@ import { OnlineOrderLimitService } from "./online-order-limit-service";
 import { allocateWalkInQueueNumber } from "./walk-in-queue-service";
 import { sendNewOrderPushForSubmission } from "../notifications/new-order-push-service";
 import {
+  notifyPortalRecognizedProfileUpdated,
   notifyPortalSubmissionCreated,
 } from "../notifications/station-activity-notification-service";
 import { maybeSendPortalOrderReceivedEmail } from "./portal-order-received-notifier";
 import { CustomerService } from "../customers/customer-service";
+import {
+  listPortalProfileChanges,
+  resolvePortalCustomerStatus,
+  summarizePortalProfileChanges,
+} from "./portal-profile-diff";
 
 function col(businessId: string) {
   return db
@@ -53,6 +59,23 @@ export async function computeStockCheckPreview(
   }
 
   return { ok: messages.length === 0, messages };
+}
+
+function resolvePortalCustomerDisplayName(
+  customerName: string | undefined,
+  payload: RawSubmissionPayload,
+): string {
+  const fromCustomer = (customerName || "").trim();
+  if (fromCustomer) return fromCustomer;
+  const profile = payload.profile;
+  const fromProfileName = String(profile?.name || "").trim();
+  if (fromProfileName) return fromProfileName;
+  const fromParts = [profile?.firstName, profile?.lastName]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(" ");
+  if (fromParts) return fromParts;
+  return "Customer";
 }
 
 export class RawSubmissionService {
@@ -148,6 +171,7 @@ export class RawSubmissionService {
         ...(walkInQueueNumber != null ?
           { walkInQueueNumber, walkInQueueDate } :
           {}),
+        portalCustomerStatus: resolvePortalCustomerStatus(customerId),
       },
       submittedAt: FieldValue.serverTimestamp(),
       stockCheckPreview,
@@ -167,6 +191,7 @@ export class RawSubmissionService {
       submissionType,
       customerId,
       referenceId,
+      portalOrderKind,
     }).catch((err) => {
       logger.warn("new_order push failed", {
         businessId,
@@ -175,24 +200,48 @@ export class RawSubmissionService {
       });
     });
 
-    void CustomerService.getCustomer(businessId, customerId)
-      .then((customer) =>
-        notifyPortalSubmissionCreated(businessId, {
+    void (async () => {
+      try {
+        const portalCustomerStatus = resolvePortalCustomerStatus(customerId);
+        const customer =
+          customerId ?
+            await CustomerService.getCustomer(businessId, customerId) :
+            null;
+        const customerName = resolvePortalCustomerDisplayName(
+          customer?.name,
+          payload,
+        );
+        await notifyPortalSubmissionCreated(businessId, {
           submissionId: ref.id,
           submissionType,
           customerId,
-          customerName: customer?.name || "Customer",
+          customerName,
           referenceId,
           portalOrderKind,
-        }),
-      )
-      .catch((err) => {
+          portalCustomerStatus,
+        });
+
+        if (portalCustomerStatus === "recognized" && customer) {
+          const changedFields = listPortalProfileChanges(customer, payload);
+          const changedSummary = summarizePortalProfileChanges(changedFields);
+          if (changedSummary) {
+            await notifyPortalRecognizedProfileUpdated(businessId, {
+              submissionId: ref.id,
+              customerId,
+              customerName,
+              referenceId,
+              changedSummary,
+            });
+          }
+        }
+      } catch (err) {
         logger.warn("portal activity notification failed", {
           businessId,
           submissionId: ref.id,
           error: err,
         });
-      });
+      }
+    })();
 
     void maybeSendPortalOrderReceivedEmail({
       businessId,

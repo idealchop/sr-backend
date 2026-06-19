@@ -76,6 +76,29 @@ export class PlantDowntimeService {
     input: CreatePlantDowntimeInput,
   ): Promise<PlantDowntimeRecord> {
     const startedAt = input.startedAt ? new Date(input.startedAt) : new Date();
+    const endedAt = input.endedAt ? new Date(input.endedAt) : null;
+    if (endedAt && endedAt.getTime() <= startedAt.getTime()) {
+      throw new Error("Downtime end must be after start");
+    }
+
+    const overlap = await this.collection(businessId)
+      .where("startedAt", "<=", endedAt ?? startedAt)
+      .limit(20)
+      .get();
+    for (const doc of overlap.docs) {
+      const existing = doc.data();
+      const existingStart = existing.startedAt?.toDate?.() as Date | undefined;
+      const existingEnd = existing.endedAt?.toDate?.() as Date | undefined;
+      if (!existingStart) continue;
+      const rangeEnd = endedAt ?? new Date("2099-12-31");
+      const existingRangeEnd = existingEnd ?? new Date("2099-12-31");
+      if (startedAt <= existingRangeEnd && rangeEnd >= existingStart) {
+        throw new Error(
+          "Downtime overlaps an existing record — adjust times or end the open downtime first",
+        );
+      }
+    }
+
     const doc = {
       startedAt,
       ...(input.endedAt ? { endedAt: new Date(input.endedAt) } : {}),

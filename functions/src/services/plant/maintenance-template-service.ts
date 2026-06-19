@@ -173,4 +173,33 @@ export class MaintenanceTemplateService {
       consumablesAdjusted,
     };
   }
+
+  /** MP-11 — owner adjusts gallon threshold for PM recurrence. */
+  static async updateDueAfterGallons(
+    businessId: string,
+    templateId: string,
+    dueAfterGallons: number | null,
+  ): Promise<MaintenanceTemplateRecord> {
+    const ref = this.collection(businessId).doc(templateId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      throw new Error("Maintenance template not found");
+    }
+
+    const normalized =
+      dueAfterGallons != null && Number.isFinite(dueAfterGallons) && dueAfterGallons > 0 ?
+        Math.round(dueAfterGallons) :
+        null;
+
+    await ref.set(
+      {
+        dueAfterGallons: normalized,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    const updated = await ref.get();
+    return serializeMaintenanceTemplate(updated.id, updated.data() ?? {});
+  }
 }

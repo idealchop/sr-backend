@@ -21,8 +21,84 @@ import {
   mergePortalProfileFromSubmission,
 } from "./portal-completion-receipt-notifier";
 import { RawSubmission } from "./raw-submission-types";
+import {
+  resolvePortalCustomerStatus,
+  type PortalCustomerStatus,
+} from "./portal-profile-diff";
+import { notifyPortalSubmissionFulfilled } from "../notifications/station-activity-notification-service";
 
 const DEFAULT_WATER_PRICE = 30;
+
+function resolvePortalCustomerStatusForSubmission(
+  submission: RawSubmission,
+  createdNewDuringAccept = false,
+): PortalCustomerStatus {
+  if (createdNewDuringAccept || submission.metadata?.customerRegisteredAt != null) {
+    return "new";
+  }
+  return resolvePortalCustomerStatus(submission.customerId);
+}
+
+async function lookupTransactionIdByReference(
+  businessId: string,
+  referenceId: string,
+): Promise<string | undefined> {
+  const refId = referenceId.trim();
+  if (!refId) return undefined;
+  const snap = await db
+    .collection("businesses")
+    .doc(businessId)
+    .collection("transactions")
+    .where("referenceId", "==", refId)
+    .limit(1)
+    .get();
+  return snap.docs[0]?.id;
+}
+
+async function notifyPortalOrderFulfilledIfNeeded(
+  businessId: string,
+  submission: RawSubmission,
+  userId: string,
+  customerName: string | undefined,
+  createdNewDuringAccept: boolean,
+): Promise<void> {
+  if (
+    submission.submissionType !== "PLACE_ORDER" &&
+    submission.submissionType !== "REQUEST_COLLECTION"
+  ) {
+    return;
+  }
+
+  const referenceId = String(submission.referenceId || "").trim();
+  const transactionId = await lookupTransactionIdByReference(
+    businessId,
+    referenceId,
+  );
+
+  await notifyPortalSubmissionFulfilled(
+    businessId,
+    {
+      submissionId: submission.id || "",
+      submissionType: submission.submissionType,
+      customerId: String(submission.customerId || "").trim(),
+      customerName: customerName || "Customer",
+      referenceId,
+      transactionId,
+      portalOrderKind: submission.metadata?.portalOrderKind,
+      portalCustomerStatus: resolvePortalCustomerStatusForSubmission(
+        submission,
+        createdNewDuringAccept,
+      ),
+    },
+    userId,
+  ).catch((err) => {
+    logger.warn("notifyPortalSubmissionFulfilled failed", {
+      businessId,
+      submissionId: submission.id,
+      err,
+    });
+  });
+}
 
 /**
  * Resolve unit price: customer override → business waterType price → default
@@ -514,6 +590,14 @@ export class RawSubmissionProcessor {
       processedAt: FieldValue.serverTimestamp() as any,
       processedByUid: userId,
     });
+
+    await notifyPortalOrderFulfilledIfNeeded(
+      businessId,
+      submission,
+      userId,
+      customer?.name,
+      createdNewPortalCustomer,
+    );
 
     logger.info("raw_submission processed", {
       businessId,

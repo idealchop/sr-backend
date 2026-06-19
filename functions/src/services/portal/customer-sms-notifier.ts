@@ -1,5 +1,6 @@
 import { logger } from "firebase-functions";
 import { brevo, getBrevoSmsApi } from "../../utils/brevo";
+import { ChannelUsageService } from "../channels/channel-usage-service";
 import type { Customer } from "../customers/customer-service";
 
 function formatPhilippinePhone(phone: string): string | null {
@@ -24,8 +25,12 @@ export async function maybeSendCustomerTxnSms(args: {
   const recipient = formatPhilippinePhone(String(args.customer.phone || ""));
   if (!recipient) return { sent: false };
 
+  const shortRef =
+    args.referenceId.length > 12 ?
+      args.referenceId.slice(-12) :
+      args.referenceId;
   const body =
-    `${args.statusLabel} — ${args.referenceId}. Track: ${args.trackUrl}`.slice(0, 320);
+    `${args.statusLabel} ref ${shortRef}. ${args.trackUrl}`.slice(0, 320);
 
   if (process.env.FUNCTIONS_EMULATOR) {
     logger.info("EMULATOR: customer txn SMS", {
@@ -50,6 +55,15 @@ export async function maybeSendCustomerTxnSms(args: {
     sms.tag = "customer_txn_status";
 
     await api.sendTransacSms(sms);
+
+    try {
+      await ChannelUsageService.recordUsage(args.businessId, "smsSegments", 1);
+    } catch (usageErr) {
+      logger.warn("customer_txn_sms_usage_record_failed", {
+        businessId: args.businessId,
+        usageErr,
+      });
+    }
 
     logger.info("customer_txn_sms_sent", {
       businessId: args.businessId,

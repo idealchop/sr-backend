@@ -3,6 +3,7 @@ import { logger } from "firebase-functions";
 import { brevo, getBrevoApi } from "../../utils/brevo";
 import { resolveAppBaseUrlForEmail } from "../../utils/app-base-url";
 import { buildPortalOrderReceivedEmail } from "../../utils/portal-order-received-email-template";
+import { maybeSendPortalOrderReceivedWebPush } from "./customer-web-push-notifier";
 import { CustomerService } from "../customers/customer-service";
 import type { RawSubmissionPayload, RawSubmissionType } from "./raw-submission-types";
 
@@ -139,6 +140,20 @@ export async function maybeSendPortalOrderReceivedEmail(params: {
     businessId,
     referenceId,
     email,
+  });
+
+  void maybeSendPortalOrderReceivedWebPush({
+    businessId,
+    customerId,
+    referenceId,
+    businessName,
+    trackUrl: buildTrackUrl(businessId, customerId, referenceId),
+  }).catch((err) => {
+    logger.warn("portal_order_received_web_push_failed", {
+      businessId,
+      referenceId,
+      err,
+    });
   });
 
   return { sent: true };

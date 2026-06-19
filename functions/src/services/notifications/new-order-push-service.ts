@@ -32,6 +32,7 @@ export function buildNewOrderPushCopy(
   submissionType: RawSubmissionType,
   customerName: string,
   referenceId: string,
+  portalOrderKind?: string,
 ): NewOrderPushCopy {
   const name = customerName.trim() || "A customer";
   const ref = referenceId.trim();
@@ -52,6 +53,23 @@ export function buildNewOrderPushCopy(
     return {
       title: "Order completion",
       body: `${name} marked an order complete${ref ? ` (${ref})` : ""}.`,
+    };
+  case "PLACE_ORDER":
+    if (portalOrderKind === "walkin") {
+      return {
+        title: "Counter walk-in",
+        body: `${name} checked in at the counter${ref ? ` (${ref})` : ""}.`,
+      };
+    }
+    if (portalOrderKind === "collection") {
+      return {
+        title: "Portal collection request",
+        body: `${name} requested collection${ref ? ` (${ref})` : ""}.`,
+      };
+    }
+    return {
+      title: "New QR order",
+      body: `${name} placed a delivery order${ref ? ` (${ref})` : ""}.`,
     };
   default:
     return {
@@ -78,6 +96,7 @@ export async function sendNewOrderPushForSubmission(
     submissionType: RawSubmissionType;
     customerId: string;
     referenceId: string;
+    portalOrderKind?: string;
   },
 ): Promise<{ sent: boolean }> {
   if (!submissionTypeNeedsReviewPush(opts.submissionType)) {
@@ -107,6 +126,7 @@ export async function sendNewOrderPushForSubmission(
     opts.submissionType,
     customer?.name ?? "Customer",
     opts.referenceId,
+    opts.portalOrderKind,
   );
 
   const { successCount, invalidTokens } = await sendFcmMulticast(tokens, {

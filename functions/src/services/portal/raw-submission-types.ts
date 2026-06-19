@@ -159,6 +159,8 @@ export interface RawSubmission {
     /** Counter QR: daily queue ticket (Manila day; resets at midnight). */
     walkInQueueNumber?: number;
     walkInQueueDate?: string;
+    /** `recognized` when linked via QR; `new` when anonymous at submit time. */
+    portalCustomerStatus?: "recognized" | "new";
   };
   submittedAt?: unknown;
   stockCheckPreview?: {

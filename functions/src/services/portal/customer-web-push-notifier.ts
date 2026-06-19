@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase-admin";
+import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "firebase-functions";
 import { sendFcmMulticast } from "../notifications/fcm-push-service";
 
@@ -12,12 +12,12 @@ export async function maybeSendCustomerTxnWebPush(args: {
   statusLabel: string;
   trackUrl: string;
 }): Promise<{ sent: boolean }> {
-  const customerSnap = await db
+  const customerRef = db
     .collection("businesses")
     .doc(args.businessId)
     .collection("customers")
-    .doc(args.customerId)
-    .get();
+    .doc(args.customerId);
+  const customerSnap = await customerRef.get();
   if (!customerSnap.exists) return { sent: false };
 
   const data = customerSnap.data() ?? {};
@@ -37,7 +37,7 @@ export async function maybeSendCustomerTxnWebPush(args: {
     return { sent: true };
   }
 
-  const { successCount } = await sendFcmMulticast(tokens, {
+  const { successCount, invalidTokens } = await sendFcmMulticast(tokens, {
     title: args.statusLabel,
     body: `Order ${args.referenceId} — tap to track`,
     data: {
@@ -48,5 +48,38 @@ export async function maybeSendCustomerTxnWebPush(args: {
     },
   });
 
+  if (invalidTokens.length > 0) {
+    const valid = tokens.filter((t) => !invalidTokens.includes(t));
+    await customerRef.set(
+      {
+        portalWebPushTokens: valid,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    logger.info("customer_web_push_pruned_invalid_tokens", {
+      businessId: args.businessId,
+      customerId: args.customerId,
+      count: invalidTokens.length,
+    });
+  }
+
   return { sent: successCount > 0 };
+}
+
+/** NT-34 — push when portal order is first received. */
+export async function maybeSendPortalOrderReceivedWebPush(args: {
+  businessId: string;
+  customerId: string;
+  referenceId: string;
+  businessName: string;
+  trackUrl: string;
+}): Promise<{ sent: boolean }> {
+  return maybeSendCustomerTxnWebPush({
+    businessId: args.businessId,
+    customerId: args.customerId,
+    referenceId: args.referenceId,
+    statusLabel: `${args.businessName.slice(0, 24)} received your order`,
+    trackUrl: args.trackUrl,
+  });
 }
