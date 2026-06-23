@@ -40,6 +40,10 @@ export function nameDissimilarity(a: string, b: string): number {
   return d / denom;
 }
 
+export function nameSimilarityPercent(a: string, b: string): number {
+  return Math.round((1 - nameDissimilarity(a, b)) * 100);
+}
+
 export function namesAreDuplicateLike(
   a: string,
   b: string,

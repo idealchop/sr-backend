@@ -157,6 +157,12 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // Public portal track — lat/lng only, keyed by order referenceId (API writes).
+      match /portal_track_live/{referenceId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
       // All other subcollections (audit_logs, subscriptions, payment_info,
       // notifications, chat_sessions, ai_tool_runs, expenses, …) — API / Admin SDK only.
       match /{subcollection}/{docId}/{nested=**} {
@@ -177,6 +183,17 @@ service cloud.firestore {
     match /apps/{appId} {
       allow read: if isSignedIn();
       allow write: if false;
+
+      match /whats_new/{releaseId} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn()
+          && releaseId.matches('^\\d{4}-\\d{2}-\\d{2}$')
+          && request.resource.data.publishedAt is string
+          && request.resource.data.title is string
+          && request.resource.data.summary is string
+          && request.resource.data.items is list;
+        allow delete: if isSuperAdmin();
+      }
     }
 
     match /subscription_plans/{planId} {

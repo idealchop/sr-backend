@@ -62,6 +62,50 @@ describe("buildDormantCustomerRows", () => {
     expect(rows).toHaveLength(0);
   });
 
+  it("excludes anonymous walk-in customer profiles", () => {
+    const rows = buildDormantCustomerRows(
+      [customer({ id: "walk", name: "Walk-in Customer" })],
+      [
+        {
+          id: "walk-only",
+          type: "walkin",
+          customerId: "walk",
+          customerName: "Walk-in Customer",
+          paymentStatus: "paid",
+          totalAmount: 50,
+          amountPaid: 50,
+          balanceDue: 0,
+          scheduledAt: new Date(now.getTime() - 20 * 86_400_000).toISOString(),
+        } as Transaction,
+      ],
+      { now },
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("does not count walk-in as retention activity", () => {
+    const rows = buildDormantCustomerRows(
+      [customer()],
+      [
+        delivery({ customerId: "c1", daysAgo: 20 }),
+        {
+          id: "walk-1",
+          type: "walkin",
+          customerId: "c1",
+          customerName: "Juan",
+          paymentStatus: "paid",
+          totalAmount: 50,
+          amountPaid: 50,
+          balanceDue: 0,
+          scheduledAt: new Date(now.getTime() - 2 * 86_400_000).toISOString(),
+        } as Transaction,
+      ],
+      { now },
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].daysSinceLastOrder).toBeGreaterThanOrEqual(20);
+  });
+
   it("uses denormalized lastFulfilledAt when ledger snapshot is partial", () => {
     const rows = buildDormantCustomerRows(
       [

@@ -27,7 +27,15 @@ vi.mock("../../../../config/firebase-admin", () => ({
 }));
 
 vi.mock("../../../../services/observability/logging/logger", () => ({
-  logger: { info: vi.fn(), error: vi.fn() },
+  logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
+}));
+
+const { mockUpsertPortalTrackLive } = vi.hoisted(() => ({
+  mockUpsertPortalTrackLive: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../../../../services/portal/portal-track-live-service", () => ({
+  upsertPortalTrackLiveForRider: mockUpsertPortalTrackLive,
 }));
 
 describe("RiderTrackingService", () => {
@@ -126,6 +134,11 @@ describe("RiderTrackingService", () => {
       );
       expect(result.latitude).toBe(14.41);
       expect(result.longitude).toBe(121.01);
+      expect(mockUpsertPortalTrackLive).toHaveBeenCalledWith(
+        "biz-1",
+        "rider-1",
+        { latitude: 14.41, longitude: 121.01 },
+      );
     });
   });
 

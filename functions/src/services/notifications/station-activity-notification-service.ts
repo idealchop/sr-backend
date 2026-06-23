@@ -14,7 +14,7 @@ import {
   NotificationService,
   type NotificationPayload,
 } from "./notification-service";
-import { maybeSendCustomerTxnNotification } from "../portal/customer-transaction-notifier";
+import { maybeSendCustomerTxnNotification, maybeNotifyCustomerOnPaymentUpdate, mapDeliveryStatusToEvent } from "../portal/customer-transaction-notifier";
 
 type NotifyType = NotificationPayload["type"];
 
@@ -400,6 +400,8 @@ export async function notifyTransactionUpdated(
     changed.has("riderId") && after.riderId !== before.riderId;
   const paymentChanged =
     changed.has("paymentStatus") && after.paymentStatus !== before.paymentStatus;
+  const amountPaidChanged =
+    changed.has("amountPaid") && after.amountPaid !== before.amountPaid;
   const amountChanged =
     changed.has("totalAmount") && after.totalAmount !== before.totalAmount;
   const coreEdited =
@@ -504,6 +506,26 @@ export async function notifyTransactionUpdated(
       message: `${customer} now has ${formatPeso(after.balanceDue ?? 0)} outstanding (${ref}).`,
       type: "warning",
       metadata: meta,
+    });
+  }
+
+  if (paymentChanged || amountPaidChanged) {
+    const completedSameUpdate =
+      statusChanged &&
+      mapDeliveryStatusToEvent(before.deliveryStatus, after.deliveryStatus) ===
+        "completed";
+    void maybeNotifyCustomerOnPaymentUpdate({
+      businessId,
+      txId: transactionId,
+      before,
+      after,
+      skipBecauseCompleted: completedSameUpdate,
+    }).catch((err) => {
+      logger.warn("customer_payment_update_notification_failed", {
+        businessId,
+        transactionId,
+        err,
+      });
     });
   }
 

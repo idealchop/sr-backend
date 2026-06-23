@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   computeCohortStats,
   computeDebtAgingBreakdown,
+  computeRevenueTrend,
+  computeRevenueWowPct,
   paginateRows,
+  sumRevenue30d,
 } from "../../../utils/analytics-utils";
 
 describe("analytics-utils", () => {
@@ -78,5 +81,52 @@ describe("analytics-utils", () => {
     );
     expect(stats.newCount).toBe(1);
     expect(stats.returningCount).toBe(1);
+  });
+
+  it("sums 30-day revenue and WoW growth by payment date", () => {
+    const now = new Date("2026-06-10T12:00:00.000Z");
+    const transactions = [
+      {
+        type: "walkin",
+        amountPaid: 100,
+        scheduledAt: "2026-06-09",
+        createdAt: "2026-06-09",
+      },
+      {
+        type: "walkin",
+        amountPaid: 50,
+        scheduledAt: "2026-06-02",
+        createdAt: "2026-06-02",
+      },
+      {
+        type: "walkin",
+        amountPaid: 200,
+        scheduledAt: "2026-05-20",
+        createdAt: "2026-05-20",
+      },
+    ] as any[];
+
+    expect(sumRevenue30d(transactions, now)).toBe(350);
+    const wow = computeRevenueWowPct(transactions, now);
+    expect(wow).not.toBeNull();
+  });
+
+  it("builds revenue trend sparkline points", () => {
+    const now = new Date("2026-06-10T12:00:00.000Z");
+    const trend = computeRevenueTrend(
+      [
+        {
+          type: "walkin",
+          amountPaid: 100,
+          scheduledAt: "2026-06-09",
+          createdAt: "2026-06-09",
+        } as any,
+      ],
+      7,
+      now,
+    );
+    expect(trend.points).toHaveLength(7);
+    expect(trend.today).toBeGreaterThanOrEqual(0);
+    expect(trend.vsAvgLabel.length).toBeGreaterThan(0);
   });
 });

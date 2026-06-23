@@ -1,5 +1,6 @@
 import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
+import { upsertPortalTrackLiveForRider } from "../portal/portal-track-live-service";
 
 export interface RiderLastLocation {
   latitude: number;
@@ -70,6 +71,15 @@ export class RiderTrackingService {
       { lastLocation, updatedAt: FieldValue.serverTimestamp() },
       { merge: true },
     );
+
+    if (isSelf) {
+      void upsertPortalTrackLiveForRider(businessId, riderId, {
+        latitude: lat,
+        longitude: lng,
+      }).catch((error) => {
+        logger.warn("portal_track_live_upsert_failed", { businessId, riderId, error });
+      });
+    }
 
     const updated = await riderRef.get();
     const stored = updated.data()?.lastLocation as RiderLastLocation | undefined;

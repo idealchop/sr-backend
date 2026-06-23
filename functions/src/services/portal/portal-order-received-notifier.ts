@@ -3,6 +3,7 @@ import { logger } from "firebase-functions";
 import { brevo, getBrevoApi } from "../../utils/brevo";
 import { resolveAppBaseUrlForEmail } from "../../utils/app-base-url";
 import { buildPortalOrderReceivedEmail } from "../../utils/portal-order-received-email-template";
+import { resolveBusinessEmailLogoUrl } from "../../utils/customer-email-branding";
 import { maybeSendPortalOrderReceivedWebPush } from "./customer-web-push-notifier";
 import { CustomerService } from "../customers/customer-service";
 import type { RawSubmissionPayload, RawSubmissionType } from "./raw-submission-types";
@@ -88,11 +89,13 @@ export async function maybeSendPortalOrderReceivedEmail(params: {
   if (sentFlags[idempotencyKey]) return { sent: false };
 
   const businessName = String(businessDoc.data()?.name || "Your water station");
+  const businessLogoUrl = resolveBusinessEmailLogoUrl(businessDoc.data()?.logo);
   const customerName =
     String(payload.profile?.name || customer?.name || "Suki").trim() || "Suki";
   const tpl = buildPortalOrderReceivedEmail({
     customerName,
     businessName,
+    businessLogoUrl,
     referenceId,
     trackUrl: buildTrackUrl(businessId, customerId, referenceId),
     scheduledLabel: formatScheduledLabel(payload),

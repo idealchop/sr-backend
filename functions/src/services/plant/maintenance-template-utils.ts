@@ -80,6 +80,63 @@ export function resolveMaintenanceTemplateStatus(
   return worseStatus(calendar, gallon);
 }
 
+/** Which trigger is driving overdue/due-soon (calendar vs production gallons). */
+export function resolveMaintenanceDueTrigger(
+  nextDueAt: string,
+  now = new Date(),
+  gallonContext: MaintenanceGallonContext = {},
+): "calendar" | "gallons" | null {
+  const status = resolveMaintenanceTemplateStatus(nextDueAt, now, gallonContext);
+  if (status === "ok") return null;
+
+  const calendar = calendarMaintenanceStatus(nextDueAt, now);
+  const gallon = gallonMaintenanceStatus(gallonContext);
+  if (!gallon || gallon === "ok") return "calendar";
+  if (calendar === "ok") return "gallons";
+  return worseStatus(calendar, gallon) === gallon ? "gallons" : "calendar";
+}
+
+export type PmGallonRecurrenceUpdate = {
+  templateId: string;
+  gallonsSinceLastComplete: number;
+  nextDueAt?: string;
+};
+
+/**
+ * MP-11 — compute gallon counter + optional calendar pull-forward when threshold hit.
+ * Returns null when persisted fields are already up to date.
+ */
+export function computePmGallonRecurrenceUpdate(
+  template: {
+    id: string;
+    dueAfterGallons: number | null;
+    gallonsSinceLastComplete: number;
+    lastCompletedAt: string | null;
+    nextDueAt: string;
+  },
+  shifts: ProductionShiftRecord[],
+  todayKey = manilaDateKey(new Date()),
+): PmGallonRecurrenceUpdate | null {
+  if (!template.dueAfterGallons) return null;
+
+  const gallons = sumGallonsSinceLastComplete(shifts, template.lastCompletedAt);
+  const pullForward =
+    gallons >= template.dueAfterGallons && template.nextDueAt > todayKey;
+
+  if (gallons === template.gallonsSinceLastComplete && !pullForward) {
+    return null;
+  }
+
+  const update: PmGallonRecurrenceUpdate = {
+    templateId: template.id,
+    gallonsSinceLastComplete: gallons,
+  };
+  if (pullForward) {
+    update.nextDueAt = todayKey;
+  }
+  return update;
+}
+
 /**
  * MP-11 — sum production gallons since last PM completion (calendar date boundary).
  */
@@ -168,6 +225,10 @@ export function serializeMaintenanceTemplate(
       dueAfterGallons,
       gallonsSinceLastComplete,
     }),
+    dueTrigger: resolveMaintenanceDueTrigger(nextDueAt, now, {
+      dueAfterGallons,
+      gallonsSinceLastComplete,
+    }),
     checklist,
     consumes,
     createdAt: String(data.createdAt ?? new Date().toISOString()),
@@ -186,6 +247,19 @@ export function sortMaintenanceTemplates(
   return [...rows].sort((a, b) => {
     const byStatus = rank[a.status] - rank[b.status];
     if (byStatus !== 0) return byStatus;
+
+    const aGallonUrgency =
+      a.dueAfterGallons && a.dueAfterGallons > 0 ?
+        a.gallonsSinceLastComplete / a.dueAfterGallons :
+        0;
+    const bGallonUrgency =
+      b.dueAfterGallons && b.dueAfterGallons > 0 ?
+        b.gallonsSinceLastComplete / b.dueAfterGallons :
+        0;
+    if (aGallonUrgency !== bGallonUrgency) {
+      return bGallonUrgency - aGallonUrgency;
+    }
+
     if (a.nextDueAt !== b.nextDueAt) return a.nextDueAt.localeCompare(b.nextDueAt);
     return a.name.localeCompare(b.name);
   });

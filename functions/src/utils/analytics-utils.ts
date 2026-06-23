@@ -44,6 +44,17 @@ function startOfDay(date: Date): Date {
   return d;
 }
 
+function endOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+function isWithinRange(day: Date, start: Date, end: Date): boolean {
+  const t = startOfDay(day).getTime();
+  return t >= startOfDay(start).getTime() && t <= endOfDay(end).getTime();
+}
+
 function differenceInCalendarDays(later: Date, earlier: Date): number {
   const msPerDay = 86_400_000;
   return Math.round((startOfDay(later).getTime() - startOfDay(earlier).getTime()) / msPerDay);
@@ -260,6 +271,123 @@ export function paginateRows<T>(
     data,
     meta: { totalCount, page: safePage, limit: safeLimit, totalPages },
   };
+}
+
+const NON_REVENUE_TYPES = new Set<Transaction["type"]>(["expense", "collection"]);
+
+function forEachRevenuePaymentInRange(
+  transactions: Transaction[],
+  start: Date,
+  end: Date,
+  onPayment: (amount: number) => void,
+): void {
+  for (const tx of transactions) {
+    if (NON_REVENUE_TYPES.has(tx.type)) continue;
+
+    const payments = tx.payments || [];
+    if (payments.length > 0) {
+      for (const payment of payments) {
+        const amount = Number(payment.amount) || 0;
+        if (amount <= 0) continue;
+        const paidOn = parseTxDate(payment.date);
+        if (!paidOn || !isWithinRange(paidOn, start, end)) continue;
+        onPayment(amount);
+      }
+      continue;
+    }
+
+    const amountPaid = Number(tx.amountPaid) || 0;
+    if (amountPaid <= 0) continue;
+    const txDay = parseTxDate(tx.scheduledAt) || parseTxDate(tx.createdAt);
+    if (!txDay || !isWithinRange(txDay, start, end)) continue;
+    onPayment(amountPaid);
+  }
+}
+
+export function sumRevenuePaymentsInRange(
+  transactions: Transaction[],
+  start: Date,
+  end: Date,
+): number {
+  let sum = 0;
+  forEachRevenuePaymentInRange(transactions, start, end, (amount) => {
+    sum += amount;
+  });
+  return sum;
+}
+
+export function sumRevenue30d(transactions: Transaction[], now = new Date()): number {
+  const end = endOfDay(now);
+  const start = startOfDay(now);
+  start.setDate(start.getDate() - 29);
+  return sumRevenuePaymentsInRange(transactions, start, end);
+}
+
+/** Last 7 days vs prior 7 days, by payment date. */
+export function computeRevenueWowPct(transactions: Transaction[], now = new Date()): number | null {
+  const end = endOfDay(now);
+  const thisStart = startOfDay(now);
+  thisStart.setDate(thisStart.getDate() - 6);
+  const priorEnd = endOfDay(new Date(thisStart));
+  priorEnd.setDate(priorEnd.getDate() - 1);
+  const priorStart = startOfDay(priorEnd);
+  priorStart.setDate(priorStart.getDate() - 6);
+
+  const current = sumRevenuePaymentsInRange(transactions, thisStart, end);
+  const prior = sumRevenuePaymentsInRange(transactions, priorStart, priorEnd);
+  if (prior <= 0) {
+    return current > 0 ? 100 : null;
+  }
+  return Math.round(((current - prior) / prior) * 1000) / 10;
+}
+
+export type RevenueTrendPoint = {
+  dayKey: string;
+  label: string;
+  amount: number;
+};
+
+export type RevenueTrendSummary = {
+  points: RevenueTrendPoint[];
+  today: number;
+  avg7: number;
+  vsAvgLabel: string;
+};
+
+/** BL-49 — daily revenue sparkline by payment date (Manila calendar days). */
+export function computeRevenueTrend(
+  transactions: Transaction[],
+  trendDays = 14,
+  now = new Date(),
+): RevenueTrendSummary {
+  const anchor = startOfDay(now);
+  const points: RevenueTrendPoint[] = [];
+
+  for (let i = trendDays - 1; i >= 0; i--) {
+    const day = new Date(anchor);
+    day.setDate(day.getDate() - i);
+    const dayEnd = endOfDay(day);
+    const amount = Math.round(sumRevenuePaymentsInRange(transactions, day, dayEnd));
+    points.push({
+      dayKey: day.toISOString().slice(0, 10),
+      label: day.toLocaleDateString("en-PH", { weekday: "short" }).slice(0, 2),
+      amount,
+    });
+  }
+
+  const today = points[points.length - 1]?.amount ?? 0;
+  const last7 = points.slice(-7);
+  const avg7 =
+    last7.length > 0 ? last7.reduce((s, p) => s + p.amount, 0) / last7.length : 0;
+  const diff = avg7 > 0 ? Math.round(((today - avg7) / avg7) * 100) : null;
+  const vsAvgLabel =
+    diff == null ?
+      "No 7-day baseline yet" :
+      diff >= 0 ?
+        `${diff}% above 7-day avg` :
+        `${Math.abs(diff)}% below 7-day avg`;
+
+  return { points, today, avg7, vsAvgLabel };
 }
 
 export type { DormantCustomerRow };

@@ -12,10 +12,12 @@ import {
 } from "../services/plant/iot-device-registry-service";
 import { ProductionShiftService } from "../services/plant/production-shift-service";
 import { TransactionService } from "../services/transactions/transaction-service";
-import { computePlantCostPerGallon } from "../utils/plant-cost-per-gallon";
+import { computePlantCostPerGallonForDays } from "../utils/plant-cost-per-gallon";
 import { computeFlowMeterReconcile } from "../utils/flow-meter-reconcile";
 import { analyzeWrsMaintenanceGaps } from "../utils/wrs-maintenance-gap-analysis";
+import { buildTankLowLevelInsight } from "../utils/tank-level-analytics";
 import { MaintenanceTemplateService } from "../services/plant/maintenance-template-service";
+import { WaterQualityLogService } from "../services/plant/water-quality-log-service";
 import { CustomerService } from "../services/customers/customer-service";
 
 export const listPlantDowntime = async (req: Request, res: Response) => {
@@ -45,22 +47,115 @@ export const createPlantDowntime = async (req: Request, res: Response) => {
       return;
     }
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const data = await PlantDowntimeService.create(businessId, {
+    const expenseRaw = body.expense;
+    const expense =
+      expenseRaw && typeof expenseRaw === "object" ?
+        {
+          amount: Number((expenseRaw as Record<string, unknown>).amount),
+          note:
+            typeof (expenseRaw as Record<string, unknown>).note === "string" ?
+              (expenseRaw as Record<string, unknown>).note as string :
+              undefined,
+        } :
+        undefined;
+    const data = await PlantDowntimeService.create(
+      businessId,
+      {
+        startedAt: typeof body.startedAt === "string" ? body.startedAt : undefined,
+        endedAt: typeof body.endedAt === "string" ? body.endedAt : undefined,
+        reasonCode: String(body.reasonCode || "other") as PlantDowntimeReason,
+        notes: typeof body.notes === "string" ? body.notes : undefined,
+        estimatedGallonsLost:
+        body.estimatedGallonsLost != null ? Number(body.estimatedGallonsLost) : undefined,
+        expenseId: typeof body.expenseId === "string" ? body.expenseId : undefined,
+        expense: expense && Number.isFinite(expense.amount) && expense.amount > 0 ?
+          expense :
+          undefined,
+        severity:
+        body.severity === "low" || body.severity === "high" || body.severity === "medium" ?
+          body.severity :
+          undefined,
+      },
+      user?.uid,
+    );
+    res.status(201).json({ data });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    if (message.includes("overlap") || message.includes("must be after")) {
+      res.status(400).json({ error: message });
+      return;
+    }
+    logger.error("createPlantDowntime", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const updatePlantDowntime = async (req: Request, res: Response) => {
+  const { businessId, downtimeId } = req.params;
+  const user = (req as { user?: { uid: string } }).user;
+  try {
+    const { hasAccess, role } = await checkBusinessAccess(user?.uid ?? "", businessId);
+    if (!hasAccess || role === "member") {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const data = await PlantDowntimeService.updateById(businessId, downtimeId, {
       startedAt: typeof body.startedAt === "string" ? body.startedAt : undefined,
-      endedAt: typeof body.endedAt === "string" ? body.endedAt : undefined,
+      endedAt:
+        body.endedAt === null ?
+          null :
+          typeof body.endedAt === "string" ?
+            body.endedAt :
+            undefined,
       reasonCode: String(body.reasonCode || "other") as PlantDowntimeReason,
       notes: typeof body.notes === "string" ? body.notes : undefined,
       estimatedGallonsLost:
-        body.estimatedGallonsLost != null ? Number(body.estimatedGallonsLost) : undefined,
-      expenseId: typeof body.expenseId === "string" ? body.expenseId : undefined,
+        body.estimatedGallonsLost === null ?
+          null :
+          body.estimatedGallonsLost != null ?
+            Number(body.estimatedGallonsLost) :
+            undefined,
       severity:
         body.severity === "low" || body.severity === "high" || body.severity === "medium" ?
           body.severity :
           undefined,
     });
-    res.status(201).json({ data });
+    res.json({ data });
   } catch (error) {
-    logger.error("createPlantDowntime", error);
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    if (
+      message.includes("not found") ||
+      message.includes("overlap") ||
+      message.includes("must be after") ||
+      message.includes("Invalid")
+    ) {
+      res.status(400).json({ error: message });
+      return;
+    }
+    logger.error("updatePlantDowntime", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const deletePlantDowntime = async (req: Request, res: Response) => {
+  const { businessId, downtimeId } = req.params;
+  const user = (req as { user?: { uid: string } }).user;
+  try {
+    const { hasAccess, role } = await checkBusinessAccess(user?.uid ?? "", businessId);
+    if (!hasAccess || role === "member") {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    await PlantDowntimeService.delete(businessId, downtimeId);
+    res.json({ data: { deleted: true } });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    if (message.includes("not found")) {
+      res.status(400).json({ error: message });
+      return;
+    }
+    logger.error("deletePlantDowntime", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -108,6 +203,60 @@ export const createTankLevel = async (req: Request, res: Response) => {
   }
 };
 
+export const updateTankLevel = async (req: Request, res: Response) => {
+  const { businessId, logId } = req.params;
+  const user = (req as { user?: { uid: string } }).user;
+  try {
+    const { hasAccess, role } = await checkBusinessAccess(user?.uid ?? "", businessId);
+    if (!hasAccess || role === "member") {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const data = await TankLevelLogService.updateById(businessId, logId, {
+      rawPct: body.rawPct != null ? Number(body.rawPct) : undefined,
+      productPct: body.productPct != null ? Number(body.productPct) : undefined,
+      rejectPct: body.rejectPct != null ? Number(body.rejectPct) : undefined,
+      notes: typeof body.notes === "string" ? body.notes : undefined,
+    });
+    res.json({ data });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    if (message.includes("not found") || message.includes("cannot be edited")) {
+      res.status(400).json({ error: message });
+      return;
+    }
+    if (message.includes("required")) {
+      res.status(400).json({ error: message });
+      return;
+    }
+    logger.error("updateTankLevel", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const deleteTankLevel = async (req: Request, res: Response) => {
+  const { businessId, logId } = req.params;
+  const user = (req as { user?: { uid: string } }).user;
+  try {
+    const { hasAccess, role } = await checkBusinessAccess(user?.uid ?? "", businessId);
+    if (!hasAccess || role === "member") {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    await TankLevelLogService.delete(businessId, logId);
+    res.json({ data: { deleted: true } });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    if (message.includes("not found") || message.includes("cannot be removed")) {
+      res.status(400).json({ error: message });
+      return;
+    }
+    logger.error("deleteTankLevel", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
 export const listIotDevices = async (req: Request, res: Response) => {
   const { businessId } = req.params;
   const user = (req as { user?: { uid: string } }).user;
@@ -141,9 +290,11 @@ export const createIotDevice = async (req: Request, res: Response) => {
       deviceType,
       serialNumber: typeof body.serialNumber === "string" ? body.serialNumber : undefined,
       locationTag: typeof body.locationTag === "string" ? body.locationTag : undefined,
+      calibrationDate:
+        typeof body.calibrationDate === "string" ? body.calibrationDate : undefined,
       active: body.active !== false,
     });
-    res.status(201).json({ data });
+    res.status(201).json({ data: data.device, ingestKey: data.ingestKey });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     if (message.includes("required")) {
@@ -175,6 +326,10 @@ export const updateIotDevice = async (req: Request, res: Response) => {
         body.locationTag !== undefined ?
           (typeof body.locationTag === "string" ? body.locationTag : "") :
           undefined,
+      calibrationDate:
+        body.calibrationDate !== undefined ?
+          (typeof body.calibrationDate === "string" ? body.calibrationDate : null) :
+          undefined,
       active: typeof body.active === "boolean" ? body.active : undefined,
     });
     res.json({ data });
@@ -185,6 +340,28 @@ export const updateIotDevice = async (req: Request, res: Response) => {
       return;
     }
     logger.error("updateIotDevice", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const rotateIotDeviceIngestKey = async (req: Request, res: Response) => {
+  const { businessId, deviceId } = req.params;
+  const user = (req as { user?: { uid: string } }).user;
+  try {
+    const { hasAccess, role } = await checkBusinessAccess(user?.uid ?? "", businessId);
+    if (!hasAccess || role === "member") {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+    const result = await IotDeviceRegistryService.rotateIngestKey(businessId, deviceId);
+    res.json({ data: result.device, ingestKey: result.ingestKey });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    if (message.includes("not found")) {
+      res.status(404).json({ error: message });
+      return;
+    }
+    logger.error("rotateIotDeviceIngestKey", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -257,7 +434,7 @@ export const getPlantEconomics = async (req: Request, res: Response) => {
       TransactionService.getTransactionsByBusiness(businessId, { limit: 2000 }),
       IotDeviceRegistryService.sumFlowGallons(businessId, days),
     ]);
-    const cost = computePlantCostPerGallon({ shifts, transactions, days });
+    const cost = computePlantCostPerGallonForDays({ shifts, transactions, days });
     const flow = computeFlowMeterReconcile({
       shifts,
       businessId,
@@ -279,12 +456,13 @@ export const getWrsMaintenanceGaps = async (req: Request, res: Response) => {
       res.status(403).json({ error: "Access denied" });
       return;
     }
-    const [templates, customers, transactions] = await Promise.all([
+    const [templates, customers, transactions, qualityLogs] = await Promise.all([
       MaintenanceTemplateService.list(businessId),
       CustomerService.getCustomersByBusiness(businessId),
       TransactionService.getTransactionsByBusiness(businessId, { limit: 500 }),
+      WaterQualityLogService.list(businessId, 200),
     ]);
-    const data = analyzeWrsMaintenanceGaps({ templates, customers, transactions });
+    const data = analyzeWrsMaintenanceGaps({ templates, customers, transactions, qualityLogs });
     res.json({ data });
   } catch (error) {
     logger.error("getWrsMaintenanceGaps", error);
@@ -302,9 +480,10 @@ export const getTankLevelDashboard = async (req: Request, res: Response) => {
       res.status(403).json({ error: "Access denied" });
       return;
     }
+    const days = Math.min(90, Math.max(7, Number(req.query.days) || 30));
     const [latest, trend, devices] = await Promise.all([
       TankLevelLogService.latestSnapshot(businessId),
-      TankLevelLogService.list(businessId, 30),
+      TankLevelLogService.list(businessId, days),
       IotDeviceRegistryService.list(businessId),
     ]);
 
@@ -327,19 +506,14 @@ export const getTankLevelDashboard = async (req: Request, res: Response) => {
       };
     });
 
-    const lowInsight =
-      latest && (latest.productPct ?? 100) < 15 ?
-        "Product tank below 15% — refill before peak hour." :
-        iot.some((row) => row.levelPct != null && row.levelPct < 15) ?
-          "IoT sensor reports low product tank level." :
-          null;
+    const lowLevelInsight = buildTankLowLevelInsight({ latest, iot });
 
     res.json({
       data: {
         latest,
         trend,
         iot,
-        lowLevelInsight: lowInsight,
+        lowLevelInsight,
       },
     });
   } catch (error) {

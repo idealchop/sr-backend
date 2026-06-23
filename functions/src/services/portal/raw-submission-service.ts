@@ -190,6 +190,7 @@ export class RawSubmissionService {
       submissionId: ref.id,
       submissionType,
       customerId,
+      customerDisplayName: resolvePortalCustomerDisplayName(undefined, payload),
       referenceId,
       portalOrderKind,
     }).catch((err) => {

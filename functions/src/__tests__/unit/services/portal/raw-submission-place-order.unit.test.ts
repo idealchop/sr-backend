@@ -70,7 +70,7 @@ vi.mock("../../../../services/observability/logging/logger", () => ({
 }));
 
 vi.mock("../../../../services/portal/portal-completion-receipt-notifier", () => ({
-  maybeSendPortalCompletionReceiptEmail: vi.fn(),
+  maybeNotifyPortalCompletionReceipt: vi.fn(),
   mergePortalProfileFromSubmission: vi.fn(),
 }));
 

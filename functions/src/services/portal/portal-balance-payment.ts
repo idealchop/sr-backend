@@ -1,6 +1,9 @@
 import type { DocumentReference } from "firebase-admin/firestore";
 import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
+import { CustomerService } from "../customers/customer-service";
+import { sendAdvancePaymentReceiptEmail } from "../notifications/owner-email-digest-services";
+import { resolveAppBaseUrlForEmail } from "../../utils/app-base-url";
 import {
   TransactionService,
   type Transaction,
@@ -10,7 +13,7 @@ import {
   ratingPatchFromPortalPayload,
 } from "./portal-rating-updates";
 import { portalPaymentConfirmedByRider } from "./portal-payment-utils";
-import type { RawSubmissionPayload } from "./raw-submission-types";
+import type { RawSubmission, RawSubmissionPayload } from "./raw-submission-types";
 
 export type ResolvedPortalBalancePayment = {
   txDocId: string;
@@ -202,6 +205,46 @@ export function buildPortalBalancePaymentUpdates(
   }
 
   return updates;
+}
+
+/** NT-30 — email suki when portal advance payment is recorded. */
+export async function maybeSendAdvancePaymentReceiptEmail(
+  businessId: string,
+  submission: RawSubmission,
+  before: Transaction,
+  after: Transaction,
+): Promise<void> {
+  if (submission.payload.portalPaymentPhase !== "advance") return;
+
+  const prevPaid = Number(before.amountPaid) || 0;
+  const newPaid = Number(after.amountPaid) || 0;
+  const delta = Math.max(0, newPaid - prevPaid);
+  if (delta <= 0) return;
+
+  const customerId = submission.customerId || after.customerId;
+  if (!customerId) return;
+
+  const customer = await CustomerService.getCustomer(businessId, customerId);
+  if (!customer?.email?.includes("@")) return;
+  if (customer.portalEmailNotifications === false) return;
+
+  const businessDoc = await db.collection("businesses").doc(businessId).get();
+  const businessName = String(businessDoc.data()?.name || "Your water station");
+  const referenceId = String(after.referenceId || "").trim();
+  if (!referenceId) return;
+
+  const params = new URLSearchParams({ b: businessId, ref: referenceId });
+  params.set("c", customerId);
+
+  await sendAdvancePaymentReceiptEmail({
+    businessId,
+    customerEmail: customer.email,
+    customerName: customer.name || "Customer",
+    businessName,
+    amount: delta,
+    referenceId,
+    trackUrl: `${resolveAppBaseUrlForEmail()}/order?${params.toString()}`,
+  });
 }
 
 /**

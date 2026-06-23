@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { logger } from "firebase-functions";
+import { MaintenanceComplianceExportService } from "../services/plant/maintenance-compliance-export-service";
 import { MaintenanceTemplateService } from "../services/plant/maintenance-template-service";
 import { summarizeMaintenanceOverdue } from "../services/plant/maintenance-template-utils";
 import { checkBusinessAccess } from "../utils/auth-utils";
@@ -119,6 +120,38 @@ export const updateMaintenanceTemplate = async (req: Request, res: Response) => 
       return;
     }
     logger.error(`Error updating maintenance template ${templateId}`, error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const exportMaintenanceCompliancePdf = async (req: Request, res: Response) => {
+  const { businessId } = req.params;
+  const user = (req as { user?: { uid: string } }).user;
+
+  try {
+    const { hasAccess, role } = await checkBusinessAccess(user?.uid ?? "", businessId);
+    if (!hasAccess || role === "member") {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const periodRaw = Number(body.periodDays);
+    const periodDays =
+      Number.isFinite(periodRaw) && periodRaw > 0 ?
+        Math.min(Math.round(periodRaw), 365) :
+        90;
+
+    const { buffer, filename } = await MaintenanceComplianceExportService.buildPdf(
+      businessId,
+      periodDays,
+    );
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(buffer);
+  } catch (error) {
+    logger.error(`Error exporting maintenance compliance PDF for ${businessId}`, error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };

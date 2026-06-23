@@ -13,12 +13,13 @@ import {
 import {
   buildPortalBalancePaymentUpdates,
   maybeDeleteRawSubmissionsAfterPaidComplete,
+  maybeSendAdvancePaymentReceiptEmail,
   resolvePortalBalancePaymentTransaction,
 } from "./portal-balance-payment";
 import { RawSubmissionService } from "./raw-submission-service";
 import {
-  maybeSendPortalCompletionReceiptEmail,
   mergePortalProfileFromSubmission,
+  maybeNotifyPortalCompletionReceipt,
 } from "./portal-completion-receipt-notifier";
 import { RawSubmission } from "./raw-submission-types";
 import {
@@ -424,6 +425,15 @@ const submissionHandlers: Record<string, SubmissionHandler> = {
       updates,
       userId,
     );
+    const after = await TransactionService.getTransaction(businessId, txDocId);
+    if (after) {
+      await maybeSendAdvancePaymentReceiptEmail(
+        businessId,
+        submission,
+        latest,
+        after,
+      );
+    }
     await maybeDeleteRawSubmissionsAfterPaidComplete(
       businessId,
       txDocId,
@@ -462,6 +472,20 @@ export class RawSubmissionProcessor {
 
       const handler = submissionHandlers[submission.submissionType];
       if (!handler) throw new Error("UNKNOWN_SUBMISSION_TYPE");
+
+      let paymentOnlyPortalCompletion = submission.submissionType === "PORTAL_PAY_BALANCE";
+      if (
+        !paymentOnlyPortalCompletion &&
+        submission.submissionType === "MARK_TX_COMPLETE"
+      ) {
+        const { current } = await resolvePortalCompletionTransaction(
+          businessId,
+          submission.customerId || "",
+          submission.payload,
+        );
+        paymentOnlyPortalCompletion = current.deliveryStatus === "completed";
+      }
+
       await handler(businessId, submission, userId, null as any);
       await RawSubmissionService.updateStatus(businessId, subId, {
         status: "processed",
@@ -474,10 +498,12 @@ export class RawSubmissionProcessor {
         type: submission.submissionType,
       });
 
-      try {
-        await maybeSendPortalCompletionReceiptEmail({ businessId, submission });
-      } catch (emailErr) {
-        logger.error("portal_completion_receipt_email_failed", emailErr);
+      if (paymentOnlyPortalCompletion) {
+        try {
+          await maybeNotifyPortalCompletionReceipt({ businessId, submission });
+        } catch (emailErr) {
+          logger.error("portal_completion_receipt_notify_failed", emailErr);
+        }
       }
       return;
     }

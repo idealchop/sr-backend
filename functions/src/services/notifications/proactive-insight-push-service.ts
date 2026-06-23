@@ -16,6 +16,7 @@ import { InventoryService } from "../inventory/inventory-service";
 import { buildContainerDeficitAlerts } from "../../utils/container-deficit-alert";
 import { buildAtRiskDeliverySnapshot } from "../../utils/at-risk-delivery-alert";
 import { buildSubscriptionLifecycleSnapshot } from "../../utils/subscription-lifecycle-alert";
+import { listPendingOrderCustomerIds } from "./pending-submission-reminder-service";
 import { resolveNotificationPreferencesFromUiConfig, resolveQuietHoursFromUiConfig } from "../../utils/notification-preferences";
 import { manilaDateKey, manilaHour } from "../../utils/philippine-datetime";
 import {
@@ -439,12 +440,17 @@ export async function sendAtRiskDeliveryPushForBusiness(
       undefined;
   if (lastSent === manilaDateKey(now)) return { sent: false };
 
-  const [customers, transactions] = await Promise.all([
+  const [customers, transactions, pendingOrderIds] = await Promise.all([
     CustomerService.getCustomersByBusiness(businessId),
     TransactionService.getTransactionsByBusiness(businessId, { limit: TX_LIMIT }),
+    listPendingOrderCustomerIds(businessId),
   ]);
 
-  const snapshot = buildAtRiskDeliverySnapshot(transactions, customers);
+  const snapshot = buildAtRiskDeliverySnapshot(
+    transactions,
+    customers,
+    pendingOrderIds,
+  );
   if (snapshot.count <= 0) return { sent: false };
 
   const hint =
@@ -530,6 +536,7 @@ export async function sendSubscriptionLifecyclePushForBusiness(
   const data = businessDoc.data() ?? {};
   const uiConfig = (data.uiConfig ?? {}) as Record<string, unknown>;
   if (uiConfig.subscriptionPushEnabled !== true) return { sent: false };
+  if (!usesDormantPushHour(uiConfig, now)) return { sent: false };
 
   const lifecycle = await buildSubscriptionLifecycleSnapshot(businessId, now);
   if (!lifecycle.active || !lifecycle.headline) return { sent: false };
@@ -552,7 +559,7 @@ export async function sendSubscriptionLifecyclePushForBusiness(
     {
       title,
       body: lifecycle.headline,
-      deepLink: "/account",
+      deepLink: "/account?tab=subscription",
       type: "subscription_lifecycle",
     },
     "subscriptionPushLastSentDate",
@@ -575,6 +582,13 @@ export async function maybeSendLowStockInstantPush(
   const uiConfig = (data.uiConfig ?? {}) as Record<string, unknown>;
   if (uiConfig.lowStockPushEnabled !== true) return;
 
+  const today = manilaDateKey(new Date());
+  const lastInstant =
+    typeof data.lowStockInstantPushLastSentDate === "string" ?
+      data.lowStockInstantPushLastSentDate :
+      undefined;
+  if (lastInstant === today) return;
+
   await sendOwnerPush(
     businessId,
     {
@@ -583,7 +597,7 @@ export async function maybeSendLowStockInstantPush(
       deepLink: "/inventory",
       type: "low_stock",
     },
-    "lowStockInstantPushLastSentAt",
+    "lowStockInstantPushLastSentDate",
     new Date(),
     uiConfig,
   );

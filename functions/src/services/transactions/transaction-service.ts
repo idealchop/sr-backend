@@ -13,6 +13,7 @@ import {
   notifyTransactionCreated,
   notifyTransactionUpdated,
 } from "../notifications/station-activity-notification-service";
+import { syncPortalTrackLiveOnDeliveryStatus } from "../portal/portal-track-live-service";
 import {
   initialPaymentConfirmedByRider,
   initialPaymentNotesForCreate,
@@ -1023,6 +1024,17 @@ export class TransactionService {
           transactionId,
         );
         hasLoggedSpecific = true;
+        void syncPortalTrackLiveOnDeliveryStatus(businessId, {
+          referenceId: current.referenceId,
+          riderId: String(updates.riderId ?? current.riderId ?? ""),
+          deliveryStatus: updates.deliveryStatus,
+        }).catch((error) => {
+          logger.warn("syncPortalTrackLiveOnDeliveryStatus failed", {
+            businessId,
+            transactionId,
+            error,
+          });
+        });
       }
 
       if (

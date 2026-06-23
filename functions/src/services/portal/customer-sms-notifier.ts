@@ -1,6 +1,9 @@
 import { logger } from "firebase-functions";
 import { brevo, getBrevoSmsApi } from "../../utils/brevo";
-import { ChannelUsageService } from "../channels/channel-usage-service";
+import {
+  ChannelUsageLimitError,
+  ChannelUsageService,
+} from "../channels/channel-usage-service";
 import type { Customer } from "../customers/customer-service";
 
 function formatPhilippinePhone(phone: string): string | null {
@@ -43,6 +46,21 @@ export async function maybeSendCustomerTxnSms(args: {
 
   if (process.env.SMARTREFILL_SMS_ENABLED !== "true") {
     return { sent: false };
+  }
+
+  try {
+    await ChannelUsageService.assertWithinCap(args.businessId, "smsSegments", 1);
+  } catch (usageErr) {
+    if (usageErr instanceof ChannelUsageLimitError) {
+      logger.warn("customer_txn_sms_cap_blocked", {
+        businessId: args.businessId,
+        referenceId: args.referenceId,
+        used: usageErr.used,
+        cap: usageErr.cap,
+      });
+      return { sent: false };
+    }
+    throw usageErr;
   }
 
   try {

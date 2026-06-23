@@ -2,7 +2,10 @@ import { db, FieldValue } from "../../config/firebase-admin";
 import { CustomerService } from "../customers/customer-service";
 import { TransactionService } from "../transactions/transaction-service";
 import { buildDormantSignalsSnapshot } from "../../utils/dormant-customers";
-import { resolveNotificationPreferencesFromUiConfig } from "../../utils/notification-preferences";
+import {
+  resolveNotificationPreferencesFromUiConfig,
+  resolveQuietHoursFromUiConfig,
+} from "../../utils/notification-preferences";
 import { manilaDateKey, manilaHour } from "../../utils/philippine-datetime";
 import {
   deleteOwnerDevicesByTokens,
@@ -101,6 +104,7 @@ export async function sendDormantDigestForBusiness(
   const revenueAtRiskPhp = Number(snapshot.revenueAtRiskPhp ?? 0);
   const copy = buildDormantDigestCopy(dormantCount, revenueAtRiskPhp);
 
+  const quietHours = resolveQuietHoursFromUiConfig(uiConfig);
   const { successCount, invalidTokens } = await sendFcmMulticast(tokens, {
     title: copy.title,
     body: copy.body,
@@ -109,6 +113,14 @@ export async function sendDormantDigestForBusiness(
       businessId,
       dormantCount: String(dormantCount),
       deepLink: "/dashboard",
+    },
+  }, {
+    quietHoursStart: quietHours.start,
+    quietHoursEnd: quietHours.end,
+    deliveryLog: {
+      businessId,
+      category: "dormant_digest",
+      audience: "owner",
     },
   });
 

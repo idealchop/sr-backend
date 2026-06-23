@@ -49,6 +49,9 @@ function sanitizeSuggestionRow(
       })) :
       [],
     rationale: String(row.rationale).slice(0, RATIONALE_MAX),
+    ...(typeof row.reason === "string" && row.reason.trim() ?
+      { reason: String(row.reason).slice(0, RATIONALE_MAX) } :
+      {}),
     ...(row.source === "profile" || row.source === "history" ? { source: row.source } : {}),
   };
 }
@@ -63,6 +66,7 @@ export type ProactiveScheduleSuggestionInput = {
   inventoryItems?: Array<{ inventoryId: string; qty: number; name?: string }>;
   returnContainers: Array<{ inventoryId: string; qty: number; name?: string }>;
   rationale: string;
+  reason?: string;
   source?: "profile" | "history";
 };
 
@@ -78,6 +82,7 @@ export type ProactiveScheduleWeekSnapshotDTO = {
   windowLabel: string;
   generatedAt: string;
   expireAt: string;
+  aiSummary?: string;
   suggestions: ProactiveScheduleSuggestionInput[];
 };
 
@@ -100,6 +105,8 @@ export class ProactiveScheduleWeekSnapshotService {
         generatedAt.toDate().toISOString() :
         new Date(0).toISOString(),
       expireAt: expireAt ? expireAt.toDate().toISOString() : "",
+      aiSummary:
+        typeof d?.aiSummary === "string" ? d.aiSummary.slice(0, 400) : undefined,
       suggestions: suggestions as ProactiveScheduleSuggestionInput[],
     };
   }
@@ -109,6 +116,7 @@ export class ProactiveScheduleWeekSnapshotService {
     payload: {
       windowLabel: string;
       suggestions: ProactiveScheduleSuggestionInput[];
+      aiSummary?: string;
     },
   ): Promise<void> {
     const rows = Array.isArray(payload.suggestions) ?
@@ -125,6 +133,7 @@ export class ProactiveScheduleWeekSnapshotService {
       {
         windowLabel: String(payload.windowLabel || "").slice(0, 500),
         suggestions: rows,
+        ...(payload.aiSummary ? { aiSummary: payload.aiSummary.slice(0, 400) } : {}),
         generatedAt: now,
         expireAt,
         updatedAt: FieldValue.serverTimestamp(),

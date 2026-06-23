@@ -1,6 +1,7 @@
 import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "firebase-functions";
 import { sendFcmMulticast } from "../notifications/fcm-push-service";
+import { resolveQuietHoursFromUiConfig } from "../../utils/notification-preferences";
 
 /**
  * NT-34 — customer Web Push on portal track (PWA subscription stored on customer doc).
@@ -11,7 +12,7 @@ export async function maybeSendCustomerTxnWebPush(args: {
   referenceId: string;
   statusLabel: string;
   trackUrl: string;
-}): Promise<{ sent: boolean }> {
+}): Promise<{ sent: boolean; skippedQuietHours?: boolean }> {
   const customerRef = db
     .collection("businesses")
     .doc(args.businessId)
@@ -37,7 +38,11 @@ export async function maybeSendCustomerTxnWebPush(args: {
     return { sent: true };
   }
 
-  const { successCount, invalidTokens } = await sendFcmMulticast(tokens, {
+  const bizSnap = await db.collection("businesses").doc(args.businessId).get();
+  const uiConfig = (bizSnap.data()?.uiConfig ?? {}) as Record<string, unknown>;
+  const quietHours = resolveQuietHoursFromUiConfig(uiConfig);
+
+  const { successCount, invalidTokens, skippedQuietHours } = await sendFcmMulticast(tokens, {
     title: args.statusLabel,
     body: `Order ${args.referenceId} — tap to track`,
     data: {
@@ -46,7 +51,14 @@ export async function maybeSendCustomerTxnWebPush(args: {
       referenceId: args.referenceId,
       deepLink: args.trackUrl,
     },
+  }, {
+    quietHoursStart: quietHours.start,
+    quietHoursEnd: quietHours.end,
   });
+
+  if (skippedQuietHours) {
+    return { sent: false, skippedQuietHours: true };
+  }
 
   if (invalidTokens.length > 0) {
     const valid = tokens.filter((t) => !invalidTokens.includes(t));

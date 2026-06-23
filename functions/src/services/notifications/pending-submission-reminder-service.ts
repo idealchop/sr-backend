@@ -3,13 +3,17 @@ import { logger } from "firebase-functions";
 import type { RawSubmission, RawSubmissionType } from "../portal/raw-submission-types";
 import { CustomerService } from "../customers/customer-service";
 import { buildNewOrderPushCopy } from "./new-order-push-service";
-import { resolveNotificationPreferencesFromUiConfig } from "../../utils/notification-preferences";
+import {
+  resolveNotificationPreferencesFromUiConfig,
+  resolveQuietHoursFromUiConfig,
+} from "../../utils/notification-preferences";
 import { manilaDateKey, manilaHour } from "../../utils/philippine-datetime";
 import {
   deleteOwnerDevicesByTokens,
   listOwnerDevices,
 } from "./owner-device-service";
 import { sendFcmMulticast } from "./fcm-push-service";
+import { pendingOrderCustomerIds } from "../../utils/at-risk-delivery-alert";
 
 const REMINDER_TYPES = new Set<RawSubmissionType>([
   "PLACE_ORDER",
@@ -52,6 +56,14 @@ async function listPendingReviewSubmissions(
     id: doc.id,
     ...(doc.data() as Omit<RawSubmission, "id">),
   }));
+}
+
+/** NT-08 — sukis with pending portal orders for at-risk push snapshot. */
+export async function listPendingOrderCustomerIds(
+  businessId: string,
+): Promise<Set<string>> {
+  const submissions = await listPendingReviewSubmissions(businessId);
+  return pendingOrderCustomerIds(submissions);
 }
 
 /**
@@ -103,6 +115,7 @@ export async function sendPendingSubmissionReminderForBusiness(
     top.referenceId ?? "",
   );
 
+  const quietHours = resolveQuietHoursFromUiConfig(uiConfig);
   const { successCount, invalidTokens } = await sendFcmMulticast(tokens, {
     title: `${stale.length} pending portal request${stale.length === 1 ? "" : "s"}`,
     body: `${copy.body} — waiting ${PENDING_HOURS}+ hours.`,
@@ -110,6 +123,14 @@ export async function sendPendingSubmissionReminderForBusiness(
       type: "incoming_request_reminder",
       businessId,
       deepLink: "/dashboard?proactive=orders",
+    },
+  }, {
+    quietHoursStart: quietHours.start,
+    quietHoursEnd: quietHours.end,
+    deliveryLog: {
+      businessId,
+      category: "incoming_request_reminder",
+      audience: "owner",
     },
   });
 

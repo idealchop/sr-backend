@@ -85,7 +85,8 @@ export function buildNewOrderPushCopy(
  * @param {object} opts Submission context for copy and routing.
  * @param {string} opts.submissionId Raw submission document id.
  * @param {RawSubmissionType} opts.submissionType Portal submission type.
- * @param {string} opts.customerId Customer linked to the submission.
+ * @param {string} [opts.customerId] Customer linked to the submission (may be empty).
+ * @param {string} [opts.customerDisplayName] Fallback name from payload when no customer doc.
  * @param {string} opts.referenceId Human-readable reference for push body.
  * @return {Promise<{ sent: boolean }>} Whether at least one device received the push.
  */
@@ -94,7 +95,8 @@ export async function sendNewOrderPushForSubmission(
   opts: {
     submissionId: string;
     submissionType: RawSubmissionType;
-    customerId: string;
+    customerId?: string;
+    customerDisplayName?: string;
     referenceId: string;
     portalOrderKind?: string;
   },
@@ -112,8 +114,11 @@ export async function sendNewOrderPushForSubmission(
     return { sent: false };
   }
 
+  const customerId = String(opts.customerId ?? "").trim();
   const [customer, devices] = await Promise.all([
-    CustomerService.getCustomer(businessId, opts.customerId),
+    customerId ?
+      CustomerService.getCustomer(businessId, customerId) :
+      Promise.resolve(null),
     listOwnerDevices(businessId),
   ]);
 
@@ -122,9 +127,14 @@ export async function sendNewOrderPushForSubmission(
     return { sent: false };
   }
 
+  const customerName =
+    (customer?.name ?? "").trim() ||
+    (opts.customerDisplayName ?? "").trim() ||
+    "Customer";
+
   const copy = buildNewOrderPushCopy(
     opts.submissionType,
-    customer?.name ?? "Customer",
+    customerName,
     opts.referenceId,
     opts.portalOrderKind,
   );
@@ -138,6 +148,12 @@ export async function sendNewOrderPushForSubmission(
       submissionId: opts.submissionId,
       referenceId: opts.referenceId,
       deepLink: "/dashboard?proactive=orders",
+    },
+  }, {
+    deliveryLog: {
+      businessId,
+      category: "new_order_push",
+      audience: "owner",
     },
   });
 

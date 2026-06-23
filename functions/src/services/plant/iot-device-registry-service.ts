@@ -1,4 +1,10 @@
 import { db, FieldValue } from "../../config/firebase-admin";
+import {
+  generateIotIngestKey,
+  hashIotIngestKey,
+  iotIngestKeyHint,
+  verifyIotIngestKey,
+} from "../../utils/iot-ingest-key";
 
 export type IotDeviceType = "tds_sensor" | "tank_level" | "flow_meter" | "generic";
 
@@ -8,9 +14,18 @@ export type IotDeviceRecord = {
   deviceType: IotDeviceType;
   serialNumber?: string;
   locationTag?: string;
+  calibrationDate?: string;
   active: boolean;
+  hasIngestKey: boolean;
+  ingestKeyHint?: string;
+  ingestKeyLastRotatedAt?: string;
   lastSeenAt?: string;
   createdAt: string;
+};
+
+export type IotDeviceCreateResult = {
+  device: IotDeviceRecord;
+  ingestKey: string;
 };
 
 export type IotTelemetryReading = {
@@ -20,11 +35,18 @@ export type IotTelemetryReading = {
   payload: Record<string, unknown>;
 };
 
-const PARTNER_HARDWARE_KIT: Array<Omit<IotDeviceRecord, "id" | "createdAt">> = [
+const PARTNER_HARDWARE_KIT: Array<Omit<IotDeviceRecord, "id" | "createdAt" | "hasIngestKey">> = [
   { name: "Product TDS probe", deviceType: "tds_sensor", locationTag: "product", active: false },
   { name: "Product tank level", deviceType: "tank_level", locationTag: "product", active: false },
   { name: "Production flow meter", deviceType: "flow_meter", locationTag: "product", active: false },
 ];
+
+function normalizeCalibrationDate(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return undefined;
+  return trimmed;
+}
 
 /** MP-20 / MP-25 — IoT device registry + partner hardware kit seeds. */
 export class IotDeviceRegistryService {
@@ -53,13 +75,20 @@ export class IotDeviceRegistryService {
     const lastSeenAt = data.lastSeenAt?.toDate ?
       data.lastSeenAt.toDate().toISOString() :
       data.lastSeenAt ? String(data.lastSeenAt) : undefined;
+    const ingestKeyLastRotatedAt = data.ingestKeyLastRotatedAt?.toDate ?
+      data.ingestKeyLastRotatedAt.toDate().toISOString() :
+      data.ingestKeyLastRotatedAt ? String(data.ingestKeyLastRotatedAt) : undefined;
     return {
       id,
       name: String(data.name || "Device"),
       deviceType: (data.deviceType || "generic") as IotDeviceType,
       serialNumber: data.serialNumber ? String(data.serialNumber) : undefined,
       locationTag: data.locationTag ? String(data.locationTag) : undefined,
+      calibrationDate: data.calibrationDate ? String(data.calibrationDate) : undefined,
       active: data.active !== false,
+      hasIngestKey: Boolean(data.ingestKeyHash),
+      ingestKeyHint: data.ingestKeyHint ? String(data.ingestKeyHint) : undefined,
+      ingestKeyLastRotatedAt,
       lastSeenAt,
       createdAt,
     };
@@ -82,24 +111,37 @@ export class IotDeviceRegistryService {
       deviceType: IotDeviceType;
       serialNumber?: string;
       locationTag?: string;
+      calibrationDate?: string;
       active?: boolean;
     },
-  ): Promise<IotDeviceRecord> {
+  ): Promise<IotDeviceCreateResult> {
     const name = input.name.trim();
     if (!name) throw new Error("Device name is required");
 
+    const ingestKey = generateIotIngestKey();
     const now = FieldValue.serverTimestamp();
     const doc = {
       name: name.slice(0, 120),
       deviceType: input.deviceType,
       ...(input.serialNumber ? { serialNumber: input.serialNumber.slice(0, 64) } : {}),
       ...(input.locationTag ? { locationTag: input.locationTag.slice(0, 40) } : {}),
+      ...(normalizeCalibrationDate(input.calibrationDate) ?
+        { calibrationDate: normalizeCalibrationDate(input.calibrationDate) } :
+        {}),
       active: input.active !== false,
+      ingestKeyHash: hashIotIngestKey(ingestKey),
+      ingestKeyHint: iotIngestKeyHint(ingestKey),
+      ingestKeyLastRotatedAt: now,
       createdAt: now,
       updatedAt: now,
     };
     const ref = await this.devicesCol(businessId).add(doc);
-    return this.serializeDevice(ref.id, { ...doc, createdAt: new Date() });
+    const device = this.serializeDevice(ref.id, {
+      ...doc,
+      createdAt: new Date(),
+      ingestKeyLastRotatedAt: new Date(),
+    });
+    return { device, ingestKey };
   }
 
   static async update(
@@ -109,6 +151,7 @@ export class IotDeviceRegistryService {
       name?: string;
       serialNumber?: string;
       locationTag?: string;
+      calibrationDate?: string | null;
       active?: boolean;
     },
   ): Promise<IotDeviceRecord> {
@@ -126,6 +169,10 @@ export class IotDeviceRegistryService {
     if (patch.locationTag !== undefined) {
       updates.locationTag = patch.locationTag.slice(0, 40);
     }
+    if (patch.calibrationDate !== undefined) {
+      const normalized = normalizeCalibrationDate(patch.calibrationDate);
+      updates.calibrationDate = normalized ?? FieldValue.delete();
+    }
     if (patch.active !== undefined) updates.active = patch.active;
 
     await ref.set(updates, { merge: true });
@@ -133,10 +180,59 @@ export class IotDeviceRegistryService {
     return this.serializeDevice(deviceId, next.data() ?? {});
   }
 
+  static async rotateIngestKey(
+    businessId: string,
+    deviceId: string,
+  ): Promise<IotDeviceCreateResult> {
+    const ref = this.devicesCol(businessId).doc(deviceId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new Error("IoT device not found");
+
+    const ingestKey = generateIotIngestKey();
+    const now = FieldValue.serverTimestamp();
+    await ref.set(
+      {
+        ingestKeyHash: hashIotIngestKey(ingestKey),
+        ingestKeyHint: iotIngestKeyHint(ingestKey),
+        ingestKeyLastRotatedAt: now,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+    const next = await ref.get();
+    return {
+      device: this.serializeDevice(deviceId, next.data() ?? {}),
+      ingestKey,
+    };
+  }
+
+  static async verifyDeviceIngestKey(
+    businessId: string,
+    deviceId: string,
+    providedKey: string,
+  ): Promise<boolean> {
+    const snap = await this.devicesCol(businessId).doc(deviceId).get();
+    if (!snap.exists) return false;
+    const data = snap.data() ?? {};
+    if (data.active === false) return false;
+    const storedHash = String(data.ingestKeyHash || "");
+    return verifyIotIngestKey(providedKey, storedHash);
+  }
+
   static async delete(businessId: string, deviceId: string): Promise<void> {
     const ref = this.devicesCol(businessId).doc(deviceId);
     const snap = await ref.get();
     if (!snap.exists) throw new Error("IoT device not found");
+
+    const telemetrySnap = await this.telemetryCol(businessId, deviceId).limit(500).get();
+    if (!telemetrySnap.empty) {
+      const batch = db.batch();
+      for (const doc of telemetrySnap.docs) {
+        batch.delete(doc.ref);
+      }
+      await batch.commit();
+    }
+
     await ref.delete();
   }
 
@@ -202,6 +298,9 @@ export class IotDeviceRegistryService {
     const deviceRef = this.devicesCol(businessId).doc(deviceId);
     const deviceSnap = await deviceRef.get();
     if (!deviceSnap.exists) throw new Error("IoT device not found");
+    if (deviceSnap.data()?.active === false) {
+      throw new Error("IoT device is disabled");
+    }
 
     const recordedAt = new Date();
     const reading = {

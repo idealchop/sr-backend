@@ -4,6 +4,7 @@ import type { Customer } from "../customers/customer-service";
 import type { Transaction } from "../transactions/transaction-service";
 import { brevo, getBrevoApi } from "../../utils/brevo";
 import { getPortalCompletionReceiptEmail } from "../../utils/portal-completion-receipt-email-templates";
+import { resolveBusinessEmailLogoUrl } from "../../utils/customer-email-branding";
 import {
   buildPortalCompletionReceiptPdf,
   formatBusinessAddressForPdf,
@@ -62,6 +63,7 @@ export async function sendTransactionCompletionReceiptEmail(args: {
   const biz = (bizSnap.data() || {}) as Record<string, unknown>;
 
   const businessName = String(biz.name || biz.businessName || "Water station");
+  const businessLogoUrl = resolveBusinessEmailLogoUrl(biz.logo);
   const businessEmail = String(biz.email || "");
   const businessPhone = String(biz.phone || "");
   const businessAddress = formatBusinessAddressForPdf(biz);
@@ -106,6 +108,7 @@ export async function sendTransactionCompletionReceiptEmail(args: {
   const template = getPortalCompletionReceiptEmail({
     customerName,
     businessName,
+    businessLogoUrl,
     referenceId: String(transaction.referenceId || "—"),
     completedAt,
     totalAmount: money(totalAmount),
@@ -140,7 +143,7 @@ export async function sendTransactionCompletionReceiptEmail(args: {
   sendSmtpEmail.tags = [template.brevoTag, "staff_ledger_receipt"];
   sendSmtpEmail.attachment = [
     {
-      name: `SmartRefill-Receipt-${String(transaction.referenceId || "order").replace(/[^\w-]+/g, "_")}.pdf`,
+      name: `${businessName.slice(0, 24).replace(/[^\w-]+/g, "_") || "Receipt"}-Receipt-${String(transaction.referenceId || "order").replace(/[^\w-]+/g, "_")}.pdf`,
       content: pdfBuffer.toString("base64"),
     },
   ];

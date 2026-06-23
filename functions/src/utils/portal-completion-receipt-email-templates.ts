@@ -1,14 +1,16 @@
 /* eslint-disable max-len */
+import { escapeHtmlForEmail } from "./auth-transactional-email";
 import {
-  escapeHtmlForEmail,
-  SMART_REFILL_EMAIL_LOGO_SRC,
-} from "./auth-transactional-email";
-
-const BRAND_COLOR = "#44c1ba";
+  buildCustomerEmailFooterHtml,
+  buildCustomerEmailFooterPlainText,
+  buildCustomerEmailMastheadHtml,
+  type CustomerEmailBrand,
+} from "./customer-email-branding";
 
 export interface PortalCompletionReceiptEmailInput {
   customerName: string;
   businessName: string;
+  businessLogoUrl?: string | null;
   referenceId: string;
   completedAt: string;
   totalAmount: string;
@@ -61,11 +63,14 @@ export function getPortalCompletionReceiptEmail(
   text: string;
   brevoTag: string;
 } {
-  const year = new Date().getFullYear();
   const name = escapeHtmlForEmail(input.customerName.trim() || "Customer");
   const business = escapeHtmlForEmail(input.businessName.trim() || "your water station");
   const ref = escapeHtmlForEmail(input.referenceId);
   const subject = `Order complete — Receipt ${input.referenceId} · ${input.businessName}`;
+  const brand: CustomerEmailBrand = {
+    businessName: input.businessName,
+    businessLogoUrl: input.businessLogoUrl,
+  };
 
   const detailRows = [
     { label: "Reference", valueHtml: ref },
@@ -93,10 +98,7 @@ export function getPortalCompletionReceiptEmail(
     `Payment status: ${input.paymentStatus}\n\n` +
     "Your official receipt is attached to this email.\n\n" +
     "Thank you for your business.\n\n" +
-    `—\n${input.businessName}\n` +
-    "Powered by Smart Refill\n" +
-    "River PH · https://riverph.com/\n" +
-    `© ${year} · All rights reserved`;
+    buildCustomerEmailFooterPlainText(input.businessName);
 
   const html = `
 <!DOCTYPE html>
@@ -116,26 +118,8 @@ export function getPortalCompletionReceiptEmail(
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
           style="max-width:600px;background-color:#ffffff;border:1px solid #d8e2ec;border-radius:14px;overflow:hidden;">
           <tr>
-            <td style="padding:0;border-bottom:3px solid ${BRAND_COLOR};background-color:#fbfcfd;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                <tr>
-                  <td style="padding:24px 28px 20px;">
-                    <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                      <tr>
-                        <td style="vertical-align:middle;padding-right:14px;">
-                          <img src="${SMART_REFILL_EMAIL_LOGO_SRC}" width="44" height="44" alt="Smart Refill" style="display:block;border-radius:10px;" />
-                        </td>
-                        <td style="vertical-align:middle;">
-                          <p style="margin:0;font-size:20px;font-weight:700;color:#0f172a;">Smart&nbsp;Refill</p>
-                          <p style="margin:6px 0 0;font-size:10px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#64748b;">
-                            Order confirmation
-                          </p>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
+            <td style="padding:0;">
+              ${buildCustomerEmailMastheadHtml(brand, "Order confirmation")}
             </td>
           </tr>
           <tr>
@@ -169,17 +153,7 @@ export function getPortalCompletionReceiptEmail(
               </p>
             </td>
           </tr>
-          <tr>
-            <td style="padding:20px 32px 28px;border-top:1px solid #e2e8f0;background-color:#f8fafc;text-align:center;">
-              <p style="margin:0;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">
-                Powered by Smart Refill
-              </p>
-              <p style="margin:8px 0 0;font-size:11px;color:#94a3b8;">
-                River Tech Inc. · <a href="https://riverph.com/" style="color:#0f766e;text-decoration:none;">riverph.com</a>
-              </p>
-              <p style="margin:8px 0 0;font-size:10px;color:#cbd5e1;">© ${year} · All rights reserved</p>
-            </td>
-          </tr>
+          ${buildCustomerEmailFooterHtml(brand)}
         </table>
       </td>
     </tr>

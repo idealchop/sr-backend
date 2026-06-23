@@ -1,6 +1,7 @@
 import express from "express";
 import {
   completeMaintenanceTemplate,
+  exportMaintenanceCompliancePdf,
   getPlantStaffQrToken,
   listMaintenanceTemplates,
   updateMaintenanceTemplate,
@@ -14,6 +15,11 @@ router.get(
   "/:businessId/staff-qr",
   validateFirebaseIdToken,
   getPlantStaffQrToken,
+);
+router.post(
+  "/:businessId/compliance/export",
+  validateFirebaseIdToken,
+  exportMaintenanceCompliancePdf,
 );
 router.post(
   "/:businessId/:templateId/complete",

@@ -1,6 +1,7 @@
 import { getMessaging, type MulticastMessage } from "firebase-admin/messaging";
 import { logger } from "firebase-functions";
 import { manilaHour } from "../../utils/philippine-datetime";
+import { AlertDeliveryLogService } from "./alert-delivery-log-service";
 
 export type FcmPushPayload = {
   title: string;
@@ -11,6 +12,12 @@ export type FcmPushPayload = {
 export type FcmSendOptions = {
   quietHoursStart?: number;
   quietHoursEnd?: number;
+  /** NT-75 — write delivery outcome to alert_delivery_log when set. */
+  deliveryLog?: {
+    businessId: string;
+    category: string;
+    audience?: "owner" | "customer";
+  };
 };
 
 /** NT-71 — block non-critical pushes outside configured Manila quiet hours. */
@@ -59,6 +66,15 @@ export async function sendFcmMulticast(
     )
   ) {
     logger.info("FCM push skipped (quiet hours)", { type: pushType ?? "unknown" });
+    if (options?.deliveryLog) {
+      await AlertDeliveryLogService.record(options.deliveryLog.businessId, {
+        channel: "push",
+        category: options.deliveryLog.category,
+        status: "skipped",
+        audience: options.deliveryLog.audience ?? "owner",
+        detail: { reason: "quiet_hours", pushType },
+      });
+    }
     return { successCount: 0, invalidTokens: [], skippedQuietHours: true };
   }
 
@@ -97,6 +113,28 @@ export async function sendFcmMulticast(
         });
       }
     });
+    if (options?.deliveryLog) {
+      const failureCount = unique.length - response.successCount;
+      const status =
+        response.successCount <= 0 ?
+          "failed" :
+          failureCount > 0 ?
+            "partial" :
+            "sent";
+      await AlertDeliveryLogService.record(options.deliveryLog.businessId, {
+        channel: "push",
+        category: options.deliveryLog.category,
+        status,
+        audience: options.deliveryLog.audience ?? "owner",
+        recipientCount: unique.length,
+        successCount: response.successCount,
+        failureCount,
+        detail: {
+          invalidTokenCount: invalidTokens.length,
+          pushType: pushType ?? null,
+        },
+      });
+    }
     return { successCount: response.successCount, invalidTokens };
   } catch (error) {
     logger.error("FCM multicast failed", error);

@@ -234,9 +234,8 @@ async function loadPendingPortalOrders(
     const payload = (d.payload || {}) as Record<string, unknown>;
     const profile = (payload.profile || {}) as Record<string, unknown>;
     const scheduledRaw = payload.scheduledAt ?? d.createdAt;
-    const scheduledDay = coerceToDate(scheduledRaw) ?
-      manilaDateKey(coerceToDate(scheduledRaw)!) :
-      null;
+    const scheduledDate = coerceToDate(scheduledRaw);
+    const scheduledDay = scheduledDate ? manilaDateKey(scheduledDate) : null;
     return {
       id: doc.id,
       customerName: String(profile.name || d.customerName || "Portal customer"),

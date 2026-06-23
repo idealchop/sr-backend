@@ -3,6 +3,7 @@ import { db } from "../../config/firebase-admin";
 import {
   addManilaDays,
   buildDefaultMaintenanceTemplates,
+  computePmGallonRecurrenceUpdate,
   serializeMaintenanceTemplate,
   sortMaintenanceTemplates,
 } from "./maintenance-template-utils";
@@ -10,10 +11,12 @@ import type { MaintenanceTemplateRecord } from "./maintenance-template-types";
 import { manilaDateKey } from "../../utils/philippine-datetime";
 import { InventoryService } from "../inventory/inventory-service";
 import { TransactionService } from "../transactions/transaction-service";
+import { ProductionShiftService } from "./production-shift-service";
 import type {
   MaintenanceCompleteInput,
   MaintenanceCompleteResult,
 } from "./maintenance-complete-types";
+import type { MaintenanceCompletionPdfRow } from "./maintenance-compliance-pdf-service";
 
 export class MaintenanceTemplateService {
   static collection(businessId: string) {
@@ -28,14 +31,54 @@ export class MaintenanceTemplateService {
     const snap = await col.get();
     if (snap.empty) {
       await this.seedDefaults(businessId);
-      const seeded = await col.get();
+      await this.syncGallonRecurrence(businessId);
+      const refreshed = await col.get();
       return sortMaintenanceTemplates(
-        seeded.docs.map((doc) => serializeMaintenanceTemplate(doc.id, doc.data())),
+        refreshed.docs.map((doc) => serializeMaintenanceTemplate(doc.id, doc.data())),
       );
     }
+
+    await this.syncGallonRecurrence(businessId);
+    const refreshed = await col.get();
     return sortMaintenanceTemplates(
-      snap.docs.map((doc) => serializeMaintenanceTemplate(doc.id, doc.data())),
+      refreshed.docs.map((doc) => serializeMaintenanceTemplate(doc.id, doc.data())),
     );
+  }
+
+  /**
+   * MP-11 — roll gallon counters from production shifts; pull nextDueAt forward when threshold hit.
+   * @return {Promise<number>} Number of templates updated.
+   */
+  static async syncGallonRecurrence(businessId: string): Promise<number> {
+    const col = this.collection(businessId);
+    const templatesSnap = await col.get();
+    if (templatesSnap.empty) return 0;
+
+    const shifts = await ProductionShiftService.list(businessId, { limit: 90 });
+    const todayKey = manilaDateKey(new Date());
+    const batch = db.batch();
+    let batchCount = 0;
+
+    for (const templateDoc of templatesSnap.docs) {
+      const template = serializeMaintenanceTemplate(templateDoc.id, templateDoc.data());
+      const update = computePmGallonRecurrenceUpdate(template, shifts, todayKey);
+      if (!update) continue;
+
+      const updates: Record<string, unknown> = {
+        gallonsSinceLastComplete: update.gallonsSinceLastComplete,
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      if (update.nextDueAt) {
+        updates.nextDueAt = update.nextDueAt;
+      }
+      batch.update(templateDoc.ref, updates);
+      batchCount += 1;
+    }
+
+    if (batchCount > 0) {
+      await batch.commit();
+    }
+    return batchCount;
   }
 
   static async seedDefaults(businessId: string): Promise<void> {
@@ -172,6 +215,45 @@ export class MaintenanceTemplateService {
       expenseId,
       consumablesAdjusted,
     };
+  }
+
+  /** MP-15 — completed PM rows within the reporting window. */
+  static async listCompletionsSince(
+    businessId: string,
+    periodDays: number,
+  ): Promise<MaintenanceCompletionPdfRow[]> {
+    const sinceKey = addManilaDays(manilaDateKey(new Date()), -periodDays);
+    const sinceMs = new Date(`${sinceKey}T00:00:00+08:00`).getTime();
+
+    const templatesSnap = await this.collection(businessId).get();
+    const rows: MaintenanceCompletionPdfRow[] = [];
+
+    for (const templateDoc of templatesSnap.docs) {
+      const templateName = String(templateDoc.data().name || templateDoc.id);
+      const completionsSnap = await templateDoc.ref
+        .collection("completions")
+        .orderBy("completedAt", "desc")
+        .get();
+
+      for (const doc of completionsSnap.docs) {
+        const data = doc.data();
+        const completedAt = data.completedAt?.toDate ?
+          data.completedAt.toDate().toISOString() :
+          String(data.completedAt || "");
+        const completedMs = new Date(completedAt).getTime();
+        if (!Number.isFinite(completedMs) || completedMs < sinceMs) continue;
+
+        rows.push({
+          templateName,
+          completedAt,
+          notes: data.notes ? String(data.notes) : null,
+          proofUrl: data.proofUrl ? String(data.proofUrl) : null,
+        });
+      }
+    }
+
+    rows.sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+    return rows;
   }
 
   /** MP-11 — owner adjusts gallon threshold for PM recurrence. */

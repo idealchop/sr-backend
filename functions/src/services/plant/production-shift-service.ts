@@ -1,6 +1,8 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../config/firebase-admin";
+import { logger } from "../observability/logging/logger";
 import { coerceToDate } from "../../utils/philippine-datetime";
+import { MaintenanceTemplateService } from "./maintenance-template-service";
 import {
   buildProductionShiftDocId,
   parseProductionShiftInput,
@@ -85,6 +87,72 @@ export class ProductionShiftService {
 
     await ref.set(payload, { merge: true });
     const saved = await ref.get();
+    void MaintenanceTemplateService.syncGallonRecurrence(businessId).catch(() => {
+      // PM gallon sync is best-effort; nightly scheduler is fallback.
+    });
     return serializeShift(saved.id, saved.data() ?? {});
+  }
+
+  static async updateById(
+    businessId: string,
+    shiftId: string,
+    userId: string,
+    body: Record<string, unknown>,
+  ): Promise<ProductionShiftRecord> {
+    const ref = this.collection(businessId).doc(shiftId);
+    const existing = await ref.get();
+    if (!existing.exists) {
+      throw new Error("Shift log not found");
+    }
+
+    const parsed = parseProductionShiftInput(body);
+    if (!parsed.ok) {
+      throw new Error(parsed.error);
+    }
+
+    const { calendarDate, shift, gallonsProduced, gallonsRejected, notes } = parsed.value;
+    const newId = buildProductionShiftDocId(calendarDate, shift);
+    const targetRef =
+      newId === shiftId ? ref : this.collection(businessId).doc(newId);
+    const now = FieldValue.serverTimestamp();
+
+    const payload: Record<string, unknown> = {
+      calendarDate,
+      shift,
+      gallonsProduced,
+      gallonsRejected,
+      source: "manual",
+      recordedBy: userId,
+      updatedAt: now,
+      ...(notes ? { notes } : { notes: FieldValue.delete() }),
+    };
+
+    if (newId !== shiftId) {
+      const priorCreated = existing.data()?.createdAt;
+      if (priorCreated) payload.createdAt = priorCreated;
+      else payload.createdAt = now;
+      await targetRef.set(payload, { merge: true });
+      await ref.delete();
+    } else {
+      await ref.set(payload, { merge: true });
+    }
+
+    const saved = await targetRef.get();
+    void MaintenanceTemplateService.syncGallonRecurrence(businessId).catch((error) => {
+      logger.warn("maintenance gallon sync failed after shift save", { businessId, error });
+    });
+    return serializeShift(saved.id, saved.data() ?? {});
+  }
+
+  static async delete(businessId: string, shiftId: string): Promise<void> {
+    const ref = this.collection(businessId).doc(shiftId);
+    const existing = await ref.get();
+    if (!existing.exists) {
+      throw new Error("Shift log not found");
+    }
+    await ref.delete();
+    void MaintenanceTemplateService.syncGallonRecurrence(businessId).catch((error) => {
+      logger.warn("maintenance gallon sync failed after shift save", { businessId, error });
+    });
   }
 }

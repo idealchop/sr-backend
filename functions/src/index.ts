@@ -19,6 +19,7 @@ import waterQualityLogRoutes from "./routes/water-quality-log-routes";
 import plantOpsRoutes from "./routes/plant-ops-routes";
 import fileRoutes from "./routes/file-routes";
 import publicRoutes from "./routes/public-routes";
+import platformRoutes from "./routes/platform-routes";
 
 // Swagger API Documentation
 import swaggerUi from "swagger-ui-express";
@@ -63,6 +64,7 @@ app.use("/plant/water-quality", waterQualityLogRoutes);
 app.use("/plant", plantOpsRoutes);
 app.use("/files", fileRoutes);
 app.use("/public", publicRoutes);
+app.use("/platform", platformRoutes);
 
 // Secured Interactive Swagger UI
 app.use("/docs", validateDocsAdminToken, swaggerUi.serve, swaggerUi.setup(openApiSpec));

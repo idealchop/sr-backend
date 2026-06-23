@@ -1,5 +1,4 @@
-import { db, FieldValue } from "../../config/firebase-admin";
-import { logger } from "firebase-functions";
+import { db } from "../../config/firebase-admin";
 import { sendProactiveInsightPushesForBusiness } from "./proactive-insight-push-service";
 import { sendPendingSubmissionReminderForBusiness } from "./pending-submission-reminder-service";
 import { sendDormantDigestEmailForBusiness } from "./dormant-digest-email-service";
@@ -18,6 +17,10 @@ import {
   sendTeamActivityDigestEmailForBusiness,
 } from "./owner-email-digest-services";
 import { runPlantAlertsForBusiness } from "./plant-alert-service";
+import {
+  AlertDeliveryLogService,
+  mapContributorToDeliveryLog,
+} from "./alert-delivery-log-service";
 
 export type AlertContributorId =
   | "proactive_push"
@@ -47,21 +50,12 @@ async function logAlertDelivery(
   businessId: string,
   result: AlertRunResult,
 ): Promise<void> {
-  if (!result.sent) return;
-  try {
-    await db
-      .collection("businesses")
-      .doc(businessId)
-      .collection("alert_delivery_log")
-      .add({
-        contributorId: result.contributorId,
-        sent: true,
-        detail: result.detail ?? {},
-        createdAt: FieldValue.serverTimestamp(),
-      });
-  } catch (error) {
-    logger.warn("alert_delivery_log write failed", { businessId, error });
-  }
+  const input = mapContributorToDeliveryLog(
+    result.contributorId,
+    result.sent,
+    result.detail,
+  );
+  await AlertDeliveryLogService.record(businessId, input);
 }
 
 /**

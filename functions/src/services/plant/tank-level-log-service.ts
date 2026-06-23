@@ -86,6 +86,69 @@ export class TankLevelLogService {
     const rows = await this.list(businessId, 1);
     return rows[0] ?? null;
   }
+
+  static async updateById(
+    businessId: string,
+    logId: string,
+    input: CreateTankLevelLogInput,
+  ): Promise<TankLevelLogRecord> {
+    const ref = this.collection(businessId).doc(logId);
+    const existing = await ref.get();
+    if (!existing.exists) {
+      throw new Error("Tank level log not found");
+    }
+    const prior = existing.data() ?? {};
+    if (prior.source === "device") {
+      throw new Error("Device readings cannot be edited");
+    }
+
+    const rawPct = input.rawPct != null ? clampPct(input.rawPct) : undefined;
+    const productPct = input.productPct != null ? clampPct(input.productPct) : undefined;
+    if (rawPct == null || productPct == null) {
+      throw new Error("Raw and product levels are required (0–100)");
+    }
+
+    const rejectPct = input.rejectPct != null ? clampPct(input.rejectPct) : undefined;
+    await ref.update({
+      rawPct,
+      productPct,
+      ...(rejectPct != null ?
+        { rejectPct } :
+        { rejectPct: FieldValue.delete() }),
+      ...(input.notes ?
+        { notes: input.notes.slice(0, 300) } :
+        { notes: FieldValue.delete() }),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    const saved = await ref.get();
+    const d = saved.data() ?? {};
+    const recordedAt = d.recordedAt?.toDate ?
+      d.recordedAt.toDate().toISOString() :
+      String(d.recordedAt || "");
+    return {
+      id: saved.id,
+      recordedAt,
+      rawPct: d.rawPct != null ? Number(d.rawPct) : undefined,
+      productPct: d.productPct != null ? Number(d.productPct) : undefined,
+      rejectPct: d.rejectPct != null ? Number(d.rejectPct) : undefined,
+      source: "manual",
+      deviceId: d.deviceId ? String(d.deviceId) : undefined,
+      notes: d.notes ? String(d.notes) : undefined,
+    };
+  }
+
+  static async delete(businessId: string, logId: string): Promise<void> {
+    const ref = this.collection(businessId).doc(logId);
+    const existing = await ref.get();
+    if (!existing.exists) {
+      throw new Error("Tank level log not found");
+    }
+    if (existing.data()?.source === "device") {
+      throw new Error("Device readings cannot be removed");
+    }
+    await ref.delete();
+  }
 }
 
 function clampPct(n: number): number {

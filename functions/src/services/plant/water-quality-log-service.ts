@@ -59,6 +59,21 @@ export class WaterQualityLogService {
       .collection("water_quality_logs");
   }
 
+  /** MP-15 — quality logs within the compliance export window. */
+  static async listInPeriod(
+    businessId: string,
+    periodDays: number,
+  ): Promise<WaterQualityLogRecord[]> {
+    const sinceKey = addManilaDays(manilaDateKey(new Date()), -periodDays);
+    const sinceMs = new Date(`${sinceKey}T00:00:00+08:00`).getTime();
+    const limit = Math.min(Math.max(periodDays * 3, 30), 200);
+    const logs = await this.list(businessId, limit);
+    return logs.filter((log) => {
+      const recordedMs = new Date(log.recordedAt).getTime();
+      return Number.isFinite(recordedMs) && recordedMs >= sinceMs;
+    });
+  }
+
   static async list(
     businessId: string,
     limit = 30,

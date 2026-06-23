@@ -54,7 +54,11 @@ export function buildLowRatingSample(
 ): LowRatingSampleRow[] {
   const rangeStart = new Date(now.getTime() - lookbackDays * 86400000);
   const nameById = new Map(
-    customers.filter((c) => c.id).map((c) => [c.id!, c.name]),
+    customers
+      .filter((c): c is typeof c & { id: string } =>
+        typeof c.id === "string" && c.id.length > 0,
+      )
+      .map((c) => [c.id, c.name]),
   );
   const byCustomer = new Map<string, LowRatingSampleRow>();
 

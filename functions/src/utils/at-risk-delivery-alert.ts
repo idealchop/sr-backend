@@ -20,26 +20,33 @@ export type AtRiskDeliverySnapshot = {
   rows: AtRiskDeliveryRow[];
 };
 
-function customerHasIncompleteTransaction(
-  transactions: Transaction[],
-  customerId: string,
-): boolean {
-  return transactions.some((tx) => {
-    if (tx.customerId !== customerId) return false;
-    const status = String(tx.deliveryStatus || "").toLowerCase();
-    if (!status) return false;
-    return !TERMINAL_DELIVERY.has(status);
-  });
+/** Customer ids with pending portal place-order / collection submissions. */
+export function pendingOrderCustomerIds(
+  submissions: Array<{ customerId?: string; submissionType?: string }>,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const sub of submissions) {
+    if (!sub.customerId) continue;
+    const type = sub.submissionType;
+    if (type === "PLACE_ORDER" || type === "REQUEST_COLLECTION") {
+      ids.add(sub.customerId);
+    }
+  }
+  return ids;
 }
 
-/** NT-08 — open deliveries and customers with pending operational activity. */
+/** NT-08 — open deliveries and pending portal orders blocking win-back work. */
 export function buildAtRiskDeliverySnapshot(
   transactions: Transaction[],
   customers: Customer[],
   pendingSubmissionCustomerIds: Set<string> = new Set(),
 ): AtRiskDeliverySnapshot {
   const customerNameById = new Map(
-    customers.filter((c) => c.id).map((c) => [c.id!, c.name]),
+    customers
+      .filter((c): c is typeof c & { id: string } =>
+        typeof c.id === "string" && c.id.length > 0,
+      )
+      .map((c) => [c.id, c.name]),
   );
   const atRiskIds = new Set<string>();
   const reasonsByCustomer = new Map<string, string[]>();
@@ -59,17 +66,12 @@ export function buildAtRiskDeliverySnapshot(
     pushReason(tx.customerId, `Delivery ${ref}: ${status.replace(/-/g, " ")}`);
   }
 
-  for (const customer of customers) {
-    if (!customer.id) continue;
-    if (
-      customerHasIncompleteTransaction(transactions, customer.id) ||
-      pendingSubmissionCustomerIds.has(customer.id)
-    ) {
-      pushReason(
-        customer.id,
-        "Pending portal or submission activity on file.",
-      );
-    }
+  for (const customerId of pendingSubmissionCustomerIds) {
+    if (atRiskIds.has(customerId)) continue;
+    pushReason(
+      customerId,
+      "Pending portal order awaiting review.",
+    );
   }
 
   const rows: AtRiskDeliveryRow[] = [...atRiskIds].map((customerId) => ({

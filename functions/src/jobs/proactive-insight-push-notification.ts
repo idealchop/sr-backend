@@ -10,7 +10,7 @@ import { manilaHour } from "../utils/philippine-datetime";
 import { DORMANT_PUSH_HOUR_OPTIONS } from "../utils/notification-preferences";
 
 /**
- * NT-01 / NT-02 / NT-03 / NT-04 — hourly proactive insight pushes at each business's send hour.
+ * NT-01–NT-10 — hourly proactive insight pushes at each business's send hour.
  */
 export const proactiveInsightPushNotification = onSchedule(
   {
@@ -35,6 +35,10 @@ export const proactiveInsightPushNotification = onSchedule(
     let varianceSent = 0;
     let reorderSent = 0;
     let slaSent = 0;
+    let containerDeficitSent = 0;
+    let atRiskSent = 0;
+    let lowStockSent = 0;
+    let subscriptionSent = 0;
     let pendingReminderSent = 0;
 
     for (const businessId of businessIds) {
@@ -45,6 +49,10 @@ export const proactiveInsightPushNotification = onSchedule(
         if (result.variance) varianceSent += 1;
         if (result.reorder) reorderSent += 1;
         if (result.sla) slaSent += 1;
+        if (result.containerDeficit) containerDeficitSent += 1;
+        if (result.atRisk) atRiskSent += 1;
+        if (result.lowStock) lowStockSent += 1;
+        if (result.subscription) subscriptionSent += 1;
 
         const pending = await sendPendingSubmissionReminderForBusiness(businessId);
         if (pending.sent) pendingReminderSent += 1;
@@ -64,6 +72,10 @@ export const proactiveInsightPushNotification = onSchedule(
       varianceSent,
       reorderSent,
       slaSent,
+      containerDeficitSent,
+      atRiskSent,
+      lowStockSent,
+      subscriptionSent,
       pendingReminderSent,
     });
   },

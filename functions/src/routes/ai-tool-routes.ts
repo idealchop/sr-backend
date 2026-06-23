@@ -10,6 +10,7 @@ import { postDashboardQa } from "../handlers/ai-dashboard-qa-handler";
 import { postRunWorkflow } from "../handlers/ai-workflow-handler";
 import {
   postDuplicatesDetect,
+  postDuplicatesDismiss,
   postDuplicatesMerge,
   postInventoryScanApply,
   postInventoryScanImage,
@@ -105,6 +106,13 @@ router.post(
   validateBusinessAccess,
   requireBusinessOwner,
   postDuplicatesDetect,
+);
+router.post(
+  "/duplicates/dismiss",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  requireBusinessOwner,
+  postDuplicatesDismiss,
 );
 router.post(
   "/duplicates/merge",

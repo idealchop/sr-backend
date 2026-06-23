@@ -544,15 +544,14 @@ async function generateAiTurn(input: {
   const parsed = normalizeSupportAiTurn(rawTurn, fallback);
   const hasAttachments = (input.currentAttachments?.length || 0) > 0;
 
+  const structured =
+    parsed.structured ||
+    plainTextToStructuredFallback(parsed.reply || fallback.reply);
   const withStructured: SupportAiTurnResult = {
     ...applySupportTurnHeuristics(parsed, input.userText, hasAttachments),
-    structured:
-      parsed.structured ||
-      plainTextToStructuredFallback(parsed.reply || fallback.reply),
+    structured,
+    reply: parsed.reply || structuredReplyToPlainText(structured),
   };
-  withStructured.reply =
-    withStructured.reply ||
-    structuredReplyToPlainText(withStructured.structured!);
 
   return withStructured;
 }

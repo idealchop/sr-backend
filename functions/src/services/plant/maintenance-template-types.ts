@@ -21,6 +21,7 @@ export type MaintenanceTemplateRecord = {
   lastCompletedAt: string | null;
   nextDueAt: string;
   status: MaintenanceTemplateStatus;
+  dueTrigger: "calendar" | "gallons" | null;
   checklist: string[];
   consumes: import("./maintenance-complete-types").MaintenanceConsumableLink[];
   createdAt: string;

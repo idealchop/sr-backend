@@ -72,6 +72,14 @@ Google OAuth runs in the **frontend only** (Firebase Auth). The API receives the
 - **Wiring:** `raw-submission-processor.ts`, `raw-submission-handler.ts` call `ensureCustomerActiveForPortalAcceptance`
 - **Docs / manual QA:** `frontend/docs/portal-customer-active-limit-test-summary.md` (TC-PORTAL-LIMIT-*)
 
+### Portal live rider tracking (`portal_track_live`)
+
+- **Unit:** `unit/services/portal/portal-track-live-service.unit.test.ts` — upsert on rider GPS; seed/clear on `deliveryStatus`
+- **Unit:** `unit/services/riders/rider-tracking-service.unit.test.ts` — self-location POST triggers portal live upsert
+- **Integration:** `integration/portal-track.test.ts` — public track GET (status/metadata)
+- **Schema / rules:** `frontend/docs/firestore_schema.md` (`portal_track_live`); `frontend/firestore.rules` + `backend/firestore.rules` (public read)
+- **Docs / manual QA:** `frontend/docs/operations-live-dispatch-test-summary.md` (TC-TRK-01, TC-TRK-11, TC-TRK-11b)
+
 ### Customer last fulfilled & dormant signals
 
 - **Unit:** `unit/services/customers/customer-last-fulfilled-service.unit.test.ts` — `resolveFulfilledActivity`, `touchFromTransaction`, `backfillBusiness`
@@ -91,7 +99,8 @@ Google OAuth runs in the **frontend only** (Firebase Auth). The API receives the
 - **Config:** `unit/services/ai/gemini-config.unit.test.ts` — default model `gemini-3.1-flash-lite`, ladder, env overrides
 - **Usage goals:** `unit/utils/usage-goals.unit.test.ts` — normalize `businesses.usageGoals`, ranked intel tool recommendations
 - **Unit:** `unit/services/ai/ai-tool-run-service.unit.test.ts` — snapshot includes `ownerUsageGoals`; prompts reference owner priorities
-- **Integration BDD:** `integration/ai-tool-flow.bdd.test.ts` — `POST/GET /business/:id/ai-tools/runs`, fallback when `GEMINI_API_KEY` is unset
+- **Integration BDD:** `integration/ai-tool-flow.bdd.test.ts` — `POST/GET /business/:id/ai-tools/runs`, fallback when `GEMINI_API_KEY` is unset; `POST …/duplicates/detect` and `POST …/duplicates/dismiss`
+- **Duplicate suki:** `unit/services/ai/duplicate-customers-service.unit.test.ts` — heuristic clustering (phone, email, name; numeric phone coercion); `duplicate-customers-ai-validation-service.unit.test.ts` — Gemini filter; `duplicate-dismissals-service.unit.test.ts` — `dismissedDuplicateCustomerIds`, legacy group keys, `dismissDuplicateCustomer`
 - **Local:** `GEMINI_API_KEY` in `functions/.env` (see `functions/.env.example`)
 
 ### Team chat (direct messages)

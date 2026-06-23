@@ -58,9 +58,10 @@ export function buildPaymentReminderScripts(
         amountPhp,
         oldestDebtDays,
         reminderTier: tier,
-        suggestedScript:
+        suggestedScript: (
           `Hi ${name}, ${urgency} — ₱${amountPhp.toFixed(0)} (${oldestDebtDays}d). ` +
-          "Pwede po ba today? Salamat po!",
+          "Pwede po ba today? Salamat po!"
+        ).slice(0, 280),
       });
     }
   }
@@ -135,14 +136,25 @@ export async function buildWaterQualityAnomalyFacts(
       sampleCount: product.length,
       latestTdsPpm: latest.tdsPpm,
       medianTdsPpm: medianTds,
+      latestPh: latest.ph ?? null,
     };
   }
+
+  const customerCommsDraft =
+    failedRecent > 0 ?
+      "Hi suki, nag-maintenance kami ng filters today para siguradong safe ang tubig. " +
+        "Salamat sa pasensya — message lang kung may concern sa lasa." :
+      tdsDeltaPct >= 15 ?
+        "Hi, nag-check kami ng TDS levels — minor adjustment lang at within standard pa rin. " +
+          "Salamat sa pag-order!" :
+        undefined;
 
   return {
     anomalyActive: true,
     sampleCount: product.length,
     latestTdsPpm: latest.tdsPpm,
     medianTdsPpm: medianTds,
+    latestPh: latest.ph ?? null,
     tdsDeltaPct,
     failedReadingsRecent: failedRecent,
     suggestedActions: [
@@ -150,6 +162,7 @@ export async function buildWaterQualityAnomalyFacts(
       tdsDeltaPct >= 15 ? "Inspect pre-filters and RO membrane — TDS trending up." : null,
       "Notify suki only after confirming fix; draft apology if taste complaints rise.",
     ].filter(Boolean),
+    ...(customerCommsDraft ? { customerCommsDraft } : {}),
   };
 }
 

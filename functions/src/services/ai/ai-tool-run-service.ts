@@ -222,6 +222,25 @@ function paymentReminderNameKeys(snapshot: Record<string, unknown>): Set<string>
   return keys;
 }
 
+/** AI-02 — deterministic outreach when Gemini returns no valid scripts. */
+function buildCollectionsOutreachFallback(
+  snapshot: Record<string, unknown>,
+): OutreachPlanRow[] {
+  const tierPriority: Record<30 | 60 | 90, OutreachPlanPriority> = {
+    90: "high",
+    60: "medium",
+    30: "low",
+  };
+  return buildPaymentReminderScripts(snapshot).slice(0, 12).map((row) => ({
+    name: row.name,
+    priority: tierPriority[row.reminderTier],
+    reason:
+      `${row.reminderTier}d tier · ₱${row.amountPhp.toFixed(0)} · ` +
+      `${row.oldestDebtDays}d oldest`,
+    suggestedMessage: row.suggestedScript,
+  }));
+}
+
 /** BL-02: validate outreach rows against dormantSignals.sample only.
  * @param {unknown} raw Raw outreach plan from Gemini.
  * @param {Set<string>} allowedNameKeys Lowercase names from dormant sample.
@@ -643,6 +662,7 @@ function systemPromptForTool(
     return (
       `${common} Focus: collections & accounts receivable — who owes, partial payments, ` +
       "and concrete follow-up cadence. Use reminderQueue30/60/90 only — never invent debtor names. " +
+      "paymentReminderScripts in the snapshot are deterministic Taglish seeds — refine them in outreachPlan. " +
       "Return JSON with title, summary, highlights, actionItems, riskLevel, " +
       "and outreachPlan (array, max 12). Each outreachPlan item: name (exact match from reminder queues), " +
       "priority (high for 90d tier, medium for 60d, low for 30d), " +
@@ -683,7 +703,8 @@ function systemPromptForTool(
       "When productionVarianceActive is true, include varianceHypotheses (array of strings, max 5): " +
       "ranked plausible causes using ONLY plantHealth facts (unlogged walk-ins, open deliveries, " +
       "stale shift log, meter drift, leak) — no invented numbers. " +
-      "When aiEnrichments.ai06_waterQualityAnomaly.anomalyActive is true, mention water quality trend. " +
+      "When aiEnrichments.ai06_waterQualityAnomaly.anomalyActive is true, mention water quality trend " +
+      "and include customerCommsDraft if present (suggested suki message — do not invent readings). " +
       "Give practical next steps (replace filter, log shift, reconcile walk-ins). " +
       "Use only plantHealth and maintenance task names from JSON — do not invent readings."
     );
@@ -832,7 +853,7 @@ export class AiToolRunService {
     });
 
     const normalized = normalizeGeminiOutput(ai, fallbackSummary);
-    const outreachPlan =
+    let outreachPlan =
       tool === "retention_pulse" ?
         normalizeOutreachPlan(
           ai?.outreachPlan,
@@ -844,6 +865,11 @@ export class AiToolRunService {
             paymentReminderNameKeys(snapshot),
           ) :
           undefined;
+
+    if (tool === "collections_pulse" && (!outreachPlan || outreachPlan.length === 0)) {
+      const fallback = buildCollectionsOutreachFallback(snapshot);
+      outreachPlan = fallback.length > 0 ? fallback : undefined;
+    }
 
     const doc = {
       tool,

@@ -71,29 +71,27 @@ export async function parseFreeTextOrder(params: {
   });
 
   const confidence = Math.min(1, Math.max(0, Number(raw?.confidence) || 0));
+  const refillItemsRaw = Array.isArray(raw?.refillItems) ? raw.refillItems : [];
+  const inventoryItemsRaw = Array.isArray(raw?.inventoryItems) ? raw.inventoryItems : [];
   return {
     customerName: typeof raw?.customerName === "string" ? raw.customerName.trim() : undefined,
     customerPhone: typeof raw?.customerPhone === "string" ? raw.customerPhone.trim() : undefined,
     deliveryRequested: raw?.deliveryRequested !== false,
     address: typeof raw?.address === "string" ? raw.address.trim() : undefined,
-    refillItems: Array.isArray(raw?.refillItems) ?
-      raw!.refillItems
-        .filter((r) => r && typeof r === "object")
-        .map((r) => ({
-          type: String((r as { type?: string }).type || "refill").slice(0, 40),
-          qty: Math.max(1, Math.round(Number((r as { qty?: number }).qty) || 1)),
-        }))
-        .slice(0, 8) :
-      [],
-    inventoryItems: Array.isArray(raw?.inventoryItems) ?
-      raw!.inventoryItems
-        .filter((r) => r && typeof r === "object")
-        .map((r) => ({
-          name: String((r as { name?: string }).name || "").slice(0, 60),
-          qty: Math.max(1, Math.round(Number((r as { qty?: number }).qty) || 1)),
-        }))
-        .slice(0, 8) :
-      [],
+    refillItems: refillItemsRaw
+      .filter((r) => r && typeof r === "object")
+      .map((r) => ({
+        type: String((r as { type?: string }).type || "refill").slice(0, 40),
+        qty: Math.max(1, Math.round(Number((r as { qty?: number }).qty) || 1)),
+      }))
+      .slice(0, 8),
+    inventoryItems: inventoryItemsRaw
+      .filter((r) => r && typeof r === "object")
+      .map((r) => ({
+        name: String((r as { name?: string }).name || "").slice(0, 60),
+        qty: Math.max(1, Math.round(Number((r as { qty?: number }).qty) || 1)),
+      }))
+      .slice(0, 8),
     notes: typeof raw?.notes === "string" ? raw.notes.trim().slice(0, 200) : undefined,
     confidence,
     clarifyingQuestion:

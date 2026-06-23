@@ -7,7 +7,10 @@ import { buildDormantCustomerRows } from "../utils/dormant-customers";
 import {
   computeCohortStats,
   computeDebtAgingBreakdown,
+  computeRevenueTrend,
+  computeRevenueWowPct,
   paginateRows,
+  sumRevenue30d,
 } from "../utils/analytics-utils";
 import { checkBusinessAccess } from "../utils/auth-utils";
 
@@ -68,7 +71,16 @@ export const getDormantCustomersAnalytics = async (req: Request, res: Response) 
     const { customers, transactions } = await loadOperationalData(businessId);
     const rows = buildDormantCustomerRows(customers, transactions, { thresholdDays });
     const paginated = paginateRows(rows, page, limit);
-    res.json(paginated);
+    const revenueAtRiskTotal = Math.round(
+      rows.reduce((sum, row) => sum + (row.estimatedRevenueAtRisk ?? 0), 0),
+    );
+    res.json({
+      ...paginated,
+      summary: {
+        revenueAtRiskTotal,
+        cadenceLateCount: rows.filter((row) => row.cadenceLate).length,
+      },
+    });
   } catch (error) {
     logger.error(`Error fetching dormant analytics for ${businessId}:`, error);
     res.status(500).json({ error: "Internal Server Error" });
@@ -120,6 +132,30 @@ export const getCohortStatsAnalytics = async (req: Request, res: Response) => {
     res.json({ data: stats });
   } catch (error) {
     logger.error(`Error fetching cohort stats for ${businessId}:`, error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getRevenueTrendAnalytics = async (req: Request, res: Response) => {
+  const { businessId } = req.params;
+  const user = (req as any).user;
+  const trendDays = Math.min(
+    90,
+    Math.max(7, parseInt(String(req.query.days || "14"), 10) || 14),
+  );
+
+  try {
+    const { hasAccess } = await checkBusinessAccess(user.uid, businessId);
+    if (!hasAccess) {
+      res.status(404).json({ error: "Business not found or access denied" });
+      return;
+    }
+
+    const { transactions } = await loadOperationalData(businessId);
+    const trend = computeRevenueTrend(transactions, trendDays);
+    res.json({ data: trend });
+  } catch (error) {
+    logger.error(`Error fetching revenue trend for ${businessId}:`, error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -227,6 +263,8 @@ export const getMultiStationBenchmark = async (req: Request, res: Response) => {
         return {
           businessId: business.id,
           businessName: business.name,
+          revenue30d: Math.round(sumRevenue30d(transactions)),
+          revenueWowPct: computeRevenueWowPct(transactions),
           volumeUnits30d: countVolumeUnits30d(transactions),
           dormantCount: dormantRows.length,
           dormantPct,
@@ -236,7 +274,7 @@ export const getMultiStationBenchmark = async (req: Request, res: Response) => {
       }),
     );
 
-    rows.sort((a, b) => b.volumeUnits30d - a.volumeUnits30d);
+    rows.sort((a, b) => b.revenue30d - a.revenue30d || b.volumeUnits30d - a.volumeUnits30d);
     res.json({ data: rows });
   } catch (error) {
     logger.error("Error fetching multi-station benchmark:", error);

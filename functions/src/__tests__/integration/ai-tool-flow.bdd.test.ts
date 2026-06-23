@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import { app } from "../../index";
 import { DEFAULT_GEMINI_MODEL } from "../../services/ai/gemini-config";
+import { CustomerService } from "../../services/customers/customer-service";
 
 const geminiGenerateJson = vi.fn();
 
@@ -152,6 +153,55 @@ describe("Feature: River AI tool runs", () => {
       expect(res.status).toBe(200);
       expect(res.body.data).toHaveLength(1);
       expect(res.body.data[0].aiModel).toBe(DEFAULT_GEMINI_MODEL);
+    });
+  });
+
+  describe("Scenario: Owner duplicate suki detect and dismiss", () => {
+    it("detect returns empty groups when no customers", async () => {
+      vi.mocked(CustomerService.getCustomersByBusiness).mockResolvedValueOnce([]);
+      mockCollection.doc.mockReturnValueOnce({
+        get: vi.fn().mockResolvedValue({
+          data: () => ({ uiConfig: {} }),
+        }),
+        collection: vi.fn(() => mockCollection),
+        update: vi.fn(),
+      });
+
+      const res = await request(app)
+        .post(`/business/${businessId}/ai-tools/duplicates/detect`)
+        .send({});
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.duplicateGroups).toEqual([]);
+    });
+
+    it("dismiss requires customerId", async () => {
+      const res = await request(app)
+        .post(`/business/${businessId}/ai-tools/duplicates/dismiss`)
+        .send({});
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/customerId/i);
+    });
+
+    it("dismiss appends customer id to uiConfig", async () => {
+      const businessUpdate = vi.fn().mockResolvedValue(undefined);
+      mockCollection.doc.mockReturnValueOnce({
+        get: vi.fn().mockResolvedValue({
+          exists: true,
+          data: () => ({ uiConfig: { dismissedDuplicateCustomerIds: ["a"] } }),
+        }),
+        update: businessUpdate,
+        collection: vi.fn(() => mockCollection),
+      });
+
+      const res = await request(app)
+        .post(`/business/${businessId}/ai-tools/duplicates/dismiss`)
+        .send({ customerId: "b" });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.dismissedDuplicateCustomerIds).toEqual(["a", "b"]);
+      expect(businessUpdate).toHaveBeenCalled();
     });
   });
 });

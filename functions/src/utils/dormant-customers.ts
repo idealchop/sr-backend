@@ -1,5 +1,6 @@
 import type { Customer } from "../services/customers/customer-service";
 import type { Transaction } from "../services/transactions/transaction-service";
+import { isWalkInCustomerName } from "../services/ai/ledger-scan-customer-match";
 
 export const DEFAULT_DORMANT_THRESHOLD_DAYS = 7;
 
@@ -67,8 +68,8 @@ function isFulfilled(tx: Transaction): boolean {
 
 function fulfilledType(tx: Transaction): DormantLastOrderType | null {
   if (!isFulfilled(tx)) return null;
+  if (tx.type === "walkin") return null;
   if (tx.type === "collection") return "collection";
-  if (tx.type === "walkin") return "walkin";
   if (tx.type === "direct_sale") return "direct_sale";
   if (tx.type === "delivery") return "delivery";
   return null;
@@ -159,21 +160,22 @@ export function buildDormantCustomerRows(
 
   for (const customer of customers) {
     if (!customer.id || customer.status === "inactive") continue;
+    if (isWalkInCustomerName(customer.name)) continue;
     if (openPipeline.has(customer.id)) continue;
 
     const custTxs = txsByCustomer.get(customer.id) || [];
-    let lastDate: Date | null =
-      parseTxDate(customer.lastFulfilledAt) || parseTxDate(customer.lastOrderAt);
+    let lastDate: Date | null = null;
     let lastType: DormantLastOrderType | null = null;
+    const denormAt =
+      parseTxDate(customer.lastFulfilledAt) || parseTxDate(customer.lastOrderAt);
     if (
-      customer.lastFulfilledType === "delivery" ||
-      customer.lastFulfilledType === "collection" ||
-      customer.lastFulfilledType === "walkin" ||
-      customer.lastFulfilledType === "direct_sale"
+      denormAt &&
+      (customer.lastFulfilledType === "delivery" ||
+        customer.lastFulfilledType === "collection" ||
+        customer.lastFulfilledType === "direct_sale")
     ) {
+      lastDate = denormAt;
       lastType = customer.lastFulfilledType;
-    } else if (lastDate) {
-      lastType = "delivery";
     }
     const fulfilledDates: Date[] = [];
     let historicalOrderCount = 0;

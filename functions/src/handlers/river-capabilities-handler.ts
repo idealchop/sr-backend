@@ -4,7 +4,15 @@ import { logger } from "../services/observability/logging/logger";
 import { CustomerService } from "../services/customers/customer-service";
 import { CustomerMergeService } from "../services/customers/customer-merge-service";
 import { InventoryService } from "../services/inventory/inventory-service";
-import { detectDuplicateCustomerGroups } from "../services/ai/duplicate-customers-service";
+import {
+  detectDuplicateCustomerGroups,
+  validateDuplicateCustomerGroupsWithAi,
+} from "../services/ai/duplicate-customers-service";
+import {
+  dismissDuplicateCustomer,
+  excludeDismissedDuplicateCustomers,
+  readDismissedDuplicateCustomerIds,
+} from "../services/ai/duplicate-dismissals-service";
 import { LedgerScanService } from "../services/ai/ledger-scan-service";
 import { LedgerScanCommitService } from "../services/ai/ledger-scan-commit-service";
 import { InventoryScanService } from "../services/ai/inventory-scan-service";
@@ -142,12 +150,47 @@ export async function postLedgerScanCommit(req: Request, res: Response) {
 export async function postDuplicatesDetect(req: Request, res: Response) {
   const { businessId } = req.params;
   try {
-    const customers = await CustomerService.getCustomersByBusiness(businessId);
-    const duplicateGroups = detectDuplicateCustomerGroups(customers);
-    res.json({ data: { duplicateGroups } });
+    const [customers, businessDoc] = await Promise.all([
+      CustomerService.getCustomersByBusiness(businessId),
+      db.collection("businesses").doc(businessId).get(),
+    ]);
+    const dismissedCustomerIds = readDismissedDuplicateCustomerIds(
+      businessDoc.data()?.uiConfig as Record<string, unknown> | undefined,
+    );
+    const activeCustomers = excludeDismissedDuplicateCustomers(
+      customers,
+      dismissedCustomerIds,
+    );
+    const heuristicGroups = detectDuplicateCustomerGroups(activeCustomers);
+    const duplicateGroups = await validateDuplicateCustomerGroupsWithAi(
+      heuristicGroups,
+    );
+    res.json({
+      data: {
+        duplicateGroups,
+        aiValidated: duplicateGroups.some((group) => group.aiValidation),
+      },
+    });
   } catch (e) {
     logger.error("postDuplicatesDetect", e);
     res.status(500).json({ error: "Duplicate detection failed" });
+  }
+}
+
+export async function postDuplicatesDismiss(req: Request, res: Response) {
+  const { businessId } = req.params;
+  const customerId = String(req.body?.customerId || "").trim();
+  if (!customerId) {
+    res.status(400).json({ error: "customerId is required" });
+    return;
+  }
+  try {
+    const data = await dismissDuplicateCustomer({ businessId, customerId });
+    res.json({ data });
+  } catch (e: unknown) {
+    logger.error("postDuplicatesDismiss", e);
+    const message = e instanceof Error ? e.message : "Failed to keep suki separate";
+    res.status(500).json({ error: message });
   }
 }
 

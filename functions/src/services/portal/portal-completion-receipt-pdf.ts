@@ -23,16 +23,20 @@ export interface PortalCompletionReceiptPdfInput {
   lineItems: string[];
 }
 
-function drawReceiptWatermark(doc: InstanceType<typeof PDFDocument>): void {
+function drawReceiptWatermark(
+  doc: InstanceType<typeof PDFDocument>,
+  businessName: string,
+): void {
   const w = doc.page.width;
   const h = doc.page.height;
+  const label = businessName.trim().slice(0, 28).toUpperCase() || "RECEIPT";
   doc.save();
   doc.translate(w / 2, h / 2);
   doc.rotate(-34);
   doc.opacity(0.065);
   doc.fillColor("#0f766e");
-  doc.font("Helvetica-Bold").fontSize(56);
-  doc.text("SMART REFILL", -220, -28, { width: 440, align: "center" });
+  doc.font("Helvetica-Bold").fontSize(42);
+  doc.text(label, -220, -28, { width: 440, align: "center" });
   doc.font("Helvetica").fontSize(13);
   doc.opacity(0.045);
   doc.text("Official order receipt", -220, 28, { width: 440, align: "center" });
@@ -73,8 +77,8 @@ export function buildPortalCompletionReceiptPdf(
         size: "A4",
         margin: 48,
         info: {
-          Title: `Smart Refill order receipt ${input.referenceId}`,
-          Author: "Smart Refill",
+          Title: `${input.businessName} order receipt ${input.referenceId}`,
+          Author: input.businessName,
         },
       });
       const chunks: Buffer[] = [];
@@ -84,7 +88,7 @@ export function buildPortalCompletionReceiptPdf(
       doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", reject);
 
-      drawReceiptWatermark(doc);
+      drawReceiptWatermark(doc, input.businessName);
 
       const margin =
         typeof doc.page.margins?.left === "number" ? doc.page.margins.left : 48;
@@ -131,19 +135,12 @@ export function buildPortalCompletionReceiptPdf(
         .fillColor("#0f766e")
         .fontSize(22)
         .font("Helvetica-Bold")
-        .text("Smart Refill", margin, doc.y, { width: contentWidth });
+        .text(input.businessName, margin, doc.y, { width: contentWidth });
       doc
         .fillColor("#374151")
         .fontSize(11)
         .font("Helvetica")
         .text("Order completion receipt", margin, doc.y, { width: contentWidth });
-      doc.moveDown(0.35);
-      doc
-        .fontSize(9)
-        .fillColor("#6b7280")
-        .text(`Issued by ${input.businessName}`, margin, doc.y, {
-          width: contentWidth,
-        });
       doc.moveDown(1.1);
 
       section("Business");
@@ -218,7 +215,7 @@ export function buildPortalCompletionReceiptPdf(
         .fontSize(8)
         .fillColor("#94a3b8")
         .font("Helvetica-Bold")
-        .text("Powered by Smart Refill", margin, doc.y, {
+        .text(input.businessName, margin, doc.y, {
           align: "center",
           width: contentWidth,
         });
@@ -226,10 +223,14 @@ export function buildPortalCompletionReceiptPdf(
         .font("Helvetica")
         .fontSize(7)
         .fillColor("#94a3b8")
-        .text("River Tech Inc. · https://riverph.com/", margin, doc.y + 2, {
+        .text("Powered by Smart Refill", margin, doc.y + 2, {
           align: "center",
           width: contentWidth,
         });
+      doc.text("River Tech Inc. · https://riverph.com/", margin, doc.y + 2, {
+        align: "center",
+        width: contentWidth,
+      });
 
       doc.end();
     } catch (e) {
