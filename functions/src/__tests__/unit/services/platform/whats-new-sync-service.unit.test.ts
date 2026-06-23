@@ -58,6 +58,34 @@ describe("whats-new sync", () => {
     expect(releases[0]?.id).toBe("2026-06-19");
   });
 
+  it("parses June 2026 ledger payment release payload", () => {
+    const releases = parseWhatsNewSyncBody({
+      releases: [
+        {
+          id: "2026-06-25",
+          publishedAt: "2026-06-25",
+          title: "Ledger payment methods & expense fixes",
+          summary: "Payment sublines and Total Net breakdown.",
+          items: [
+            {
+              kind: "fix",
+              title: "Expense payment method saves correctly",
+              description: "BIP/GCash selection persists on save.",
+            },
+            {
+              kind: "improvement",
+              title: "Total Net by payment source",
+              description: "Cash ₱194 · BIP ₱252 on one line.",
+            },
+          ],
+        },
+      ],
+    });
+    expect(releases).toHaveLength(1);
+    expect(releases[0]?.items).toHaveLength(2);
+    expect(releases[0]?.items[0]?.kind).toBe("fix");
+  });
+
   it("writes releases under apps/smartrefill/whats_new", async () => {
     const result = await syncWhatsNewReleases([
       {
