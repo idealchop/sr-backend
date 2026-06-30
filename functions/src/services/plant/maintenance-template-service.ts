@@ -148,7 +148,7 @@ export class MaintenanceTemplateService {
       const amount = Math.round(Number(input.expense.amount) * 100) / 100;
       const note =
         (input.expense.note || `${template.name} maintenance`).trim().slice(0, 200);
-      const expenseTx = await TransactionService.addTransaction(
+      const { transaction: expenseTx } = await TransactionService.addTransaction(
         businessId,
         {
           type: "expense",

@@ -2,10 +2,12 @@ import express from "express";
 import {
   deleteTeamInviteRow,
   deleteTeamMember,
+  deleteTeamRecord,
   getTeamHub,
   patchTeamMemberStatus,
   postResendTeamInvite,
   postTeamInvite,
+  postTeamRecord,
 } from "../handlers/team-hub-handler";
 import {
   deleteTeamChatMessageHandler,
@@ -37,11 +39,13 @@ router.get("/", requireBusinessOwner, getTeamHub);
 router.patch("/members/:memberId", requireBusinessOwner, patchTeamMemberStatus);
 router.delete("/members/:memberId", requireBusinessOwner, deleteTeamMember);
 router.post("/invites", requireBusinessOwner, postTeamInvite);
+router.post("/records", requireBusinessOwner, postTeamRecord);
 router.post(
   "/invites/:inviteId/resend",
   requireBusinessOwner,
   postResendTeamInvite,
 );
 router.delete("/invites/:inviteId", requireBusinessOwner, deleteTeamInviteRow);
+router.delete("/records/:riderId", requireBusinessOwner, deleteTeamRecord);
 
 export default router;

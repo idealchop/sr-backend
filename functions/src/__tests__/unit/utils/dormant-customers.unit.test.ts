@@ -42,6 +42,16 @@ function delivery(
 }
 
 describe("buildDormantCustomerRows", () => {
+  it("skips customers with non-string names without throwing", () => {
+    const rows = buildDormantCustomerRows(
+      [customer({ name: undefined as unknown as string })],
+      [delivery({ customerId: "c1", daysAgo: 10 })],
+      { now },
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.name).toBe("Untitled Suki");
+  });
+
   it("flags suki with no fulfilled order in 7+ days", () => {
     const rows = buildDormantCustomerRows(
       [customer()],

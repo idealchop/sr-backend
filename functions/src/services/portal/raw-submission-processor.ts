@@ -128,6 +128,14 @@ async function resolveWaterPrice(
   return DEFAULT_WATER_PRICE;
 }
 
+/** Ledger-only label for anonymous counter walk-in — not a saved customer profile. */
+function walkInTransactionCustomerName(submission: RawSubmission): string {
+  const profile = (submission.payload.profile || {}) as Record<string, unknown>;
+  const fromProfile =
+    typeof profile.name === "string" ? profile.name.trim() : "";
+  return fromProfile || "Walk-in";
+}
+
 /**
  * If the customer has no pricing entry for a water type, check the business price.
  * If the business price exists and differs from what's stored, update the customer.
@@ -189,7 +197,7 @@ type SubmissionHandler = (
   businessId: string,
   submission: RawSubmission,
   userId: string,
-  customer: Awaited<ReturnType<typeof CustomerService.getCustomer>>,
+  customer: Awaited<ReturnType<typeof CustomerService.getCustomer>> | null,
 ) => Promise<void>;
 
 const submissionHandlers: Record<string, SubmissionHandler> = {
@@ -215,7 +223,10 @@ const submissionHandlers: Record<string, SubmissionHandler> = {
   },
 
   PLACE_ORDER: async (businessId, submission, userId, customer) => {
-    if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
+    const isWalkinPayload = submission.payload.type === "walkin";
+    if (!customer && !isWalkinPayload) {
+      throw new Error("CUSTOMER_NOT_FOUND");
+    }
     const lines = submission.payload.refillItems || [];
 
     const refills = await Promise.all(
@@ -240,12 +251,26 @@ const submissionHandlers: Record<string, SubmissionHandler> = {
     const otherItems = await Promise.all(
       otherItemsRaw.map(async (i) => {
         const item = await InventoryService.getItem(businessId, i.inventoryId);
+        const rawUnit = (i as { unitPrice?: number }).unitPrice;
+        let unitPrice = 0;
+        if (isWalkinPayload) {
+          if (
+            typeof rawUnit === "number" &&
+            Number.isFinite(rawUnit) &&
+            rawUnit >= 0
+          ) {
+            unitPrice = rawUnit;
+          } else if (item && typeof item.cost === "number") {
+            unitPrice = item.cost;
+          }
+        }
+        const qty = i.qty ?? 0;
         return {
           inventoryId: i.inventoryId,
           name: item?.name || i.inventoryId,
-          quantity: i.qty,
-          unitPrice: 0,
-          subtotal: 0,
+          quantity: qty,
+          unitPrice,
+          subtotal: unitPrice * qty,
         };
       }),
     );
@@ -273,7 +298,11 @@ const submissionHandlers: Record<string, SubmissionHandler> = {
 
     const pay = submission.payload.payment;
     const amountPaid = pay?.amountPaid ?? 0;
-    const calculatedTotal = refills.reduce((acc, r) => acc + r.subtotal, 0);
+    const refillSubtotal = refills.reduce((acc, r) => acc + r.subtotal, 0);
+    const itemSubtotal = isWalkinPayload ?
+      invItems.reduce((acc, item) => acc + (item.subtotal ?? 0), 0) :
+      0;
+    const calculatedTotal = refillSubtotal + itemSubtotal;
     const payloadTotal = submission.payload.totalAmount;
     const declaredTotal =
       typeof payloadTotal === "number" &&
@@ -297,8 +326,8 @@ const submissionHandlers: Record<string, SubmissionHandler> = {
       {
         referenceId: submission.referenceId,
         type: isWalkin ? "walkin" : "delivery",
-        customerId: submission.customerId,
-        customerName: customer.name,
+        customerId: submission.customerId || undefined,
+        customerName: customer?.name ?? walkInTransactionCustomerName(submission),
         waterRefills: refills,
         items: invItems,
         collectionItems: isWalkin ? [] : collectionItems,
@@ -530,33 +559,35 @@ export class RawSubmissionProcessor {
       if (submission.submissionType === "COMPLETE_TX") {
         throw new Error("CUSTOMER_NOT_FOUND");
       }
-      await CustomerActiveLimitService.assertCanAddActiveCustomer(businessId);
-      const profile = submission.payload.profile || {};
-      const addr = submission.payload.address || {};
       const isWalkin = submission.payload.type === "walkin";
-      const sukiType =
-        profile.sukiType === "commercial" ? "commercial" : "residential";
-      customer = await CustomerService.addCustomer(businessId, {
-        name:
-          (profile.name as string) ||
-          (isWalkin ? "Walk-in Customer" : "New Suki"),
-        phone: (profile.phone as string) || "",
-        email: (profile.email as string) || "",
-        address: (addr.line as string) || "",
-        latitude: addr.latitude != null ? Number(addr.latitude) : 0,
-        longitude: addr.longitude != null ? Number(addr.longitude) : 0,
-        type: sukiType,
-        companyName:
-          sukiType === "commercial" && typeof profile.companyName === "string" ?
-            profile.companyName.trim() || undefined :
-            undefined,
-      });
-      if (customer.id) {
-        await RawSubmissionService.updateStatus(businessId, subId, {
-          customerId: customer.id,
+      if (isWalkin) {
+        customer = null;
+      } else {
+        await CustomerActiveLimitService.assertCanAddActiveCustomer(businessId);
+        const profile = submission.payload.profile || {};
+        const addr = submission.payload.address || {};
+        const sukiType =
+          profile.sukiType === "commercial" ? "commercial" : "residential";
+        customer = await CustomerService.addCustomer(businessId, {
+          name: (profile.name as string) || "New Suki",
+          phone: (profile.phone as string) || "",
+          email: (profile.email as string) || "",
+          address: (addr.line as string) || "",
+          latitude: addr.latitude != null ? Number(addr.latitude) : 0,
+          longitude: addr.longitude != null ? Number(addr.longitude) : 0,
+          type: sukiType,
+          companyName:
+            sukiType === "commercial" && typeof profile.companyName === "string" ?
+              profile.companyName.trim() || undefined :
+              undefined,
         });
-        submission.customerId = customer.id;
-        createdNewPortalCustomer = true;
+        if (customer.id) {
+          await RawSubmissionService.updateStatus(businessId, subId, {
+            customerId: customer.id,
+          });
+          submission.customerId = customer.id;
+          createdNewPortalCustomer = true;
+        }
       }
     } else {
       const profile = submission.payload.profile || {};

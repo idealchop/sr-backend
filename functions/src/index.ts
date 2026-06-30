@@ -33,8 +33,13 @@ app.set("trust proxy", 1);
 
 // Middleware
 app.use(cors({ origin: true }));
-// Default 100kb is too small for proactive week snapshots (hundreds of suggestion rows).
-app.use(express.json({ limit: "2mb" }));
+// Capture raw body for Meta webhook signature verification (CP-27).
+app.use(express.json({
+  limit: "2mb",
+  verify: (req, _res, buf) => {
+    (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+  },
+}));
 
 // Global Rate Limiting
 const globalLimiter = rateLimit({
@@ -81,7 +86,7 @@ api.use("/", app);
 
 // Brevo: production reads SMARTREFILL_BREVO_API_KEY from Secret Manager via `secrets` below.
 // Local: SMARTREFILL_ENV_DEV=true + keys and APP_BASE_URL in functions/.env — never set
-// SMARTREFILL_ENV_DEV on deployed functions (prod links always use https://smartrefill.io).
+// SMARTREFILL_ENV_DEV on deployed functions (prod links always use https://app.smartrefill.io).
 
 // Export the API Gateway
 export { app };
@@ -90,9 +95,15 @@ export const smartrefillV3Api = onRequest(
     region: "asia-southeast1",
     cors: true,
     secrets: [
+      "DOCS_ADMIN_TOKEN",
       "SMARTREFILL_BREVO_API_KEY",
       "GEMINI_API_KEY",
+      "SMARTREFILL_GOOGLE_MAPS_SERVER_API_KEY",
       "smartrefill-firebase-google-maps-api-key",
+      "META_COMMUNITY_VERIFY_TOKEN",
+      "META_COMMUNITY_PAGE_ACCESS_TOKEN",
+      "META_COMMUNITY_PAGE_ID",
+      "META_COMMUNITY_APP_SECRET",
     ],
   },
   api,
@@ -106,5 +117,6 @@ export { dormantDigestNotification } from "./jobs/dormant-digest-notification";
 export { morningOwnerIntelligence } from "./jobs/morning-owner-intelligence";
 export { proactiveInsightPushNotification } from "./jobs/proactive-insight-push-notification";
 export { pmRecurrenceScheduler } from "./jobs/pm-recurrence-scheduler";
+export { communityDispatchExpireOffers } from "./jobs/community-dispatch-expire-offers";
 export { ownerDataWarehouseExport } from "./jobs/owner-data-warehouse-export";
 export { onSubscriptionUpdated } from "./triggers/subscription-triggers";

@@ -868,6 +868,7 @@ export const trackOrder = async (req: Request, res: Response) => {
       let riderPhotoUrl: string | undefined;
       let riderPhone: string | undefined;
       let riderAvgRating: number | null = null;
+      let riderIsRecordOnly = false;
       if (tx.riderId) {
         const riderSnap = await db
           .collection("businesses")
@@ -886,23 +887,26 @@ export const trackOrder = async (req: Request, res: Response) => {
         riderPhotoUrl = profile.riderPhotoUrl;
         riderPhone = profile.riderPhone;
         riderAvgRating = profile.riderAvgRating;
-        const loc =
-          tx.deliveryStatus === "in-transit" ?
-            await RiderTrackingService.getRiderLastLocation(
-              businessId,
-              tx.riderId,
-            ) :
-            rider?.lastLocation;
-        if (
-          loc &&
-          typeof loc.latitude === "number" &&
-          typeof loc.longitude === "number"
-        ) {
-          riderLocation = {
-            latitude: loc.latitude,
-            longitude: loc.longitude,
-            updatedAt: serializePortalTimestamp(loc.updatedAt),
-          };
+        riderIsRecordOnly = profile.riderIsRecordOnly;
+        if (!riderIsRecordOnly) {
+          const loc =
+            tx.deliveryStatus === "in-transit" ?
+              await RiderTrackingService.getRiderLastLocation(
+                businessId,
+                tx.riderId,
+              ) :
+              rider?.lastLocation;
+          if (
+            loc &&
+            typeof loc.latitude === "number" &&
+            typeof loc.longitude === "number"
+          ) {
+            riderLocation = {
+              latitude: loc.latitude,
+              longitude: loc.longitude,
+              updatedAt: serializePortalTimestamp(loc.updatedAt),
+            };
+          }
         }
       }
 
@@ -967,6 +971,7 @@ export const trackOrder = async (req: Request, res: Response) => {
           riderPhotoUrl,
           riderPhone,
           riderAvgRating,
+          riderIsRecordOnly,
           destination,
           riderOtherActiveStops,
           arrivedAt: serializePortalTimestamp(tx.arrivedAt),

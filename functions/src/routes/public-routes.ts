@@ -25,6 +25,8 @@ import {
   postPartnerApplication,
   postRequestDemo,
 } from "../handlers/marketing-handler";
+import { metaCommunityWebhook } from "../handlers/meta/meta-community-webhook-handler";
+import { metaCommunityWhatsappWebhook } from "../handlers/meta/meta-community-whatsapp-webhook-handler";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
 
 const router = express.Router(); // eslint-disable-line new-cap
@@ -91,5 +93,10 @@ router.post(
   marketingLimiter,
   postPartnerApplication,
 );
+
+router.get("/webhooks/meta/community", metaCommunityWebhook);
+router.post("/webhooks/meta/community", metaCommunityWebhook);
+router.get("/webhooks/meta/whatsapp/community", metaCommunityWhatsappWebhook);
+router.post("/webhooks/meta/whatsapp/community", metaCommunityWhatsappWebhook);
 
 export default router;

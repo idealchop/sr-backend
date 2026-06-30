@@ -160,7 +160,8 @@ export function buildDormantCustomerRows(
 
   for (const customer of customers) {
     if (!customer.id || customer.status === "inactive") continue;
-    if (isWalkInCustomerName(customer.name)) continue;
+    const customerName = String(customer.name ?? "").trim() || "Untitled Suki";
+    if (isWalkInCustomerName(customerName)) continue;
     if (openPipeline.has(customer.id)) continue;
 
     const custTxs = txsByCustomer.get(customer.id) || [];
@@ -233,7 +234,7 @@ export function buildDormantCustomerRows(
 
     rows.push({
       customerId: customer.id,
-      name: customer.name,
+      name: customerName,
       phone: customer.phone,
       daysSinceLastOrder: daysSince,
       lastFulfilledAt: lastDate,

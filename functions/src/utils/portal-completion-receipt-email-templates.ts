@@ -18,6 +18,8 @@ export interface PortalCompletionReceiptEmailInput {
   balanceDue: string;
   paymentMethod: string;
   paymentStatus: string;
+  /** Online transfer reference when available; omitted for cash. */
+  paymentReference?: string | null;
 }
 
 function detailCardHtml(
@@ -81,6 +83,9 @@ export function getPortalCompletionReceiptEmail(
       [{ label: "Balance due", valueHtml: escapeHtmlForEmail(`₱${input.balanceDue}`) }] :
       []),
     { label: "Payment method", valueHtml: escapeHtmlForEmail(input.paymentMethod) },
+    ...(input.paymentReference != null ?
+      [{ label: "Payment reference", valueHtml: escapeHtmlForEmail(input.paymentReference) }] :
+      []),
     { label: "Payment status", valueHtml: escapeHtmlForEmail(input.paymentStatus) },
   ];
 
@@ -95,6 +100,9 @@ export function getPortalCompletionReceiptEmail(
       `Balance due: ₱${input.balanceDue}\n` :
       "") +
     `Payment method: ${input.paymentMethod}\n` +
+    (input.paymentReference != null ?
+      `Payment reference: ${input.paymentReference}\n` :
+      "") +
     `Payment status: ${input.paymentStatus}\n\n` +
     "Your official receipt is attached to this email.\n\n" +
     "Thank you for your business.\n\n" +
@@ -167,4 +175,15 @@ export function getPortalCompletionReceiptEmail(
     text,
     brevoTag: "portal_completion_receipt",
   };
+}
+
+/** Plain-text receipt summary for Messenger (matches email body fields). */
+export function getPortalCompletionReceiptMessengerText(
+  input: PortalCompletionReceiptEmailInput,
+): string {
+  const template = getPortalCompletionReceiptEmail(input);
+  return template.text.replace(
+    "Your official receipt is attached to this email.\n\n",
+    "Your official receipt PDF is attached in the next message.\n\n",
+  );
 }

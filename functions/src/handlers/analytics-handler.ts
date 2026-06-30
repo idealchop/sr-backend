@@ -14,10 +14,13 @@ import {
 } from "../utils/analytics-utils";
 import { checkBusinessAccess } from "../utils/auth-utils";
 
+/** Large ledgers use hybrid analytics above the FE threshold (250+ txs). */
+const ANALYTICS_TX_LIMIT = 5000;
+
 async function loadOperationalData(businessId: string) {
   const [customers, transactions] = await Promise.all([
     CustomerService.getCustomersByBusiness(businessId),
-    TransactionService.getTransactionsByBusiness(businessId),
+    TransactionService.getTransactionsByBusiness(businessId, { limit: ANALYTICS_TX_LIMIT }),
   ]);
   return { customers, transactions };
 }

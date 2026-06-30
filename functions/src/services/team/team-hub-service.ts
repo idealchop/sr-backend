@@ -14,6 +14,7 @@ import {
   type AddonLimitBoosts,
 } from "../../utils/subscription-addon-limit-boosts";
 import { SubscriptionService } from "../subscriptions/subscription-service";
+import { RiderService } from "../riders/rider-service";
 import { purgeRemovedMemberWorkspaceData } from "./team-member-removal-cleanup";
 import { normalizeSeatRole, type TeamSeatRole } from "./team-seat-roles";
 
@@ -380,10 +381,78 @@ export async function listPendingTeamInvitesForHub(
   return rowsInternal.map(({ _created: __, ...row }) => row);
 }
 
+/** Directory entry without workspace login — for personnel records only. */
+export interface TeamHubRecordRiderDto {
+  id: string;
+  name: string;
+  phone: string;
+  photoUrl?: string | null;
+  role: TeamSeatRole;
+  status: "active" | "inactive";
+}
+
+const TEAM_DIRECTORY_RECORDS = "team_directory_records";
+
+function isRecordOnlyRiderUserId(userId: unknown): boolean {
+  return !userId || !String(userId).trim();
+}
+
+function mapDirectoryRecordDoc(
+  id: string,
+  data: Record<string, unknown>,
+): TeamHubRecordRiderDto {
+  return {
+    id,
+    name: String(data.name || "Member").trim(),
+    phone: String(data.phone || "").trim(),
+    photoUrl: data.photoUrl ? String(data.photoUrl).trim() : null,
+    role: normalizeSeatRole(data.role),
+    status: data.status === "inactive" ? "inactive" : "active",
+  };
+}
+
+/**
+ * Lists personnel with no linked login (directory-only records).
+ * @param {string} businessId Business id.
+ * @return {Promise<TeamHubRecordRiderDto[]>} Record-only directory rows.
+ */
+export async function listRecordOnlyRidersForHub(
+  businessId: string,
+): Promise<TeamHubRecordRiderDto[]> {
+  const businessRef = db.collection("businesses").doc(businessId);
+  const [riders, directorySnap] = await Promise.all([
+    RiderService.getRidersByBusiness(businessId),
+    businessRef.collection(TEAM_DIRECTORY_RECORDS).get(),
+  ]);
+
+  const riderRows = riders
+    .filter((r) => r.id && isRecordOnlyRiderUserId(r.userId))
+    .map((r) => ({
+      id: r.id as string,
+      name: (r.name || "Rider").trim(),
+      phone: (r.phone || "").trim(),
+      photoUrl: r.photoUrl?.trim() || null,
+      role: "rider" as TeamSeatRole,
+      status: (r.status === "inactive" ? "inactive" : "active") as
+        | "active"
+        | "inactive",
+    }));
+
+  const directoryRows = directorySnap.docs.map((doc) =>
+    mapDirectoryRecordDoc(doc.id, doc.data()),
+  );
+
+  return [...riderRows, ...directoryRows].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+  );
+}
+
 export interface TeamHubOverview {
   members: TeamMemberDto[];
   /** Outstanding invitations (shown in directory with Invited / Expired status). */
   pendingInvites: TeamHubPendingInviteDto[];
+  /** Riders without linked Firebase Auth — directory-only records. */
+  recordOnlyRiders: TeamHubRecordRiderDto[];
   assignableRoles: AssignableRoleDto[];
   staffLimit: number;
   currentStaffCount: number;
@@ -393,9 +462,10 @@ export async function getTeamHubOverview(
   businessId: string,
 ): Promise<TeamHubOverview> {
   const sub = await SubscriptionService.getSubscriptionStatus(businessId);
-  const [rawMembers, pendingInvites] = await Promise.all([
+  const [rawMembers, pendingInvites, recordOnlyRiders] = await Promise.all([
     listTeamMembers(businessId),
     listPendingTeamInvitesForHub(businessId),
+    listRecordOnlyRidersForHub(businessId),
   ]);
   const planCode = (sub.planCode || "starter").toLowerCase();
   const limitations =
@@ -446,10 +516,157 @@ export async function getTeamHubOverview(
   return {
     members,
     pendingInvites,
+    recordOnlyRiders,
     assignableRoles,
     staffLimit: limitations.staffLimit,
     currentStaffCount: limitations.currentStaffCount,
   };
+}
+
+/**
+ * Creates a record-only rider profile (no workspace invite or login).
+ * @param {Object} params Input payload.
+ * @return {Promise<Object>} Created rider row or error.
+ */
+export async function createRecordOnlyRiderForHub(params: {
+  businessId: string;
+  name: string;
+  role: TeamSeatRole;
+  phone?: string;
+  photoUrl?: string;
+}): Promise<
+  | { ok: true; rider: TeamHubRecordRiderDto }
+  | { ok: false; message: string; status: number }
+> {
+  const name = params.name.trim();
+  if (!name) {
+    return { ok: false, message: "Name is required.", status: 400 };
+  }
+
+  const role = normalizeSeatRole(params.role);
+  const phone = typeof params.phone === "string" ? params.phone.trim() : "";
+  const photoUrl =
+    typeof params.photoUrl === "string" ? params.photoUrl.trim() : "";
+
+  try {
+    if (role === "rider") {
+      const created = await RiderService.addRider(params.businessId, {
+        name,
+        phone,
+        userId: "",
+        status: "active",
+        ...(photoUrl ? { photoUrl } : {}),
+      });
+
+      if (!created.id) {
+        return {
+          ok: false,
+          message: "Could not save the directory record.",
+          status: 500,
+        };
+      }
+
+      return {
+        ok: true,
+        rider: {
+          id: created.id,
+          name,
+          phone,
+          photoUrl: photoUrl || null,
+          role,
+          status: "active",
+        },
+      };
+    }
+
+    const businessRef = db.collection("businesses").doc(params.businessId);
+    const payload = {
+      name,
+      phone,
+      role,
+      status: "active",
+      ...(photoUrl ? { photoUrl } : {}),
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    const docRef = await businessRef
+      .collection(TEAM_DIRECTORY_RECORDS)
+      .add(payload);
+
+    return {
+      ok: true,
+      rider: {
+        id: docRef.id,
+        name,
+        phone,
+        photoUrl: photoUrl || null,
+        role,
+        status: "active",
+      },
+    };
+  } catch (e) {
+    logger.error("createRecordOnlyRiderForHub failed", e);
+    return {
+      ok: false,
+      message: "Could not save the directory record.",
+      status: 500,
+    };
+  }
+}
+
+/**
+ * Removes a record-only rider profile from the directory.
+ * @param {Object} params Business and rider ids.
+ * @return {Promise<Object>} Success or error.
+ */
+export async function deleteRecordOnlyRiderFromHub(params: {
+  businessId: string;
+  riderId: string;
+}): Promise<{ ok: true } | { ok: false; message: string; status: number }> {
+  const rider = await RiderService.getRider(params.businessId, params.riderId);
+  if (rider) {
+    if (!isRecordOnlyRiderUserId(rider.userId)) {
+      return {
+        ok: false,
+        message:
+          "This person has login access. Remove them from workspace members instead.",
+        status: 400,
+      };
+    }
+    try {
+      await RiderService.deleteRider(params.businessId, params.riderId);
+      return { ok: true };
+    } catch (e) {
+      logger.error("deleteRecordOnlyRiderFromHub rider failed", e);
+      return {
+        ok: false,
+        message: "Could not remove this record.",
+        status: 500,
+      };
+    }
+  }
+
+  const directoryRef = db
+    .collection("businesses")
+    .doc(params.businessId)
+    .collection(TEAM_DIRECTORY_RECORDS)
+    .doc(params.riderId);
+  const directorySnap = await directoryRef.get();
+  if (!directorySnap.exists) {
+    return { ok: false, message: "Record not found.", status: 404 };
+  }
+
+  try {
+    await directoryRef.delete();
+    return { ok: true };
+  } catch (e) {
+    logger.error("deleteRecordOnlyRiderFromHub directory failed", e);
+    return {
+      ok: false,
+      message: "Could not remove this record.",
+      status: 500,
+    };
+  }
 }
 
 export async function setTeamMemberActiveStatus(params: {

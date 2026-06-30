@@ -3,6 +3,7 @@ import {
   TransactionService,
   InsufficientStockError,
 } from "../../services/transactions/transaction-service";
+import { SyncConflictError } from "../../services/transactions/sync-conflict";
 import { logger } from "../../services/observability/logging/logger";
 import { maybeSendCustomerTxnNotification } from "../../services/portal/customer-transaction-notifier";
 
@@ -52,13 +53,16 @@ export const transactionHandler = {
     const { businessId } = req.params;
     const user = (req as any).user;
     try {
-      const transaction = await TransactionService.addTransaction(
+      const { transaction, created } = await TransactionService.addTransaction(
         businessId,
         req.body,
         user?.uid,
       );
 
-      res.status(201).json({ data: transaction });
+      res.status(created ? 201 : 200).json({
+        data: transaction,
+        idempotent: !created,
+      });
     } catch (error: any) {
       if (error instanceof InsufficientStockError) {
         return res.status(400).json({
@@ -110,7 +114,7 @@ export const transactionHandler = {
     const user = (req as any).user;
     try {
       const before = await TransactionService.getTransaction(businessId, id);
-      await TransactionService.updateTransaction(
+      const applied = await TransactionService.updateTransaction(
         businessId,
         id,
         req.body,
@@ -118,7 +122,7 @@ export const transactionHandler = {
       );
 
       // NT-33 — staff ledger terminal delivery/collection/walk-in customer receipt
-      if (before) {
+      if (before && applied) {
         const after = await TransactionService.getTransaction(businessId, id);
         const terminal = new Set(["delivered", "collected", "completed"]);
         const becameTerminal =
@@ -152,8 +156,15 @@ export const transactionHandler = {
         }
       }
 
-      res.json({ success: true });
+      res.json({ success: true, idempotent: !applied });
     } catch (error) {
+      if (error instanceof SyncConflictError) {
+        return res.status(409).json({
+          error: "SYNC_CONFLICT",
+          conflict: true,
+          data: error.serverTransaction,
+        });
+      }
       logger.error("Error updating transaction", error);
       res.status(500).json({ error: "Failed to update transaction" });
     }

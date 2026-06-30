@@ -191,6 +191,16 @@ async function markChannelNotified(
   return true;
 }
 
+/** Claim a customer notify slot (exported for community Messenger receipt routing). */
+export async function claimCustomerNotifyChannel(
+  businessId: string,
+  txId: string,
+  channel: NotifyChannel,
+  event: CustomerNotifyEventKey,
+): Promise<boolean> {
+  return markChannelNotified(businessId, txId, channel, event);
+}
+
 /**
  * NT-32 / NT-33 / NT-34 — unified customer notifications on ledger status changes.
  */

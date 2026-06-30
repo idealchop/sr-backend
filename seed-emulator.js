@@ -32,7 +32,18 @@ async function seed() {
             ownerId: userId,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+            ...(id === businessId ?
+                {
+                    location: { lat: 14.42, lng: 121.04 },
+                    communityDispatch: {
+                        enabled: true,
+                        acceptingOrders: true,
+                        publicName: "Water Ko To Test",
+                        slug: "water-ko-to-test",
+                    },
+                } :
+                {}),
+        }, { merge: true });
 
         // Add user as member
         await firestore.collection("businesses").doc(id).collection("members").doc(userId).set({

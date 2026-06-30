@@ -36,7 +36,7 @@ export function isPushBlockedByQuietHours(
 }
 
 function isCriticalPushType(type: string | undefined): boolean {
-  return type === "new_order";
+  return type === "new_order" || type === "community_dispatch_offer";
 }
 
 /**

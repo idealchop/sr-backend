@@ -107,6 +107,8 @@ describe("ledger-scan-customer-match", () => {
 
   it("skips customer match for walk-in and expense", () => {
     expect(isWalkInCustomerName("Walk-in Customer")).toBe(true);
+    expect(isWalkInCustomerName(null)).toBe(true);
+    expect(isWalkInCustomerName(undefined)).toBe(true);
     const rows: ExtractedLedgerRow[] = [
       {
         transactionType: "walkin",

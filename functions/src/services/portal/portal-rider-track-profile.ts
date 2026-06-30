@@ -47,7 +47,17 @@ export type PortalRiderTrackProfile = {
   riderPhotoUrl?: string;
   riderPhone?: string;
   riderAvgRating: number | null;
+  /** True when the rider has no linked Firebase Auth account (directory record only). */
+  riderIsRecordOnly: boolean;
 };
+
+/** Riders without `userId` cannot share live GPS via the companion app. */
+export function isRecordOnlyRider(
+  riderData: Record<string, unknown> | undefined,
+): boolean {
+  const userId = riderData?.userId;
+  return !userId || !String(userId).trim();
+}
 
 export async function resolvePortalRiderTrackProfile(
   businessId: string,
@@ -74,5 +84,6 @@ export async function resolvePortalRiderTrackProfile(
     riderPhotoUrl,
     riderPhone,
     riderAvgRating,
+    riderIsRecordOnly: isRecordOnlyRider(riderData),
   };
 }

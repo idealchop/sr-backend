@@ -44,6 +44,7 @@ export class RiderService {
         userId: rider.userId || "",
         name: rider.name || "",
         phone: rider.phone || "",
+        ...(rider.photoUrl ? { photoUrl: rider.photoUrl } : {}),
         status: rider.status || "active",
         vehicle: rider.vehicle || "",
         quota: rider.quota || { maxDeliveries: 20, maxContainers: 100 },

@@ -7,7 +7,7 @@ import {
   getRevenueTrendAnalytics,
 } from "../handlers/analytics-handler";
 
-const router = express.Router(); // eslint-disable-line new-cap
+const router = express.Router({ mergeParams: true }); // eslint-disable-line new-cap
 
 router.get("/", getBusinessAnalyticsSummary);
 router.get("/dormant-customers", getDormantCustomersAnalytics);

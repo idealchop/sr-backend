@@ -177,11 +177,16 @@ function buildDuplicateGroupsUnionFind(
   }
 
   const find = (id: string): string => {
-    const current = parent.get(id)!;
-    if (current !== id) {
-      parent.set(id, find(current));
+    const current = parent.get(id);
+    if (current === undefined) {
+      return id;
     }
-    return parent.get(id)!;
+    if (current !== id) {
+      const root = find(current);
+      parent.set(id, root);
+      return root;
+    }
+    return id;
   };
 
   const union = (idA: string, idB: string) => {

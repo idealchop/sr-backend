@@ -23,6 +23,8 @@ vi.mock("../../services/subscriptions/subscription-service", () => ({
 vi.mock("../../services/team/team-hub-service", () => ({
   getTeamHubOverview: vi.fn(),
   createTeamInvite: vi.fn(),
+  createRecordOnlyRiderForHub: vi.fn(),
+  deleteRecordOnlyRiderFromHub: vi.fn(),
   setTeamMemberActiveStatus: vi.fn(),
   removeTeamMember: vi.fn(),
 }));
@@ -48,6 +50,8 @@ import { SubscriptionService } from "../../services/subscriptions/subscription-s
 import {
   getTeamHubOverview,
   createTeamInvite,
+  createRecordOnlyRiderForHub,
+  deleteRecordOnlyRiderFromHub,
   removeTeamMember,
   setTeamMemberActiveStatus,
 } from "../../services/team/team-hub-service";
@@ -67,6 +71,7 @@ describe("Team Hub API Endpoints", () => {
       (getTeamHubOverview as any).mockResolvedValue({
         members: [],
         pendingInvites: [],
+        recordOnlyRiders: [],
         staffLimit: 5,
         currentStaffCount: 1,
       });
@@ -247,6 +252,62 @@ describe("Team Hub API Endpoints", () => {
 
       expect(res.status).toBe(409);
       expect(res.body.error).toBe("User is already a member");
+    });
+  });
+
+  describe("POST /business/:businessId/team/records", () => {
+    it("should create a record-only rider", async () => {
+      (createRecordOnlyRiderForHub as any).mockResolvedValue({
+        ok: true,
+        rider: {
+          id: "rider-record-1",
+          name: "Juan",
+          phone: "09123456789",
+          photoUrl: null,
+          role: "rider",
+          status: "active",
+        },
+      });
+
+      const res = await request(app)
+        .post("/business/test-biz/team/records")
+        .send({ name: "Juan", phone: "09123456789", role: "rider" });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.id).toBe("rider-record-1");
+      expect(createRecordOnlyRiderForHub).toHaveBeenCalledWith(
+        expect.objectContaining({
+          businessId: "test-biz",
+          name: "Juan",
+          phone: "09123456789",
+          role: "rider",
+        }),
+      );
+    });
+
+    it("should return 400 when name is missing", async () => {
+      const res = await request(app)
+        .post("/business/test-biz/team/records")
+        .send({ phone: "09123456789" });
+
+      expect(res.status).toBe(400);
+      expect(createRecordOnlyRiderForHub).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("DELETE /business/:businessId/team/records/:riderId", () => {
+    it("should remove a record-only rider", async () => {
+      (deleteRecordOnlyRiderFromHub as any).mockResolvedValue({ ok: true });
+
+      const res = await request(app).delete(
+        "/business/test-biz/team/records/rider-record-1",
+      );
+
+      expect(res.status).toBe(200);
+      expect(deleteRecordOnlyRiderFromHub).toHaveBeenCalledWith({
+        businessId: "test-biz",
+        riderId: "rider-record-1",
+      });
     });
   });
 });

@@ -30,7 +30,17 @@ import scaleRoutes from "./scale-routes";
 import ownerDeviceRoutes from "./owner-device-routes";
 import analyticsRoutes from "./analytics-routes";
 import globalAnalyticsRoutes from "./global-analytics-routes";
+import {
+  getCommunityDispatchDirectoryPreview,
+  getCommunityDispatchSettingsHandler,
+  getPendingCommunityDispatchOffer,
+  patchCommunityDispatchSettingsHandler,
+  postAcceptCommunityDispatchOffer,
+  postDeclineCommunityDispatchOffer,
+  postNotifyCommunityDispatchOffer,
+} from "../handlers/community-dispatch-handler";
 import { validateBusinessAccess } from "../middleware/business-middleware";
+import { getOfflineSnapshot } from "../handlers/offline-snapshot-handler";
 
 const router = express.Router(); // eslint-disable-line new-cap
 
@@ -40,6 +50,16 @@ router.use(
   "/analytics",
   validateFirebaseIdToken,
   globalAnalyticsRoutes,
+);
+router.get(
+  "/community-dispatch/directory",
+  validateFirebaseIdToken,
+  getCommunityDispatchDirectoryPreview,
+);
+router.post(
+  "/community-dispatch/ops/notify-offer",
+  validateFirebaseIdToken,
+  postNotifyCommunityDispatchOffer,
 );
 router.get("/:businessId", validateFirebaseIdToken, getBusiness);
 router.put("/:businessId", validateFirebaseIdToken, updateBusiness);
@@ -63,10 +83,46 @@ router.patch(
   patchBusinessOnboardingProgress,
 );
 router.get(
+  "/:businessId/community-dispatch",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  getCommunityDispatchSettingsHandler,
+);
+router.patch(
+  "/:businessId/community-dispatch",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  patchCommunityDispatchSettingsHandler,
+);
+router.get(
+  "/:businessId/community-dispatch/pending-offer",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  getPendingCommunityDispatchOffer,
+);
+router.post(
+  "/:businessId/community-dispatch/offers/:offerId/accept",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  postAcceptCommunityDispatchOffer,
+);
+router.post(
+  "/:businessId/community-dispatch/offers/:offerId/decline",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  postDeclineCommunityDispatchOffer,
+);
+router.get(
   "/:businessId/getting-started/sync",
   validateFirebaseIdToken,
   validateBusinessAccess,
   syncGettingStarted,
+);
+router.get(
+  "/:businessId/offline-snapshot",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  getOfflineSnapshot,
 );
 
 router.get(

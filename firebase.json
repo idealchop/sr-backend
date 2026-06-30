@@ -11,7 +11,8 @@
         ".env",
         ".env.*",
         "**/.env",
-        "**/.env.*"
+        "**/.env.*",
+        ".secret.local"
       ],
       "predeploy": [
         "npm --prefix \"$RESOURCE_DIR\" run build"

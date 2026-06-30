@@ -86,6 +86,62 @@ describe("whats-new sync", () => {
     expect(releases[0]?.items[0]?.kind).toBe("fix");
   });
 
+  it("parses June 2026 ledger totals release payload", () => {
+    const releases = parseWhatsNewSyncBody({
+      releases: [
+        {
+          id: "2026-06-26",
+          publishedAt: "2026-06-26",
+          title: "Clearer ledger totals & mobile profit card",
+          summary: "In-period revenue/net headlines and past-orders filter.",
+          items: [
+            {
+              kind: "improvement",
+              title: "Revenue totals match this period only",
+              description: "Past-order collections stay in breakdown only.",
+            },
+            {
+              kind: "fix",
+              title: "Dashboard analytics for large ledgers",
+              description: "Hybrid analytics load for 500+ transactions.",
+            },
+          ],
+        },
+      ],
+    });
+    expect(releases).toHaveLength(1);
+    expect(releases[0]?.id).toBe("2026-06-26");
+    expect(releases[0]?.items).toHaveLength(2);
+  });
+
+  it("parses June 2026 decimal refill price release payload", () => {
+    const releases = parseWhatsNewSyncBody({
+      releases: [
+        {
+          id: "2026-06-27",
+          publishedAt: "2026-06-27",
+          title: "Decimal refill prices on Record order",
+          summary: "Centavo-friendly editable unit prices.",
+          items: [
+            {
+              kind: "improvement",
+              title: "Decimal unit prices on refill rows",
+              description: "Accept amounts like 24.50 on Record order.",
+            },
+            {
+              kind: "fix",
+              title: "Dashboard analytics API reliability",
+              description: "mergeParams and 5000 tx limit for hybrid reads.",
+            },
+          ],
+        },
+      ],
+    });
+    expect(releases).toHaveLength(1);
+    expect(releases[0]?.id).toBe("2026-06-27");
+    expect(releases[0]?.items[0]?.kind).toBe("improvement");
+  });
+
   it("writes releases under apps/smartrefill/whats_new", async () => {
     const result = await syncWhatsNewReleases([
       {

@@ -306,6 +306,23 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // CP-05 — community Page dispatch intake (API / Admin SDK only)
+    match /community_dispatch_requests/{requestId} {
+      allow read, write: if false;
+    }
+
+    match /community_messenger_sessions/{psid} {
+      allow read, write: if false;
+    }
+
+    match /dispatch_offers/{offerId} {
+      allow read, write: if false;
+    }
+
+    match /platform/{docId} {
+      allow read, write: if false;
+    }
+
     match /deliveryTrackers/{docId} {
       allow read, write: if false;
     }

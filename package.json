@@ -3,6 +3,7 @@
   "scripts": {
     "sync:firestore": "bash scripts/sync-firestore-config.sh",
     "emulators:start": "npm run sync:firestore && npx -y firebase-tools emulators:start --project aquaflow-management-suite --only functions,firestore,auth,storage",
+    "community:local": "npm run sync:firestore && npm --prefix functions run build && npx -y firebase-tools emulators:exec --project aquaflow-management-suite --only \"functions,firestore,auth\" \"node seed-emulator.js && cd functions && npm run community:messenger:simulate\"",
     "test:bdd:local": "npm run sync:firestore && npm --prefix functions run build && npx -y firebase-tools emulators:exec --project aquaflow-management-suite --only \"functions,firestore,auth,storage\" \"node seed-emulator.js && cd functions && npm run test:bdd\"",
     "test:all:local": "npm --prefix functions run test && npm run test:bdd:local"
   },

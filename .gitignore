@@ -4,6 +4,8 @@ node_modules/
 # Environment & secrets
 .env*
 !.env.example
+.secret.local
+!.secret.local.example
 
 # Firebase
 .firebase/

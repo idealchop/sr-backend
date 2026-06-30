@@ -23,6 +23,9 @@ import {
 } from "../../utils/staff-seat-limit";
 import { OnlineOrderLimitService } from "../portal/online-order-limit-service";
 import { ChannelUsageService } from "../channels/channel-usage-service";
+import { isBusinessEligibleForCommunityMessenger } from "../../utils/community-messenger-plan-access";
+import { readCommunityOrdersAcceptedThisMonth } from "../meta/community-dispatch-station-usage-service";
+import { syncCommunityDispatchEnrollment } from "../meta/community-dispatch-enrollment-service";
 import { SupportAiUsageService } from "../support/support-ai-usage-service";
 import {
   resolveSupportAiPlanLimits,
@@ -754,6 +757,13 @@ export class SubscriptionService {
         ) :
         0;
       const starterChannelUsage = await ChannelUsageService.getStatusSnapshot(businessId);
+      void syncCommunityDispatchEnrollment(businessId).catch((error) => {
+        logger.error("syncCommunityDispatchEnrollment failed", { businessId, error });
+      });
+      const communityMessenger = {
+        planEligible: false,
+        ordersAcceptedThisMonth: await readCommunityOrdersAcceptedThisMonth(businessId),
+      };
       const pendingUpgradePayload = pendingPaidUpgrade ?
         {
           planCode: String(pendingPaidUpgrade.data.planCode || ""),
@@ -784,6 +794,7 @@ export class SubscriptionService {
           onlineOrdersFrequency: starterQuotas?.onlineOrders?.frequency ?? null,
           onlineOrdersUsed: starterOnlineOrdersUsed,
           channelUsage: starterChannelUsage,
+          communityMessenger,
         },
         supportAccess: { level: "community", chatEnabled: false },
         supportAi: await this.resolveSupportAiUsageForBusiness(businessId, {
@@ -843,6 +854,14 @@ export class SubscriptionService {
       ) :
       0;
     const channelUsage = await ChannelUsageService.getStatusSnapshot(businessId);
+    void syncCommunityDispatchEnrollment(businessId).catch((error) => {
+      logger.error("syncCommunityDispatchEnrollment failed", { businessId, error });
+    });
+    const communityPlanEligible = await isBusinessEligibleForCommunityMessenger(businessId);
+    const communityMessenger = {
+      planEligible: communityPlanEligible,
+      ordersAcceptedThisMonth: await readCommunityOrdersAcceptedThisMonth(businessId),
+    };
     const planSupport = parsePlanSupportAccess(
       planRow?.limitations,
       String(sub.planCode || ""),
@@ -886,6 +905,7 @@ export class SubscriptionService {
         onlineOrdersUsed,
         addonBoosts,
         channelUsage,
+        communityMessenger,
       },
       supportAccess,
       supportAi: await this.resolveSupportAiUsageForBusiness(businessId, {

@@ -25,4 +25,8 @@ describe("app-base-url", () => {
       "https://preview.example.com",
     );
   });
+
+  it("resolveAppBaseUrlForEmail defaults to app.smartrefill.io in production mode", () => {
+    expect(resolveAppBaseUrlForEmail()).toBe("https://app.smartrefill.io");
+  });
 });

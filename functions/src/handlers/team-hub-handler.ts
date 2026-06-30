@@ -6,6 +6,8 @@ import {
 } from "../services/observability/logging/logger";
 import {
   createTeamInvite,
+  createRecordOnlyRiderForHub,
+  deleteRecordOnlyRiderFromHub,
   deleteTeamHubInvite,
   getTeamHubOverview,
   resendTeamHubInvite,
@@ -318,5 +320,102 @@ export const deleteTeamInviteRow = async (req: Request, res: Response) => {
   } catch (e) {
     logger.error("deleteTeamInviteRow failed", e);
     res.status(500).json({ error: "Failed to remove invitation" });
+  }
+};
+
+/**
+ * POST /business/:businessId/team/records — add a record-only rider (no login).
+ * @param {Request} req The express request object.
+ * @param {Response} res The express response object.
+ * @return {Promise<void>}
+ */
+export const postTeamRecord = async (req: Request, res: Response) => {
+  const { businessId } = req.params;
+  const user = (req as { user?: { uid: string } }).user;
+  if (!businessId || !user?.uid) {
+    res.status(400).json({ error: "Invalid request" });
+    return;
+  }
+
+  const { name, phone, photoUrl, role } = req.body as {
+    name?: string;
+    phone?: string;
+    photoUrl?: string;
+    role?: string;
+  };
+
+  if (!name || typeof name !== "string" || !name.trim()) {
+    res.status(400).json({ error: "name is required" });
+    return;
+  }
+
+  const rawRole = String(role ?? "rider")
+    .trim()
+    .toLowerCase();
+  if (rawRole !== "admin" && rawRole !== "rider" && rawRole !== "staff") {
+    res.status(400).json({ error: "role must be \"admin\" or \"rider\"" });
+    return;
+  }
+
+  try {
+    const result = await createRecordOnlyRiderForHub({
+      businessId,
+      name,
+      role: normalizeSeatRole(role),
+      phone: typeof phone === "string" ? phone : undefined,
+      photoUrl: typeof photoUrl === "string" ? photoUrl : undefined,
+    });
+
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.message });
+      return;
+    }
+
+    await logAuditEvent(
+      "TEAM_RECORD_RIDER_CREATED",
+      { businessId, userId: user.uid, riderId: result.rider.id },
+      null,
+      { name: result.rider.name },
+    );
+
+    res.status(201).json({ success: true, data: result.rider });
+  } catch (e) {
+    logger.error("postTeamRecord failed", e);
+    res.status(500).json({ error: "Failed to save record" });
+  }
+};
+
+/**
+ * DELETE /business/:businessId/team/records/:riderId — remove a record-only rider.
+ * @param {Request} req The express request object.
+ * @param {Response} res The express response object.
+ * @return {Promise<void>}
+ */
+export const deleteTeamRecord = async (req: Request, res: Response) => {
+  const { businessId, riderId } = req.params;
+  const user = (req as { user?: { uid: string } }).user;
+
+  if (!businessId || !riderId || !user?.uid) {
+    res.status(400).json({ error: "Invalid request" });
+    return;
+  }
+
+  try {
+    const result = await deleteRecordOnlyRiderFromHub({ businessId, riderId });
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.message });
+      return;
+    }
+
+    await logAuditEvent(
+      "TEAM_RECORD_RIDER_REMOVED",
+      { businessId, userId: user.uid, riderId },
+      null,
+      {},
+    );
+    res.status(200).json({ success: true });
+  } catch (e) {
+    logger.error("deleteTeamRecord failed", e);
+    res.status(500).json({ error: "Failed to remove record" });
   }
 };

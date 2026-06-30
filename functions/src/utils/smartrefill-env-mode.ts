@@ -7,7 +7,7 @@
    origin.
  */
 
-const PRODUCTION_APP_ORIGIN = "https://smartrefill.io";
+const PRODUCTION_APP_ORIGIN = "https://app.smartrefill.io";
 
 function stripTrailingSlash(origin: string): string {
   return origin.replace(/\/+$/, "");
@@ -17,9 +17,9 @@ function stripTrailingSlash(origin: string): string {
 /**
  * Dashboard origin for server-built deep links (invites, verification/reset emails).
  *
- * - Dev: non-empty `APP_BASE_URL` from `.env`; otherwise `https://smartrefill.io` (with a console
-   warning).
- * - Prod: always `https://smartrefill.io` (ignores `APP_BASE_URL` in the environment).
+ * - Dev: non-empty `APP_BASE_URL` from `.env`; otherwise `https://app.smartrefill.io`
+ *   (with a console warning).
+ * - Prod: always `https://app.smartrefill.io` (ignores `APP_BASE_URL` in the environment).
  *
  * @param {string} [override] Optional caller value; wins when non-empty.
  */
@@ -39,7 +39,7 @@ export function resolveSmartrefillPublicBaseUrl(
     if (process.env.NODE_ENV !== "test") {
       console.warn(
         "[SmartRefill] SMARTREFILL_ENV_DEV is enabled but APP_BASE_URL is unset; " +
-        "defaulting origin to https://smartrefill.io.",
+        "defaulting origin to https://app.smartrefill.io.",
       );
     }
     return stripTrailingSlash(PRODUCTION_APP_ORIGIN);

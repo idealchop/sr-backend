@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# SmartRefill V3 — build, test (unit + integration + BDD), lint, deploy.
+# SmartRefill V3 — build, test (unit + integration + community + BDD), lint, deploy.
 # Deploys: v3-api functions (API + scheduled jobs + triggers), Firestore rules/indexes.
 # Optional: production Storage rules when DEPLOY_STORAGE_RULES=1 (requires Firebase Storage on the project).
 # BDD: seeds Firestore (riverdb) then runs Playwright against emulators.
@@ -14,9 +14,21 @@ PROJECT_ID="aquaflow-management-suite"
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${BLUE}🚀 Starting compilation and deployment for SmartRefill V3...${NC}"
+NODE_MAJOR="$(node -p "Number(process.versions.node.split('.')[0])")"
+if [[ "${NODE_MAJOR}" -ge 26 ]]; then
+  echo -e "${RED}❌ Node $(node -v) crashed during deploy tests (Vitest + CJS on Node 26).${NC}"
+  echo -e "${YELLOW}   Use Node 22 (matches Cloud Functions runtime):${NC}"
+  echo -e "${YELLOW}     nvm install 22 && nvm use 22${NC}"
+  echo -e "${YELLOW}   Or temporarily: nvm use 20   or   nvm use 24${NC}"
+  echo -e "${YELLOW}   Then re-run: ./deploy.sh${NC}"
+  exit 1
+fi
+
+echo -e "${BLUE}🚀 Starting compilation and deployment for SmartRefill V3... (Node $(node -v))${NC}"
 
 cd "${FUNCTIONS_DIR}"
 
@@ -33,6 +45,9 @@ npm run test:unit
 
 echo -e "${BLUE}🔗 Running integration tests...${NC}"
 npm run test:integration
+
+echo -e "${BLUE}💬 Running community Messenger dispatch tests...${NC}"
+npm run test:community
 
 echo -e "${BLUE}🎭 Running BDD tests (Playwright + emulators)...${NC}"
 cd "${ROOT_DIR}"

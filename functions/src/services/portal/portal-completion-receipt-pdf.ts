@@ -15,6 +15,7 @@ export interface PortalCompletionReceiptPdfInput {
   deliveryStatus: string;
   paymentStatus: string;
   paymentMethod: string;
+  paymentReference?: string | null;
   totalAmount: number;
   amountPaid: number;
   balanceDue: number;
@@ -175,6 +176,9 @@ export function buildPortalCompletionReceiptPdf(
 
       section("Payment");
       row("Method", input.paymentMethod);
+      if (input.paymentReference != null) {
+        row("Payment reference", input.paymentReference);
+      }
       row("Payment status", input.paymentStatus);
       doc.moveDown(0.15);
       doc

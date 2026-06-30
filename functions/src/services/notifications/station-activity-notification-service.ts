@@ -15,6 +15,7 @@ import {
   type NotificationPayload,
 } from "./notification-service";
 import { maybeSendCustomerTxnNotification, maybeNotifyCustomerOnPaymentUpdate, mapDeliveryStatusToEvent } from "../portal/customer-transaction-notifier";
+import { maybeSendCommunityMessengerDeliveryComplete } from "../meta/community-messenger-customer-notifier";
 
 type NotifyType = NotificationPayload["type"];
 
@@ -431,6 +432,19 @@ export async function notifyTransactionUpdated(
         buildAmountLine(after) ? ` · ${buildAmountLine(after)}` : ""
       }.`;
       type = "success";
+
+      void maybeSendCommunityMessengerDeliveryComplete({
+        businessId,
+        referenceId: ref,
+        paymentStatus: after.paymentStatus,
+        balanceDue: after.balanceDue,
+      }).catch((err) => {
+        logger.warn("community_messenger_delivery_notify_failed", {
+          businessId,
+          referenceId: ref,
+          err,
+        });
+      });
     } else if (
       after.deliveryStatus === "in-transit"
     ) {

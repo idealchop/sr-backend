@@ -20,8 +20,10 @@ export function customerLookupKey(name: string, phone?: string): string {
   return `name:${name.toLowerCase().replace(/\s+/g, " ").trim()}`;
 }
 
-export function isWalkInCustomerName(name: string): boolean {
-  const n = name.toLowerCase().trim();
+export function isWalkInCustomerName(name: unknown): boolean {
+  const n = String(name ?? "")
+    .toLowerCase()
+    .trim();
   return (
     !n ||
     n === "walk-in customer" ||

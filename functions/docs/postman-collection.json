@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "smartrefill-v3-api-1780591201805",
+    "_postman_id": "smartrefill-v3-api-1782543237528",
     "name": "SmartRefill V3 API Gateway",
     "description": "Auto-generated from OpenAPI 3.0 (npm run docs:generate). GET requests include x-frontend-read-model (firestore-primary, api-fallback, etc.). See smartrefill/frontend/docs/hybrid-read-model.md.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -1564,6 +1564,84 @@
               ]
             },
             "description": "Public manifest for `/c?id=…`. Merges live rider GPS and per-stop `arrivedAt`/`deliveredAt` from transactions."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Community",
+      "item": [
+        {
+          "name": "Meta community Page webhook verify (CP-01)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/public/webhooks/meta/community",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "public",
+                "webhooks",
+                "meta",
+                "community"
+              ],
+              "variable": []
+            },
+            "description": "Meta subscription handshake. Echoes `hub.challenge` when `hub.verify_token` matches `META_COMMUNITY_VERIFY_TOKEN`."
+          }
+        },
+        {
+          "name": "Meta community Page webhook receive (CP-01 / CP-27)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{firebase_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/public/webhooks/meta/community",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "public",
+                "webhooks",
+                "meta",
+                "community"
+              ],
+              "variable": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"page\",\n  \"entry\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Receives Messenger `messages` and `messaging_postbacks`. Acknowledges immediately; processes async. **CP-27:** requires valid `X-Hub-Signature-256` HMAC in production (`META_COMMUNITY_APP_SECRET`)."
           }
         }
       ]

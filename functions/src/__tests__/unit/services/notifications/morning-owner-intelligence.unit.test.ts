@@ -69,7 +69,7 @@ describe("dormant-digest-email-template", () => {
       dormantCount: 2,
       revenueAtRiskPhp: 500,
       cadenceLateCount: 1,
-      dashboardUrl: "https://smartrefill.io/dashboard",
+      dashboardUrl: "https://app.smartrefill.io/dashboard",
       morningBriefSummary: "Prioritize Ben and Carla today.",
     });
     expect(tpl.subject).toContain("2 dormant");

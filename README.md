@@ -25,10 +25,13 @@ Canonical docs live in the frontend package:
 ```bash
 cd functions
 cp .env.example .env    # SMARTREFILL_FIREBASE_* + DOCS_ADMIN_TOKEN + optional GEMINI_API_KEY
+cp .secret.local.example .secret.local   # emulator Secret Manager overrides (see below)
 npm install
 npm run build
 npm run serve:local    # http://localhost:8070 (live Firestore)
 ```
+
+**Emulator 404 on `META_COMMUNITY_APP_SECRET`?** The Functions emulator fetches every secret listed in `src/index.ts` from Secret Manager unless you provide `functions/.secret.local`. Copy `.secret.local.example` → `.secret.local` and restart emulators. For production, run `firebase functions:secrets:set META_COMMUNITY_APP_SECRET`.
 
 ### Auth: `aud` claim mismatch (WFDC vs SmartRefill)
 
@@ -84,6 +87,14 @@ npm run test:bdd       # Playwright vs emulator
 ```
 
 Emulator base URL: `http://127.0.0.1:5001/aquaflow-management-suite/asia-southeast1/smartrefillV3Api`.
+
+### Community Messenger dispatch (local)
+
+```bash
+npm run community:local    # emulators + seed + simulate order (no deploy)
+```
+
+Docs: [`../frontend/docs/community-dispatch-test-summary.md`](../frontend/docs/community-dispatch-test-summary.md).
 
 ---
 

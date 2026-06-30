@@ -38,9 +38,25 @@ export function applyCustomerLocationPatch(
   const patch = { ...updates };
   delete patch.coordinates;
 
-  const touchesLocation =
-    "address" in updates || "latitude" in updates || "longitude" in updates;
+  const hasAddressKey = "address" in updates;
+  const hasLatitudeKey = "latitude" in updates;
+  const hasLongitudeKey = "longitude" in updates;
+  const touchesLocation = hasAddressKey || hasLatitudeKey || hasLongitudeKey;
   if (!touchesLocation) {
+    return patch;
+  }
+
+  // Map-pin-only update (e.g. rider GPS at customer site): coords change, address text stays.
+  if (hasLatitudeKey && hasLongitudeKey && !hasAddressKey) {
+    const lat = updates.latitude;
+    const lng = updates.longitude;
+    if (isValidCustomerMapCoordinate(lat, lng)) {
+      patch.latitude = lat;
+      patch.longitude = lng;
+    } else {
+      patch.latitude = FieldValue.delete();
+      patch.longitude = FieldValue.delete();
+    }
     return patch;
   }
 

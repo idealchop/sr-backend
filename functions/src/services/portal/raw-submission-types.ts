@@ -161,6 +161,11 @@ export interface RawSubmission {
     walkInQueueDate?: string;
     /** `recognized` when linked via QR; `new` when anonymous at submit time. */
     portalCustomerStatus?: "recognized" | "new";
+    /** CP-14 / CP-16 — community Page Messenger intake. */
+    sourceChannel?: "community_messenger";
+    communityDispatchRequestId?: string;
+    communityReferenceId?: string;
+    communityAcceptedByUid?: string;
   };
   submittedAt?: unknown;
   stockCheckPreview?: {

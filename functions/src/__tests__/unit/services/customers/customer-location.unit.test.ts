@@ -56,4 +56,26 @@ describe("customer-location", () => {
     expect(patch.latitude).toBe("__DELETE__");
     expect(patch.longitude).toBe("__DELETE__");
   });
+
+  it("updates coordinates only when lat/lng are sent without address", () => {
+    const patch = applyCustomerLocationPatch({
+      latitude: 14.45,
+      longitude: 121.02,
+    });
+
+    expect(patch.address).toBeUndefined();
+    expect(patch.latitude).toBe(14.45);
+    expect(patch.longitude).toBe(121.02);
+  });
+
+  it("clears coordinates on map-pin-only update when coords are invalid", () => {
+    const patch = applyCustomerLocationPatch({
+      latitude: 0,
+      longitude: 0,
+    });
+
+    expect(patch.address).toBeUndefined();
+    expect(patch.latitude).toBe("__DELETE__");
+    expect(patch.longitude).toBe("__DELETE__");
+  });
 });

@@ -1,3 +1,7 @@
+import {
+  assertNoSyncConflict,
+  SyncConflictError,
+} from "./sync-conflict";
 import { db, FieldValue } from "../../config/firebase-admin";
 import { logger, logAuditEvent } from "../observability/logging/logger";
 import { RiderService } from "../riders/rider-service";
@@ -7,7 +11,7 @@ import {
   InsufficientStockError,
   type StockDeltaApplyResult,
 } from "../inventory/inventory-service";
-import { resolveStockInventoryLineId } from "./transaction-line-inventory";
+import { resolveStockInventoryLineId, transactionSkipsSalesInventoryStock } from "./transaction-line-inventory";
 import { CustomerLastFulfilledService } from "../customers/customer-last-fulfilled-service";
 import {
   notifyTransactionCreated,
@@ -18,7 +22,14 @@ import {
   initialPaymentConfirmedByRider,
   initialPaymentNotesForCreate,
 } from "./rider-cash-payment";
+import {
+  findTransactionByClientMutationId,
+  isIdempotentPaymentPatch,
+  normalizeClientMutationId,
+} from "./client-mutation-id";
+
 export { InsufficientStockError };
+
 
 export interface TransactionRefill {
   waterTypeId: string;
@@ -127,6 +138,8 @@ export interface Transaction {
   feedback?: string;
   createdAt?: any;
   updatedAt?: any;
+  /** Offline outbox idempotency key (unique per business when set). */
+  clientMutationId?: string;
   /**
    * When false, delivery line items have not yet been deducted from inventory
    * (deferred until the order leaves `pending`). Omitted/undefined means legacy
@@ -134,6 +147,11 @@ export interface Transaction {
    */
   salesStockApplied?: boolean;
 }
+
+export type AddTransactionResult = {
+  transaction: Transaction;
+  created: boolean;
+};
 
 /** Delivery phases where sold line items are considered dispatched for stock. */
 const DISPATCH_STOCK_PHASES = new Set<string>([
@@ -284,8 +302,21 @@ export class TransactionService {
     businessId: string,
     transaction: Partial<Transaction>,
     userId?: string,
-  ): Promise<Transaction> {
+  ): Promise<AddTransactionResult> {
     try {
+      const clientMutationId = normalizeClientMutationId(
+        transaction.clientMutationId,
+      );
+      if (clientMutationId) {
+        const existing = await findTransactionByClientMutationId(
+          businessId,
+          clientMutationId,
+        );
+        if (existing) {
+          return { transaction: existing, created: false };
+        }
+      }
+
       const timestamp = Date.now();
       const now = new Date();
       const datePart = now.toISOString().slice(2, 10).replace(/-/g, ""); // YYMMDD
@@ -360,7 +391,7 @@ export class TransactionService {
         referenceId: transaction.referenceId || referenceId,
         type: transaction.type || "delivery",
         customerId: transaction.customerId,
-        customerName: transaction.customerName || "Walk-in Customer",
+        customerName: transaction.customerName || (transaction.customerId ? "Unknown" : "Walk-in"),
         waterRefills: transaction.waterRefills || [],
         items: transaction.items || [],
         collectionItems: TransactionService.normalizeCollectionItems(
@@ -386,11 +417,16 @@ export class TransactionService {
         scheduledAt: scheduledAt,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
+        ...(clientMutationId ? { clientMutationId } : {}),
       };
 
       const deferSalesInventory =
-        newTransaction.type === "delivery" &&
-        (newTransaction.deliveryStatus || "pending") === "pending";
+        transactionSkipsSalesInventoryStock(
+          newTransaction.type,
+          newTransaction.items,
+        ) ||
+        (newTransaction.type === "delivery" &&
+          (newTransaction.deliveryStatus || "pending") === "pending");
       const applyCollectionAtCreate = isCollectionStockPhase(
         newTransaction.deliveryStatus,
       );
@@ -399,23 +435,42 @@ export class TransactionService {
         false :
         true;
 
-      const docRef = db
-        .collection("businesses")
-        .doc(businessId)
-        .collection("transactions")
-        .doc();
+      const docRef = clientMutationId
+        ? db
+            .collection("businesses")
+            .doc(businessId)
+            .collection("transactions")
+            .doc(clientMutationId)
+        : db
+            .collection("businesses")
+            .doc(businessId)
+            .collection("transactions")
+            .doc();
 
       let stockApplyResults: StockDeltaApplyResult[] = [];
+      let idempotentReplay: Transaction | null = null;
 
       // EXECUTE ATOMICALLY
       await db.runTransaction(async (t) => {
+        const existingSnap = await t.get(docRef);
+        if (existingSnap.exists) {
+          idempotentReplay = {
+            id: docRef.id,
+            ...existingSnap.data(),
+          } as Transaction;
+          return;
+        }
+
         // 1. Validate stock for the full commitment (sales + optional returns at create)
         const validationUpdates = new Map<
           string,
           { delta: number; name: string }
         >();
-        // Expenses are ledger-only; line items must not touch inventory stock.
-        if (txType !== "expense") {
+        // Expenses and walk-in refills are ledger-only; line items must not touch inventory stock.
+        if (
+          txType !== "expense" &&
+          !transactionSkipsSalesInventoryStock(txType, newTransaction.items)
+        ) {
           for (const item of newTransaction.items || []) {
             const invId = resolveStockInventoryLineId(item);
             if (!invId) continue;
@@ -535,6 +590,10 @@ export class TransactionService {
         }
       });
 
+      if (idempotentReplay) {
+        return { transaction: idempotentReplay, created: false };
+      }
+
       await logTransactionStockAuditRows(businessId, stockApplyResults, {
         transactionId: docRef.id,
         referenceId: newTransaction.referenceId,
@@ -630,7 +689,7 @@ export class TransactionService {
         logger.warn("notifyTransactionCreated failed", { businessId, err });
       });
 
-      return createdTx;
+      return { transaction: createdTx, created: true };
     } catch (error) {
       if (error instanceof InsufficientStockError) {
         throw error;
@@ -652,7 +711,7 @@ export class TransactionService {
     transactionId: string,
     updates: Partial<Transaction>,
     userId?: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       const docRef = db
         .collection("businesses")
@@ -671,6 +730,29 @@ export class TransactionService {
         throw new Error(`Transaction ${transactionId} not found`);
       }
       const current = doc.data() as Transaction;
+
+      assertNoSyncConflict(
+        current,
+        updates as Partial<Transaction> & {
+          baseUpdatedAt?: unknown;
+          forceApply?: boolean;
+        },
+        current,
+      );
+      delete (updates as Partial<Transaction> & { baseUpdatedAt?: unknown })
+        .baseUpdatedAt;
+      delete (updates as Partial<Transaction> & { forceApply?: boolean })
+        .forceApply;
+
+      if (
+        updates.payments &&
+        isIdempotentPaymentPatch(current, {
+          payments: updates.payments,
+          amountPaid: updates.amountPaid ?? current.amountPaid ?? 0,
+        })
+      ) {
+        return false;
+      }
 
       const effectiveType = (updates.type ?? current.type) as
         | string
@@ -871,7 +953,14 @@ export class TransactionService {
         };
 
         const stockEffectiveType = updates.type ?? current.type;
-        if (!skippingInventoryMutation && stockEffectiveType !== "expense") {
+        if (
+          !skippingInventoryMutation &&
+          stockEffectiveType !== "expense" &&
+          !transactionSkipsSalesInventoryStock(
+            stockEffectiveType,
+            updates.items ?? current.items,
+          )
+        ) {
           const stockDeltas = new Map<string, number>();
           let didDispatchSalesInventory = false;
 
@@ -1260,6 +1349,8 @@ export class TransactionService {
           });
         });
       }
+
+      return true;
     } catch (error) {
       logger.error(`Error updating transaction ${transactionId}`, error);
       throw error;
@@ -1283,6 +1374,7 @@ export class TransactionService {
 
     // 1. Revert sold items (add back to stock) when dispatch had reduced inventory
     if (
+      !transactionSkipsSalesInventoryStock(transaction.type, transaction.items) &&
       transaction.salesStockApplied !== false &&
       transaction.items &&
       transaction.items.length > 0

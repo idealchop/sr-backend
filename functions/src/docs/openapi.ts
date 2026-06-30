@@ -90,6 +90,10 @@ export const openApiSpec = {
       name: "Public",
       description: "Customer portal, track order, and shared route (no Firebase auth)",
     },
+    {
+      name: "Community",
+      description: "River community Facebook Page Messenger dispatch (CP-01…CP-27)",
+    },
   ],
   components: {
     securitySchemes: {
@@ -1086,6 +1090,63 @@ export const openApiSpec = {
               },
             },
           },
+        },
+      },
+    },
+    "/public/webhooks/meta/community": {
+      get: {
+        tags: ["Community", "Public"],
+        summary: "Meta community Page webhook verify (CP-01)",
+        description:
+          "Meta subscription handshake. Echoes `hub.challenge` when `hub.verify_token` matches " +
+          "`META_COMMUNITY_VERIFY_TOKEN`.",
+        security: [],
+        parameters: [
+          { name: "hub.mode", in: "query", schema: { type: "string" } },
+          { name: "hub.verify_token", in: "query", schema: { type: "string" } },
+          { name: "hub.challenge", in: "query", schema: { type: "string" } },
+        ],
+        responses: {
+          200: { description: "Challenge echoed as plain text." },
+          403: { description: "Invalid verify token." },
+          503: { description: "Webhook not configured." },
+        },
+      },
+      post: {
+        tags: ["Community", "Public"],
+        summary: "Meta community Page webhook receive (CP-01 / CP-27)",
+        description:
+          "Receives Messenger `messages` and `messaging_postbacks`. Acknowledges immediately; " +
+          "processes async. **CP-27:** requires valid `X-Hub-Signature-256` HMAC in production " +
+          "(`META_COMMUNITY_APP_SECRET`).",
+        security: [],
+        parameters: [
+          {
+            name: "X-Hub-Signature-256",
+            in: "header",
+            required: false,
+            schema: { type: "string" },
+            description: "sha256= HMAC of raw JSON body",
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  object: { type: "string", example: "page" },
+                  entry: { type: "array", items: { type: "object" } },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: "EVENT_RECEIVED" },
+          403: { description: "Invalid or missing signature." },
+          503: { description: "App secret not configured in production." },
         },
       },
     },

@@ -7,12 +7,14 @@ const {
   getItemMock,
   updateStatusMock,
   updateCustomerMock,
+  addCustomerMock,
 } = vi.hoisted(() => ({
   addTransactionMock: vi.fn(),
   getCustomerMock: vi.fn(),
   getItemMock: vi.fn(),
   updateStatusMock: vi.fn(),
   updateCustomerMock: vi.fn(),
+  addCustomerMock: vi.fn(),
 }));
 
 vi.mock("../../../../config/firebase-admin", () => ({
@@ -50,7 +52,7 @@ vi.mock("../../../../services/customers/customer-service", () => ({
   CustomerService: {
     getCustomer: getCustomerMock,
     updateCustomer: updateCustomerMock,
-    addCustomer: vi.fn(),
+    addCustomer: addCustomerMock,
   },
 }));
 
@@ -77,6 +79,16 @@ vi.mock("../../../../services/portal/portal-completion-receipt-notifier", () => 
 vi.mock("../../../../services/notifications/station-activity-notification-service", () => ({
   notifyPortalSubmissionFulfilled: vi.fn().mockResolvedValue(undefined),
 }));
+
+vi.mock("../../../../services/customers/customer-active-limit-service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../../services/customers/customer-active-limit-service")>();
+  return {
+    ...actual,
+    CustomerActiveLimitService: {
+      assertCanAddActiveCustomer: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+});
 
 import { RawSubmissionProcessor } from "../../../../services/portal/raw-submission-processor";
 
@@ -110,6 +122,7 @@ describe("RawSubmissionProcessor PLACE_ORDER", () => {
       name: "Ditas",
       pricing: {},
     });
+    addCustomerMock.mockResolvedValue({ id: "new-cust", name: "New Suki" });
     getItemMock.mockResolvedValue({ name: "Round Container" });
     addTransactionMock.mockResolvedValue(undefined);
     updateStatusMock.mockResolvedValue(undefined);
@@ -194,5 +207,27 @@ describe("RawSubmissionProcessor PLACE_ORDER", () => {
     const txPayload = addTransactionMock.mock.calls[0][1];
     expect(txPayload.type).toBe("walkin");
     expect(txPayload.walkInQueueNumber).toBe(7);
+  });
+
+  it("does not create a customer profile for anonymous walk-in counter orders", async () => {
+    getCustomerMock.mockResolvedValue(null);
+
+    await RawSubmissionProcessor.accept(
+      "biz-1",
+      buildPlaceOrderSubmission({
+        customerId: "",
+        payload: {
+          type: "walkin",
+          refillItems: [{ type: "Mineral", qty: 1, unitPrice: 25 }],
+        },
+      }),
+      "staff-1",
+    );
+
+    expect(addCustomerMock).not.toHaveBeenCalled();
+    const txPayload = addTransactionMock.mock.calls[0][1];
+    expect(txPayload.customerId).toBeUndefined();
+    expect(txPayload.customerName).toBe("Walk-in");
+    expect(txPayload.type).toBe("walkin");
   });
 });

@@ -94,6 +94,15 @@ Google OAuth runs in the **frontend only** (Firebase Auth). The API receives the
 - **Writes:** `transaction-service.ts` calls `CustomerLastFulfilledService.touchFromTransaction` on fulfill transitions
 - **Docs:** `frontend/docs/firestore_schema.md`, `frontend/docs/dormant-customer-test-summary.md`, `frontend/docs/backend-documentation.md`
 
+### Business analytics HTTP routes
+
+- **Unit:** `unit/routes/analytics-routes.unit.test.ts` — `mergeParams: true` on analytics router; `businessId` forwarded to dormant/debt/cohort/revenue-trend handlers
+- **Handler:** `handlers/analytics-handler.ts` — `ANALYTICS_TX_LIMIT = 5000` for hybrid dashboard reads
+- **Unit:** `unit/utils/dormant-customers.unit.test.ts` — non-string customer `name` coerced without throw
+- **Unit:** `unit/services/ai/ledger-scan.unit.test.ts` — walk-in customer match uses safe string coercion
+- **Unit:** `unit/utils/analytics-utils.unit.test.ts` — debt aging, cohort pagination
+- **Docs / manual QA:** `frontend/docs/analytics-capabilities-test-summary.md` (TC-AN-07–10), `frontend/docs/backend-documentation.md`
+
 ### River AI tools & Gemini config
 
 - **Config:** `unit/services/ai/gemini-config.unit.test.ts` — default model `gemini-3.1-flash-lite`, ladder, env overrides
@@ -109,3 +118,18 @@ Google OAuth runs in the **frontend only** (Firebase Auth). The API receives the
 - **Integration:** `integration/team-chat.test.ts` — `GET/POST/DELETE …/team/chats…`, reactions, `retentionDays`
 - **Scheduled job:** `purgeExpiredTeamChats` (7-day rolling retention)
 - **Docs / manual QA:** `frontend/docs/team-chat-test-summary.md`
+
+### Community Messenger dispatch (CP-01…CP-22, CP-27)
+
+| Area | Path |
+|------|------|
+| Template / parser / routing / geo (distance, ETA) | `unit/services/meta/community-*.unit.test.ts` |
+| Webhook + **CP-27 signature** | `unit/services/meta/meta-community-webhook-signature.unit.test.ts`, `unit/handlers/meta-community-webhook-handler.unit.test.ts` |
+| HTTP integration | `integration/community-meta-webhook.integration.test.ts` |
+| Local smoke | `npm run community:local` (from `backend/`), `npm run community:messenger:simulate` |
+| **Docs / manual QA** | `frontend/docs/community-dispatch-test-summary.md` (TC-CP-*) |
+
+```bash
+cd functions
+npm run test:community
+```

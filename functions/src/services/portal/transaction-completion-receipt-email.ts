@@ -10,12 +10,10 @@ import {
   formatBusinessAddressForPdf,
 } from "./portal-completion-receipt-pdf";
 import { formatFirestorePhilippineDateTime } from "../../utils/philippine-datetime";
-
-function formatPaymentMethodLabel(method: string | undefined): string {
-  const m = (method || "").trim().toLowerCase();
-  if (!m || m === "cash") return "Cash";
-  return m.replace(/_/g, " ");
-}
+import {
+  loadBusinessPaymentAccounts,
+  resolveReceiptPaymentDisplay,
+} from "../../utils/receipt-payment-display";
 
 function formatTransactionTypeLabel(type: string | undefined): string {
   const t = (type || "").toLowerCase();
@@ -47,17 +45,26 @@ function buildTransactionLineItems(tx: Transaction): string[] {
   return lines;
 }
 
-/**
- * NT-33 — PDF receipt email for completed ledger / portal transactions.
- */
-export async function sendTransactionCompletionReceiptEmail(args: {
+function receiptPdfFileName(businessName: string, referenceId: string): string {
+  return `${businessName.slice(0, 24).replace(/[^\w-]+/g, "_") || "Receipt"}-Receipt-${String(referenceId || "order").replace(/[^\w-]+/g, "_")}.pdf`;
+}
+
+export type TransactionCompletionReceiptArtifacts = {
+  template: ReturnType<typeof getPortalCompletionReceiptEmail>;
+  pdfBuffer: Buffer;
+  pdfFileName: string;
+  customerName: string;
+  businessName: string;
+};
+
+export async function buildTransactionCompletionReceiptArtifacts(args: {
   businessId: string;
   transaction: Transaction;
   customer: Customer;
-  recipientEmail: string;
-}): Promise<boolean> {
-  const { businessId, transaction, customer, recipientEmail } = args;
-  if (!recipientEmail.includes("@")) return false;
+  recipientEmail?: string;
+}): Promise<TransactionCompletionReceiptArtifacts | null> {
+  const { businessId, transaction, customer } = args;
+  const recipientEmail = (args.recipientEmail || customer.email || "").trim();
 
   const bizSnap = await db.collection("businesses").doc(businessId).get();
   const biz = (bizSnap.data() || {}) as Record<string, unknown>;
@@ -80,6 +87,9 @@ export async function sendTransactionCompletionReceiptEmail(args: {
   const amountPaid = Number(transaction.amountPaid) || 0;
   const balanceDue = Number(transaction.balanceDue) || 0;
 
+  const paymentAccounts = await loadBusinessPaymentAccounts(businessId);
+  const paymentDisplay = resolveReceiptPaymentDisplay(transaction, paymentAccounts);
+
   const pdfBuffer = await buildPortalCompletionReceiptPdf({
     businessName,
     businessEmail,
@@ -93,7 +103,8 @@ export async function sendTransactionCompletionReceiptEmail(args: {
     transactionType: formatTransactionTypeLabel(transaction.type),
     deliveryStatus: String(transaction.deliveryStatus || "completed"),
     paymentStatus: String(transaction.paymentStatus || "—"),
-    paymentMethod: formatPaymentMethodLabel(transaction.paymentMethod),
+    paymentMethod: paymentDisplay.paymentMethod,
+    paymentReference: paymentDisplay.paymentReference,
     totalAmount,
     amountPaid,
     balanceDue,
@@ -114,9 +125,46 @@ export async function sendTransactionCompletionReceiptEmail(args: {
     totalAmount: money(totalAmount),
     amountPaid: money(amountPaid),
     balanceDue: money(balanceDue),
-    paymentMethod: formatPaymentMethodLabel(transaction.paymentMethod),
+    paymentMethod: paymentDisplay.paymentMethod,
     paymentStatus: String(transaction.paymentStatus || "—"),
+    paymentReference: paymentDisplay.paymentReference,
   });
+
+  return {
+    template,
+    pdfBuffer,
+    pdfFileName: receiptPdfFileName(businessName, String(transaction.referenceId || "")),
+    customerName,
+    businessName,
+  };
+}
+
+/**
+ * NT-33 — PDF receipt email for completed ledger / portal transactions.
+ */
+export async function sendTransactionCompletionReceiptEmail(args: {
+  businessId: string;
+  transaction: Transaction;
+  customer: Customer;
+  recipientEmail: string;
+}): Promise<boolean> {
+  const { businessId, transaction, customer, recipientEmail } = args;
+  if (!recipientEmail.includes("@")) return false;
+
+  const artifacts = await buildTransactionCompletionReceiptArtifacts({
+    businessId,
+    transaction,
+    customer,
+    recipientEmail,
+  });
+  if (!artifacts) return false;
+
+  const { template, pdfBuffer, pdfFileName } = artifacts;
+  const customerName = customer.name || transaction.customerName || "Customer";
+  const businessName = artifacts.businessName;
+  const bizSnap = await db.collection("businesses").doc(businessId).get();
+  const biz = (bizSnap.data() || {}) as Record<string, unknown>;
+  const businessEmail = String(biz.email || "");
 
   if (process.env.FUNCTIONS_EMULATOR) {
     logger.info("EMULATOR: transaction completion receipt email", {
@@ -143,7 +191,7 @@ export async function sendTransactionCompletionReceiptEmail(args: {
   sendSmtpEmail.tags = [template.brevoTag, "staff_ledger_receipt"];
   sendSmtpEmail.attachment = [
     {
-      name: `${businessName.slice(0, 24).replace(/[^\w-]+/g, "_") || "Receipt"}-Receipt-${String(transaction.referenceId || "order").replace(/[^\w-]+/g, "_")}.pdf`,
+      name: pdfFileName,
       content: pdfBuffer.toString("base64"),
     },
   ];

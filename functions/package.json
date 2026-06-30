@@ -23,6 +23,9 @@
     "test:all": "npm run test && npm run test:bdd",
     "test:watch": "vitest",
     "sync:subscription-plans": "ts-node src/scripts/sync-subscription-plans.ts",
+    "community:messenger:preview": "ts-node src/scripts/community-messenger-preview.ts",
+    "community:messenger:simulate": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 ts-node src/scripts/community-messenger-simulate.ts",
+    "test:community": "vitest run src/__tests__/unit/services/meta src/__tests__/unit/handlers/meta-community-webhook-handler.unit.test.ts src/__tests__/unit/services/notifications/community-dispatch-offer-push-service.unit.test.ts src/__tests__/integration/community-meta-webhook.integration.test.ts",
     "logs": "firebase functions:log"
   },
   "engines": {

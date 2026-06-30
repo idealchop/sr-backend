@@ -33,7 +33,6 @@ function clampPercent(value: unknown, fallback: number): number {
 function normalizeAssessment(
   raw: Partial<AiGroupAssessment> | undefined,
   group: DuplicateGroup,
-  groupIndex: number,
 ): DuplicateGroupAiValidation {
   const recommendedPrimaryId =
     typeof raw?.recommendedPrimaryId === "string" &&
@@ -116,7 +115,7 @@ async function validateDuplicateBatch(
       fallback.groups[index];
     assessments.set(
       groupIndex,
-      normalizeAssessment(match, group, groupIndex),
+      normalizeAssessment(match, group),
     );
   }
 
@@ -149,7 +148,7 @@ export async function validateDuplicateCustomerGroupsWithAi(
     const group = groups[index];
     const aiValidation =
       assessments.get(index) ??
-      normalizeAssessment(undefined, group, index);
+      normalizeAssessment(undefined, group);
 
     if (!shouldIncludeValidatedGroup(aiValidation)) {
       continue;

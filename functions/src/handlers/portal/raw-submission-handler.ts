@@ -749,6 +749,12 @@ export const registerNewSukiFromSubmission = async (
     >;
     const addr = submission.payload.address || {};
     const isWalkin = submission.payload?.type === "walkin";
+    if (isWalkin) {
+      return res.status(400).json({
+        error:
+          "Counter walk-in orders are recorded on the ledger only — no customer profile is saved.",
+      });
+    }
     const sukiType =
       profile.sukiType === "commercial" ? "commercial" : "residential";
     try {
@@ -765,9 +771,7 @@ export const registerNewSukiFromSubmission = async (
       throw limitErr;
     }
     const customer = await CustomerService.addCustomer(businessId, {
-      name:
-        (profile.name as string) ||
-        (isWalkin ? "Walk-in Customer" : "New Suki"),
+      name: (profile.name as string) || "New Suki",
       phone: (profile.phone as string) || "",
       email: (profile.email as string) || "",
       address: (addr.line as string) || "",

@@ -45,6 +45,15 @@ describe("GeocodingService", () => {
       formattedAddress:
         "123 Rizal St, Quezon City, Metro Manila, Philippines",
     });
+    const url = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+    expect(url).toContain("Philippines");
+  });
+
+  it("logs and returns null when maps API key is missing", async () => {
+    delete process.env.GOOGLE_MAPS_API_KEY;
+    await expect(
+      GeocodingService.geocodeAddress("123 Rizal St, Quezon City"),
+    ).resolves.toBeNull();
   });
 
   it("returns null when API status is not OK", async () => {
@@ -56,5 +65,30 @@ describe("GeocodingService", () => {
     await expect(
       GeocodingService.geocodeAddress("Unknown place"),
     ).resolves.toBeNull();
+  });
+
+  it("reverse-geocodes coordinates via latlng query", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: "OK",
+        results: [
+          {
+            formatted_address: "SM North EDSA, Quezon City, Philippines",
+            geometry: { location: { lat: 14.656, lng: 121.031 } },
+          },
+        ],
+      }),
+    }) as typeof fetch;
+
+    const hit = await GeocodingService.reverseGeocodeCoordinates(14.656, 121.031);
+    expect(hit).toEqual({
+      latitude: 14.656,
+      longitude: 121.031,
+      formattedAddress: "SM North EDSA, Quezon City, Philippines",
+    });
+
+    const url = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+    expect(url).toContain("latlng=14.656%2C121.031");
   });
 });

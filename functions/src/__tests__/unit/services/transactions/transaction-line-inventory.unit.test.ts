@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   isStockTrackedInventoryId,
   resolveStockInventoryLineId,
+  transactionSkipsSalesInventoryStock,
+  walkInHasStockSaleItems,
 } from "../../../../services/transactions/transaction-line-inventory";
 
 describe("transaction-line-inventory", () => {
@@ -33,5 +35,19 @@ describe("transaction-line-inventory", () => {
         itemId: "item-456",
       }),
     ).toBe("item-456");
+  });
+
+  it("marks walk-in refills as ledger-only unless priced inventory lines exist", () => {
+    expect(transactionSkipsSalesInventoryStock("walkin")).toBe(true);
+    expect(
+      transactionSkipsSalesInventoryStock("walkin", [
+        { inventoryId: "jug-round", quantity: 1, unitPrice: 350, subtotal: 350 },
+      ]),
+    ).toBe(false);
+    expect(walkInHasStockSaleItems([{ inventoryId: "jug-round", unitPrice: 350 }])).toBe(
+      true,
+    );
+    expect(transactionSkipsSalesInventoryStock("direct_sale")).toBe(false);
+    expect(transactionSkipsSalesInventoryStock("expense")).toBe(true);
   });
 });

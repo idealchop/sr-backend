@@ -89,6 +89,7 @@ vi.mock("../../config/firebase-admin", () => ({
                       name: "Juan Rider",
                       phone: "09171234567",
                       photoUrl: "https://cdn.example/rider.jpg",
+                      userId: "auth-rider-1",
                     }),
                   }),
                 })),
@@ -231,6 +232,7 @@ describe("GET /public/portal/track/:referenceId", () => {
     expect(res.body.data.riderPhone).toBe("09171234567");
     expect(res.body.data.riderPhotoUrl).toBe("https://cdn.example/rider.jpg");
     expect(res.body.data.riderAvgRating).toBe(5);
+    expect(res.body.data.riderIsRecordOnly).toBe(false);
     expect(res.body.data.riderLocation).toMatchObject({
       latitude: 14.4081,
       longitude: 121.0415,

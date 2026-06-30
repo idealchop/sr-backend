@@ -25,9 +25,13 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 - **Google inside Facebook Messenger, Instagram, or other in-app browsers is blocked by Google**
   (Error 403 disallowed_useragent). Open the Smart Refill link in **Safari or Chrome**
   (tap menu → Open in browser), then sign in again.
+- **Local development**: localhost uses its own auth domain so Google sign-in stays on your machine.
 - New owners: verify email → complete station onboarding → dashboard.
 - Invited staff: accept Team Hub invite link → verify email if needed → staff onboarding →
   **My Area** (riders) or **dashboard** (admins).
+- **Team Hub record-only**: owner can add personnel **without email or login** (toggle
+  "Access credential not needed") — name, optional photo/phone, role — for directory and dispatch
+  assignment only. These riders do **not** get My Area or live GPS.
 - If you are sent back to onboarding after you already finished: try sign out and sign in;
   confirm you are on the correct station/workspace; use **Talk to human agent** if it persists
   (account may show complete but station profile may still need a step).
@@ -37,20 +41,46 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 - **Tabs/filters** for sales/walk-in, delivery, collection, expenses; status filters for
   order placed, pending, in transit, completed, etc.
 - **Time filter**: today (default), yesterday, week, month, upcoming, or custom range.
+- **Decimal unit prices** on refill rows (Record order, delivery, walk-in): centavos like ₱24.50.
+- **Total Revenue / Total Net** headline totals count **in-period income only**; collections on
+  older completed stops appear under **Past orders** in See breakdown. Tap Past orders to filter.
+- **Ledger subtype labels** distinguish QR portal, community messenger, walk-in queue, and direct sale.
+- **Walk-in sales** — container picker on Record order; inventory deducts containers/supplies **only when paid**.
+
+### Operations hub (Dashboard → Operations hub tab, owner only)
+- **Overview strip**: 14-day revenue trend, portal funnel (30-day placed → delivered),
+  multi-station benchmark when you manage 2+ branches.
+- **Daily averages row**: avg transactions/day, deliveries & collections/day, production volume/day,
+  profit/day — month-to-date or last 30 days when the month just started.
+- **Profit card**: Today and month tabs; **projected month-end profit** from scheduled stops and
+  suki visit-pattern forecast (same engine as Forecast); **River AI observes** — short profit-health
+  read (pace vs last month, risks, quiet sukis) without extra AI credits.
+- **Deliveries & collections card**: pending, in-transit, completed counts; compact subtitle shows
+  only non-zero buckets.
+- **Transaction mix chart** includes delivery, walk-in, collection, expense, and **community order**
+  (messenger channel) categories.
+- **Customer health**, ratings, production, rider productivity charts below.
 
 ### Operations & field work
-- **Operations**: fleet, assign riders, cash reconciliation, performance.
+- **Operations** page: fleet, assign riders, cash reconciliation, performance, live dispatch map.
 - **Dashboard map** (owners): beside daily stats—**all customers with a saved location** appear on the map.
   **Lime pin** = delivery in progress, **orange** = collection in progress, **red** = no active job.
-- **My Area** (riders): today's route, **live map of all to-do stops**, driving route + ETAs,
+- **My Area** (riders with login): today's route, **live map of all to-do stops**, driving route + ETAs,
   GPS ping to server, mark delivered/collected, proof & signature.
-- **Track order** (customer order portal): see rider + your address only; message if rider
-  has other stops; estimated arrival shown in the app (Google Directions).
-- **Submissions**: approve customer portal orders before they become official transactions.
+- **Record-only riders** (Team Hub directory, no login): can be assigned on deliveries but **cannot**
+  open My Area or send GPS; portal **Track order** shows rider name and **En route** but **no live map**.
+- **Track order** (customer order portal): linked riders with GPS — see rider pin + your address;
+  message if rider has other stops; estimated arrival shown in the app (Google Directions).
+- **Submissions**: approve customer portal and community orders before they become official transactions.
 
 ### Recent platform improvements (May–June 2026)
 - Smoother dashboard—live customer/transaction/submission lists; shared inventory load.
 - Dashboard customer map: lime/orange/red pins for delivery, collection, and idle customers.
+- Operations hub: daily averages, projected profit, River AI profit observation, community order in mix.
+- Team Hub record-only personnel for directory/dispatch without staff login.
+- Portal track hides live map for record-only riders; shows En route status instead.
+- Decimal centavo prices on refill unit rows; clearer ledger totals (in-period vs past orders).
+- Walk-in stock deducts only on paid sales; clearer ledger subtype labels.
 - River AI owner tools run on server-side Gemini (gemini-3.1-flash-lite default); requires GEMINI_API_KEY on the API in production.
 - Manual Refresh no longer triggers heavy list downloads when data is already syncing.
 - Fewer busy-hour errors when jumping between pages quickly.
@@ -98,6 +128,34 @@ export const SUPPORT_PRODUCT_DOC_ENTRIES: Array<{
       "subukang **Continue with Google** muli. Gumamit ng email/password kung hindi mabuksan sa browser.",
   },
   {
+    id: "doc-team-hub-record-only",
+    topic: "Team Hub: record-only personnel (walang login)",
+    content:
+      "Sa **Team Hub → Invite**, i-on ang **Access credential not needed** para magdagdag ng personnel " +
+      "sa directory nang walang email invite o app login. Ilagay ang pangalan, optional photo/phone, at role " +
+      "(rider o admin contact). Makikita sa directory at pwedeng i-assign sa delivery, pero **walang My Area** " +
+      "at **walang live GPS**. Para sa riders na may phone at dapat mag-track, gamitin ang normal email invite.",
+  },
+  {
+    id: "doc-ops-hub-kpis",
+    topic: "Operations hub: daily averages, projected profit, River AI observes",
+    content:
+      "Sa **Dashboard → Operations hub** (owner): **Daily averages** row — avg transactions, stops, production volume, " +
+      "at profit bawat araw (MTD o last 30 days). **Profit card** — Today/Month tabs; **Projected month-end profit** " +
+      "mula sa scheduled stops at suki visit pattern (Forecast engine); **River AI observes** — maikling profit-health " +
+      "read (pace vs last month, risks, quiet sukis) nang walang dagdag na AI credits. **Transaction mix** kasama ang " +
+      "community messenger orders.",
+  },
+  {
+    id: "doc-portal-track-record-only",
+    topic: "Track order: walang live map pero En route",
+    content:
+      "Kung ang delivery ay naka-assign sa **record-only rider** (Team Hub directory, walang login), ang customer portal " +
+      "**Track order** ay nagpapakita ng pangalan ng rider at **En route** status, pero **hindi live GPS map**. " +
+      "Normal na riders na may My Area login ay may live pin at ETA. Sabihin sa owner na mag-invite ng rider account " +
+      "kung kailangan ng customer tracking.",
+  },
+  {
     id: "doc-slow-peak-hours",
     topic: "Mabagal o error sa peak hours",
     content:
@@ -117,23 +175,25 @@ export const SUPPORT_PRODUCT_DOC_ENTRIES: Array<{
     topic: "Hanapin ang transaction sa ledger",
     content:
       "Transactions page → search bar (customer, REF ID, notes, amount). Gamitin time filter " +
-      "'All time' kung hindi today. Delivery/collection tabs para i-filter ang type.",
+      "'All time' kung hindi today. Delivery/collection tabs para i-filter ang type. **See breakdown** " +
+      "sa Total Revenue/Net para sa Past orders collections.",
   },
   {
     id: "doc-my-area-rider",
     topic: "Rider: walang lalabas sa My Area",
     content:
       "Kailangan naka-assign ang delivery/collection sa rider account; tingnan ang date filter " +
-      "(today). Pull to refresh kung available. Kung bagong assign, hintayin ilang segundo para sync.",
+      "(today). Pull to refresh kung available. Kung bagong assign, hintayin ilang segundo para sync. " +
+      "**Record-only riders** (Team Hub directory) ay walang login—hindi sila makakapasok sa My Area.",
   },
   {
     id: "doc-live-tracking",
     topic: "Live tracking / track order / ETA",
     content:
-      "Riders: buksan My Area, payagan ang GPS—makikita ang lahat ng to-do stops sa map at orange route. " +
-      "Customers: Order portal → Track tab, ilagay ang reference ID—mapa ng rider at address mo lang; " +
-      "may paalala kung may ibang customers pa ang rider. Estimated arrival sa app (hindi guaranteed). " +
-      "Owner: Operations share route para sa public tracker link (c page).",
+      "Riders **with login**: buksan My Area, payagan ang GPS—makikita ang lahat ng to-do stops sa map at orange route. " +
+      "Customers: Order portal → Track tab, ilagay ang reference ID—mapa ng rider at address mo kung may GPS login ang rider; " +
+      "**En route lang** kung record-only rider. May paalala kung may ibang customers pa ang rider. " +
+      "Estimated arrival sa app (hindi guaranteed). Owner: Operations share route para sa public tracker link (c page).",
   },
   {
     id: "doc-email-verification",
@@ -144,11 +204,12 @@ export const SUPPORT_PRODUCT_DOC_ENTRIES: Array<{
       "Kung expired: sign in → Account → Security → Resend verification. Staff pagkatapos ng invite: parehong resend flow; pwede ring humingi sa station admin.",
   },
   {
-    id: "doc-may-2026-release",
-    topic: "Ano ang bago kamakailan (2026)?",
+    id: "doc-june-2026-release",
+    topic: "Ano ang bago kamakailan (June 2026)?",
     content:
-      "Mas mabilis na dashboard lists, mas stable sa peak hours, ayos sa onboarding loop, " +
-      "at mas consistent na My Area para sa riders. Walang change sa paraan ng pag-record ng sale/delivery.",
+      "Team Hub record-only personnel; Operations hub daily averages at projected month-end profit; " +
+      "River AI observes sa profit card; community orders sa transaction mix; portal track En route " +
+      "para sa directory riders; decimal centavo prices; mas malinaw na ledger totals (in-period vs past orders).",
   },
   {
     id: "doc-river-ai-vs-live-support",
