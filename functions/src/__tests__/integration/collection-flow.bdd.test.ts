@@ -15,10 +15,10 @@ const { mockCollection } = vi.hoisted(() => {
     delete: vi.fn().mockResolvedValue({}),
   };
 
-  const createDocMock = (id: string, data: any) => ({
+  const createDocMock = (id: string, data: any, exists = true) => ({
     id,
     get: vi.fn().mockResolvedValue({
-      exists: true,
+      exists,
       id,
       data: () => data,
       ref: { update: mc.update, set: mc.set, delete: mc.delete },
@@ -44,7 +44,10 @@ const { mockCollection } = vi.hoisted(() => {
         stock: { current: 10, min: 2 },
       });
     }
-    return createDocMock(id || "test-id", { ownerId: "user123" });
+    if (id === undefined) {
+      return createDocMock("new-collection-id", {}, false);
+    }
+    return createDocMock(id, { ownerId: "user123" });
   });
 
   mc.where.mockReturnThis();
