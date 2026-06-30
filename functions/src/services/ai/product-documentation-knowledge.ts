@@ -63,6 +63,10 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 
 ### Operations & field work
 - **Operations** page: fleet, assign riders, cash reconciliation, performance, live dispatch map.
+- **Offline-first ledger (June 2026)** — After one online sign-in, browse cached suki/inventory/jobs offline;
+  queue walk-in sales, deliveries, and cash payments; auto-sync on reconnect. GCash stays pending until sync.
+  Riders can complete stops offline with proof upload. Conflict UI when server and offline edits clash.
+  Sign-in still requires internet; River AI and live maps need connection.
 - **Dashboard map** (owners): beside daily stats—**all customers with a saved location** appear on the map.
   **Lime pin** = delivery in progress, **orange** = collection in progress, **red** = no active job.
 - **My Area** (riders with login): today's route, **live map of all to-do stops**, driving route + ETAs,
@@ -81,6 +85,8 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 - Portal track hides live map for record-only riders; shows En route status instead.
 - Decimal centavo prices on refill unit rows; clearer ledger totals (in-period vs past orders).
 - Walk-in stock deducts only on paid sales; clearer ledger subtype labels.
+- **Offline-first ledger**: cached browse after sign-in; sync queue for walk-in/delivery/cash;
+  rider offline complete with proof; conflict resolution; no duplicate txs on retry.
 - River AI owner tools run on server-side Gemini (gemini-3.1-flash-lite default); requires GEMINI_API_KEY on the API in production.
 - Manual Refresh no longer triggers heavy list downloads when data is already syncing.
 - Fewer busy-hour errors when jumping between pages quickly.
@@ -207,9 +213,21 @@ export const SUPPORT_PRODUCT_DOC_ENTRIES: Array<{
     id: "doc-june-2026-release",
     topic: "Ano ang bago kamakailan (June 2026)?",
     content:
-      "Team Hub record-only personnel; Operations hub daily averages at projected month-end profit; " +
-      "River AI observes sa profit card; community orders sa transaction mix; portal track En route " +
-      "para sa directory riders; decimal centavo prices; mas malinaw na ledger totals (in-period vs past orders).",
+      "Offline-first ledger: browse cached suki at jobs pag walang signal; queue walk-in at delivery; " +
+      "cash OK offline, GCash pending hanggang sync; rider pwedeng mag-complete offline with proof; " +
+      "conflict resolution kung nagbago ang order online. Team Hub record-only personnel; Operations hub daily averages " +
+      "at projected profit; River AI observes; community orders sa mix; portal track En route para sa directory riders.",
+  },
+  {
+    id: "doc-offline-operations",
+    topic: "Pwede ba magtrabaho offline / brownout?",
+    content:
+      "Oo, **partial offline** na (June 2026 DEV): mag-sign in muna **online** isang beses para ma-download ang cache. " +
+      "Pag walang signal, makikita pa ang customers, inventory, at today's jobs (may stale banner). " +
+      "Pwedeng mag-record ng walk-in sale, delivery, at cash payment — lalabas sa **Sync queue** at auto-sync pag bumalik ang internet. " +
+      "GCash/bank transfer ay **pending sync** hanggang kumpirmado ng server. " +
+      "Riders sa My Area: pwedeng mag-mark delivered/collected offline with proof photo. " +
+      "Hindi pa offline: sign-in, River AI, live dispatch map, portal orders.",
   },
   {
     id: "doc-river-ai-vs-live-support",

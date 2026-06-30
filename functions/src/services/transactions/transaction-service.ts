@@ -435,17 +435,17 @@ export class TransactionService {
         false :
         true;
 
-      const docRef = clientMutationId
-        ? db
-            .collection("businesses")
-            .doc(businessId)
-            .collection("transactions")
-            .doc(clientMutationId)
-        : db
-            .collection("businesses")
-            .doc(businessId)
-            .collection("transactions")
-            .doc();
+      const docRef = clientMutationId ?
+        db
+          .collection("businesses")
+          .doc(businessId)
+          .collection("transactions")
+          .doc(clientMutationId) :
+        db
+          .collection("businesses")
+          .doc(businessId)
+          .collection("transactions")
+          .doc();
 
       let stockApplyResults: StockDeltaApplyResult[] = [];
       let idempotentReplay: Transaction | null = null;

@@ -251,12 +251,12 @@ export async function buildOfflineSnapshot(
     generatedAt: now.toISOString(),
     manilaDayKey: dayKey,
     waterTypes: Array.isArray(biz.waterTypes) ? biz.waterTypes : undefined,
-    inventoryCategories: Array.isArray(biz.inventoryCategories)
-      ? biz.inventoryCategories
-      : undefined,
-    expenseCategories: Array.isArray(biz.expenseCategories)
-      ? biz.expenseCategories
-      : undefined,
+    inventoryCategories: Array.isArray(biz.inventoryCategories) ?
+      biz.inventoryCategories :
+      undefined,
+    expenseCategories: Array.isArray(biz.expenseCategories) ?
+      biz.expenseCategories :
+      undefined,
     customers: leanCustomers,
     inventory: leanInventory,
     todaysTransactions,

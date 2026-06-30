@@ -16,7 +16,7 @@ import { logger, logAuditEvent } from "../observability/logging/logger";
 import { NotificationService } from "../notifications/notification-service";
 import { CustomerActiveLimitService } from "../customers/customer-active-limit-service";
 import { deactivateAllNonOwnerWorkspaceMembers } from "../team/team-member-downgrade-policy";
-import { isActiveStaffMemberForLimit } from "../team/workspace-member-access";
+import { countActiveStaffSeatsForBusiness } from "../team/staff-seat-usage";
 import {
   applyStaffSeatAddonBoosts,
   computeStaffSeatLimitFromRoleQuotas,
@@ -816,15 +816,7 @@ export class SubscriptionService {
       await this.handleExpiryAlert(businessId, sub, now, expiresAt, effective.id);
     }
 
-    const businessRef = db.collection("businesses").doc(businessId);
-    const [membersSnapshot, bizSnap] = await Promise.all([
-      businessRef.collection("members").get(),
-      businessRef.get(),
-    ]);
-    const ownerId = String(bizSnap.data()?.ownerId || "");
-    const currentStaffCount = membersSnapshot.docs.filter((doc) =>
-      isActiveStaffMemberForLimit(doc.id, doc.data(), ownerId),
-    ).length;
+    const currentStaffCount = (await countActiveStaffSeatsForBusiness(businessId)).total;
 
     let staffLimit = await this.resolveDashboardStaffLimit(
       sub as Record<string, any>,

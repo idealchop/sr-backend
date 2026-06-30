@@ -17,6 +17,10 @@ import { SubscriptionService } from "../subscriptions/subscription-service";
 import { RiderService } from "../riders/rider-service";
 import { purgeRemovedMemberWorkspaceData } from "./team-member-removal-cleanup";
 import { normalizeSeatRole, type TeamSeatRole } from "./team-seat-roles";
+import {
+  countActiveStaffSeatsForBusiness,
+  TEAM_DIRECTORY_RECORDS,
+} from "./staff-seat-usage";
 
 export type TeamMemberRole = "owner" | "admin" | "staff" | "rider" | string;
 
@@ -147,10 +151,11 @@ async function evaluateMemberActivationEligibility(
       sub.limitations :
       { staffLimit: 1, currentStaffCount: 0 };
 
-  const members = await listTeamMembers(businessId);
-  const pending = await countPendingInvitesByRole(businessId);
-  const memberCounts = countOccupiedMemberSeatsByRole(members);
-  const activeTotal = countActiveStaffMembers(members);
+  const [pending, seatUsage] = await Promise.all([
+    countPendingInvitesByRole(businessId),
+    countActiveStaffSeatsForBusiness(businessId),
+  ]);
+  const activeTotal = seatUsage.total;
   const pendingTotalActive = pending.admins + pending.riders;
 
   const limit = limitations.staffLimit;
@@ -165,8 +170,8 @@ async function evaluateMemberActivationEligibility(
     planCode,
     readAddonBoostsFromLimitations(limitations),
   );
-  const adminsUsed = memberCounts.admins + pending.admins;
-  const ridersUsed = memberCounts.riders + pending.riders;
+  const adminsUsed = seatUsage.admins + pending.admins;
+  const ridersUsed = seatUsage.riders + pending.riders;
 
   const allowedFiltered = filterAssignableRolesBySeatQuotas(
     assignableRolesForPlan(planCode),
@@ -391,8 +396,6 @@ export interface TeamHubRecordRiderDto {
   status: "active" | "inactive";
 }
 
-const TEAM_DIRECTORY_RECORDS = "team_directory_records";
-
 function isRecordOnlyRiderUserId(userId: unknown): boolean {
   return !userId || !String(userId).trim();
 }
@@ -498,12 +501,12 @@ export async function getTeamHubOverview(
       readAddonBoostsFromLimitations(limitations),
     );
     const pending = await countPendingInvitesByRole(businessId);
-    const memberCounts = countOccupiedMemberSeatsByRole(members);
+    const seatUsage = await countActiveStaffSeatsForBusiness(businessId);
     assignableRoles = filterAssignableRolesBySeatQuotas(
       assignableRoles,
       quotas,
-      memberCounts.admins + pending.admins,
-      memberCounts.riders + pending.riders,
+      seatUsage.admins + pending.admins,
+      seatUsage.riders + pending.riders,
     );
   } catch (e) {
     logger.warn("getTeamHubOverview: seat quota filter skipped", {
@@ -547,6 +550,18 @@ export async function createRecordOnlyRiderForHub(params: {
   const phone = typeof params.phone === "string" ? params.phone.trim() : "";
   const photoUrl =
     typeof params.photoUrl === "string" ? params.photoUrl.trim() : "";
+
+  const eligibility = await evaluateMemberActivationEligibility(
+    params.businessId,
+    role,
+  );
+  if (!eligibility.canActivate) {
+    return {
+      ok: false,
+      message: eligibility.reason || "Staff seat limit reached.",
+      status: 400,
+    };
+  }
 
   try {
     if (role === "rider") {
