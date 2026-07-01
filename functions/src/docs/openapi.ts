@@ -1150,6 +1150,87 @@ export const openApiSpec = {
         },
       },
     },
+    "/public/portal/business-profile": {
+      get: {
+        tags: ["Public"],
+        summary: "Station profile (Order & Counter Portal)",
+        description:
+          "Public business profile for customer-facing order and counter portals. " +
+          "Query `b` = businessId; optional `page` and `pageSize` for feedback pagination (default 5). " +
+          "Returns name, phone, address, map coordinates, average rating, and paginated feedback with masked customer names.",
+        security: [],
+        parameters: [
+          {
+            name: "b",
+            in: "query",
+            required: true,
+            schema: { type: "string" },
+            description: "businessId",
+          },
+          {
+            name: "page",
+            in: "query",
+            schema: { type: "integer", minimum: 1, default: 1 },
+          },
+          {
+            name: "pageSize",
+            in: "query",
+            schema: { type: "integer", minimum: 1, maximum: 20, default: 5 },
+          },
+        ],
+        responses: {
+          200: {
+            description: "Station profile payload.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    data: {
+                      type: "object",
+                      properties: {
+                        businessName: { type: "string" },
+                        businessLogo: { type: "string", nullable: true },
+                        phone: { type: "string", nullable: true },
+                        address: { type: "string", nullable: true },
+                        location: {
+                          type: "object",
+                          nullable: true,
+                          properties: {
+                            latitude: { type: "number" },
+                            longitude: { type: "number" },
+                          },
+                        },
+                        ratings: {
+                          type: "object",
+                          properties: {
+                            average: { type: "number" },
+                            count: { type: "integer" },
+                          },
+                        },
+                        feedback: {
+                          type: "object",
+                          properties: {
+                            items: { type: "array", items: { type: "object" } },
+                            page: { type: "integer" },
+                            pageSize: { type: "integer" },
+                            total: { type: "integer" },
+                            totalPages: { type: "integer" },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: "Missing businessId." },
+          404: { description: "Station not found." },
+          500: { description: "Server error." },
+        },
+      },
+    },
     "/public/portal/track/search": {
       get: {
         tags: ["Public"],

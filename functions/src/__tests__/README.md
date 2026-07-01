@@ -72,6 +72,13 @@ Google OAuth runs in the **frontend only** (Firebase Auth). The API receives the
 - **Wiring:** `raw-submission-processor.ts`, `raw-submission-handler.ts` call `ensureCustomerActiveForPortalAcceptance`
 - **Docs / manual QA:** `frontend/docs/portal-customer-active-limit-test-summary.md` (TC-PORTAL-LIMIT-*)
 
+### Portal station profile (`business-profile`)
+
+- **Unit:** `unit/handlers/portal-business-profile.unit.test.ts` — 400/404/200 for `GET /public/portal/business-profile`
+- **Unit:** `unit/services/portal/mask-portal-customer-name.unit.test.ts` — masked feedback names (`J****e`)
+- **Service:** `services/portal/portal-business-profile-service.ts`; handler `handlers/portal/portal-public-handler.ts`
+- **FE:** `fetch-portal-business-profile.test.ts`, `bdd/qr-portal.spec.ts` (TC-PUB-06c)
+
 ### Portal live rider tracking (`portal_track_live`)
 
 - **Unit:** `unit/services/portal/portal-track-live-service.unit.test.ts` — upsert on rider GPS; seed/clear on `deliveryStatus`

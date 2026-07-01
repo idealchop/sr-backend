@@ -14,6 +14,10 @@ import {
 import { buildCommunityChannelContact } from "./community-channel-contact";
 import { parseMessengerLocationAttachment } from "./meta-messenger-location";
 import { readMetaCommunityPageId } from "./meta-messenger-send-service";
+import {
+  handleRiderMessengerEvent,
+  shouldRouteToRiderMessenger,
+} from "../rider/rider-messenger-routing";
 
 type MetaMessagingEvent = {
   sender?: { id?: string };
@@ -53,6 +57,11 @@ function entryMatchesConfiguredPage(entryPageId: string | undefined): boolean {
 async function handleMessagingEvent(event: MetaMessagingEvent): Promise<void> {
   const psid = readSenderPsid(event);
   if (!psid) return;
+
+  if (await shouldRouteToRiderMessenger(event)) {
+    await handleRiderMessengerEvent(event);
+    return;
+  }
 
   const contact = buildCommunityChannelContact({
     sourceChannel: "community_messenger",

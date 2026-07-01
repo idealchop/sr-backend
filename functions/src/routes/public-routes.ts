@@ -4,6 +4,7 @@ import { deliveryHandler } from "../handlers/deliveries/delivery-handler";
 import { statementShareHandler } from "../handlers/customers/statement-share-handler";
 import {
   getPortalCustomerContext,
+  getPortalBusinessProfile,
   getQrPng,
   postPortalSubmission,
   trackOrder,
@@ -65,6 +66,7 @@ router.get(
 
 router.get("/qr.png", getQrPng);
 router.get("/portal/customer", portalLimiter, getPortalCustomerContext);
+router.get("/portal/business-profile", portalLimiter, getPortalBusinessProfile);
 router.get("/portal/track/search", portalLimiter, searchTrackOrders);
 router.get("/portal/track/:referenceId", portalLimiter, trackOrder);
 router.post("/portal/submissions", portalLimiter, postPortalSubmission);

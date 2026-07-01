@@ -39,8 +39,13 @@ import {
   postDeclineCommunityDispatchOffer,
   postNotifyCommunityDispatchOffer,
 } from "../handlers/community-dispatch-handler";
-import { validateBusinessAccess } from "../middleware/business-middleware";
+import { validateBusinessAccess, requireBusinessOwner } from "../middleware/business-middleware";
 import { getOfflineSnapshot } from "../handlers/offline-snapshot-handler";
+import {
+  deleteRiderMessengerLink,
+  getRiderMessengerLinkStatus,
+  postRiderMessengerLinkCode,
+} from "../handlers/rider-messenger-handler";
 
 const router = express.Router(); // eslint-disable-line new-cap
 
@@ -123,6 +128,28 @@ router.get(
   validateFirebaseIdToken,
   validateBusinessAccess,
   getOfflineSnapshot,
+);
+
+router.post(
+  "/:businessId/rider-messenger/link-code",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  requireBusinessOwner,
+  postRiderMessengerLinkCode,
+);
+router.get(
+  "/:businessId/rider-messenger/link-code/:riderId",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  requireBusinessOwner,
+  getRiderMessengerLinkStatus,
+);
+router.delete(
+  "/:businessId/rider-messenger/link/:riderId",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  requireBusinessOwner,
+  deleteRiderMessengerLink,
 );
 
 router.get(

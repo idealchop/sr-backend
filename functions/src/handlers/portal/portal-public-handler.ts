@@ -12,6 +12,7 @@ import {
   transactionHasCustomerRating,
 } from "../../services/portal/portal-rating-updates";
 import { PortalOrderRatingService } from "../../services/portal/portal-order-rating-service";
+import { PortalBusinessProfileService } from "../../services/portal/portal-business-profile-service";
 import { RawSubmissionService } from "../../services/portal/raw-submission-service";
 import { TransactionService } from "../../services/transactions/transaction-service";
 import { CustomerService } from "../../services/customers/customer-service";
@@ -355,6 +356,34 @@ export const getPortalCustomerContext = async (req: Request, res: Response) => {
       return res.status(403).json({ error: "Account inactive" });
     }
     logger.error("getPortalCustomerContext failed", e);
+    return res.status(500).json({ error: "Server error" });
+  }
+};
+
+export const getPortalBusinessProfile = async (req: Request, res: Response) => {
+  const businessId = parseQueryString(req.query.b);
+  if (!businessId) {
+    return res.status(400).json({ error: "Missing business ID (b)" });
+  }
+
+  const page = Math.max(1, Number.parseInt(String(req.query.page ?? "1"), 10) || 1);
+  const pageSize = Math.max(
+    1,
+    Number.parseInt(String(req.query.pageSize ?? "5"), 10) || 5,
+  );
+
+  try {
+    const profile = await PortalBusinessProfileService.getPublicProfile({
+      businessId,
+      page,
+      pageSize,
+    });
+    if (!profile) {
+      return res.status(404).json({ error: "Station not found" });
+    }
+    return res.json({ data: profile });
+  } catch (e) {
+    logger.error("getPortalBusinessProfile failed", e);
     return res.status(500).json({ error: "Server error" });
   }
 };
