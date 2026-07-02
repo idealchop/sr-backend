@@ -65,4 +65,13 @@ describe("parseFastWriteRiverAiAgentIntent", () => {
     expect(intent?.parameters.amount).toBe(500);
     expect(intent?.parameters.referenceId).toBe("OR-1234");
   });
+
+  it("drafts delivery create from plain text", () => {
+    const intent = parseFastWriteRiverAiAgentIntent("add delivery for Juan Santos 5 gallons tomorrow");
+    expect(intent?.tool).toBe("transaction.create");
+    expect(intent?.parameters.subtype).toBe("delivery");
+    expect(intent?.parameters.customerName).toBe("Juan Santos");
+    expect(intent?.parameters.quantity).toBe(5);
+    expect(String(intent?.parameters.scheduledAt)).toContain("T08:00:00");
+  });
 });

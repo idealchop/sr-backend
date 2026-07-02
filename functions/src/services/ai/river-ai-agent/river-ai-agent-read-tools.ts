@@ -71,6 +71,7 @@ export async function listCustomersForAgent(
     label: c.name,
     sublabel: [c.phone, c.address].filter(Boolean).join(" · "),
     meta: {
+      kind: "customer",
       status: c.status || "active",
       hasBalance: Boolean(c.hasBalance),
     },
@@ -85,6 +86,7 @@ function customerToRow(c: Awaited<ReturnType<typeof CustomerService.getCustomers
     label: c.name,
     sublabel: [c.phone, c.address].filter(Boolean).join(" · "),
     meta: {
+      kind: "customer",
       status: c.status || "active",
       hasBalance: Boolean(c.hasBalance),
     },
@@ -169,6 +171,7 @@ export async function listTransactionsForAgent(
     label: `${t.referenceId || t.id} — ${t.customerName || "—"}`,
     sublabel: `${t.type} · ${t.deliveryStatus || "—"} · ₱${t.totalAmount ?? 0}`,
     meta: {
+      kind: "transaction",
       paymentStatus: t.paymentStatus || null,
       scheduledAt: t.scheduledAt ? String(t.scheduledAt) : null,
     },
@@ -193,7 +196,7 @@ export async function getTransactionForAgent(
           id: tx.id || "",
           label: `${tx.referenceId} — ${tx.customerName}`,
           sublabel: `${tx.type} · ${tx.deliveryStatus}`,
-          meta: { totalAmount: tx.totalAmount ?? 0, paymentStatus: tx.paymentStatus || null },
+          meta: { kind: "transaction", totalAmount: tx.totalAmount ?? 0, paymentStatus: tx.paymentStatus || null },
         },
       ],
       total: 1,
@@ -240,7 +243,7 @@ export async function listInventoryForAgent(
     id: i.id || "",
     label: i.name,
     sublabel: `${i.categoryId || "—"} · stock ${i.stock?.current ?? 0}`,
-    meta: { unit: i.stock?.unit || null },
+    meta: { kind: "inventory", unit: i.stock?.unit || null },
   }));
 
   return { rows, total };
@@ -304,6 +307,7 @@ export async function listRidersForAgent(
     label: r.name,
     sublabel: [r.phone, r.vehicle, r.status || "active"].filter(Boolean).join(" · "),
     meta: {
+      kind: "rider",
       deliveriesToday: r.currentStats?.deliveriesToday ?? 0,
       status: r.status || "active",
     },

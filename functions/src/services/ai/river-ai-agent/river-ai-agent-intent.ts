@@ -21,6 +21,33 @@ function manilaDateISO(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
 }
 
+function offsetManilaDateISO(offsetDays: number): string {
+  const today = manilaDateISO();
+  const [year, month, day] = today.split("-").map(Number);
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  utc.setUTCDate(utc.getUTCDate() + offsetDays);
+  return utc.toISOString().slice(0, 10);
+}
+
+function scheduledAtFromHint(text: string): string {
+  if (/\b(tomorrow|bukas)\b/i.test(text)) {
+    return `${offsetManilaDateISO(1)}T08:00:00.000+08:00`;
+  }
+  if (/\b(today|ngayon)\b/i.test(text)) {
+    return `${manilaDateISO()}T08:00:00.000+08:00`;
+  }
+  return new Date().toISOString();
+}
+
+function parseDeliveryCustomerName(rest: string): string {
+  return rest
+    .replace(/(\d+)\s*(?:gallons?|gal|gals?)\b/gi, " ")
+    .replace(/\b(today|ngayon|tomorrow|bukas)\b/gi, " ")
+    .replace(/[,.!?]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function extractCustomerSearchHint(text: string): string | null {
   const patterns = [
     /(?:show|find|get|lookup|hanapin|sino\s+si)\s+(?:customer|suki|client)?\s*(.+)/i,
@@ -196,6 +223,26 @@ export function parseFastWriteRiverAiAgentIntent(message: string): RiverAiAgentI
       parameters: { itemName: stockMatch[1].trim(), delta: Number(stockMatch[2]) },
       confidence: 0.88,
     };
+  }
+
+  const deliveryMatch = text.match(/(?:add|create|schedule|book)\s+(?:a\s+)?delivery\s+(?:for|sa|to)\s+(.+)/i);
+  if (deliveryMatch?.[1]) {
+    const rest = deliveryMatch[1].trim();
+    const qtyMatch = rest.match(/(\d+)\s*(?:gallons?|gal|gals?)\b/i);
+    const quantity = qtyMatch ? Number(qtyMatch[1]) : 1;
+    const customerName = parseDeliveryCustomerName(rest);
+    if (customerName.length >= 2) {
+      return {
+        tool: "transaction.create",
+        parameters: {
+          subtype: "delivery",
+          customerName,
+          quantity,
+          scheduledAt: scheduledAtFromHint(rest),
+        },
+        confidence: 0.9,
+      };
+    }
   }
 
   return null;
