@@ -17,6 +17,30 @@ function isToolId(v: string): v is RiverAiAgentToolId {
   return (RIVER_AI_AGENT_TOOLS as readonly string[]).includes(v);
 }
 
+/** Skip Gemini for obvious read-only list commands (faster + works without API key). */
+function parseFastListIntent(message: string): RiverAiAgentIntentResult | null {
+  const text = message.trim();
+  if (!text) return null;
+
+  if (/\b(list|show|display|get\s+all)\b.*\b(customers?|suki)\b/i.test(text) ||
+      /\b(customers?|suki)\b.*\b(list|show)\b/i.test(text)) {
+    return { tool: "customer.list", parameters: {}, confidence: 0.98 };
+  }
+  if (/\b(list|show|display|get\s+all)\b.*\b(transactions?|orders?|deliveries)\b/i.test(text) ||
+      /\b(transactions?|orders?)\b.*\b(list|show)\b/i.test(text)) {
+    return { tool: "transaction.list", parameters: {}, confidence: 0.98 };
+  }
+  if (/\b(list|show|display)\b.*\b(inventory|stock)\b/i.test(text) ||
+      /\binventory\b.*\b(list|show)\b/i.test(text)) {
+    return { tool: "inventory.list", parameters: {}, confidence: 0.98 };
+  }
+  if (/\b(list|show|display)\b.*\bcatalog\b/i.test(text) ||
+      /\bcatalog\b.*\b(list|show)\b/i.test(text)) {
+    return { tool: "catalog.list", parameters: {}, confidence: 0.98 };
+  }
+  return null;
+}
+
 /**
  * Classify owner ops commands into agent tools + parameters.
  */
@@ -26,6 +50,9 @@ export async function parseRiverAiAgentIntent(input: {
 }): Promise<RiverAiAgentIntentResult> {
   const message = input.message.trim().slice(0, 1500);
   if (!message) return { ...FALLBACK };
+
+  const fast = parseFastListIntent(message);
+  if (fast) return fast;
 
   if (!getGeminiApiKey()) {
     return {
