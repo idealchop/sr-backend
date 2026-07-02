@@ -36,6 +36,10 @@ import {
   postInventoryImportAiParse,
   postInventoryImportAiProfile,
 } from "../handlers/inventory-import-ai-handler";
+import {
+  postRiverAiAgentConfirm,
+  postRiverAiAgentTurn,
+} from "../handlers/river-ai-agent-handler";
 
 const router = express.Router({ mergeParams: true }); // eslint-disable-line new-cap
 
@@ -229,6 +233,21 @@ router.post(
   validateBusinessAccess,
   requireBusinessOwner,
   postInventoryImportAiCommit,
+);
+
+router.post(
+  "/agent/turn",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  requireBusinessOwner,
+  postRiverAiAgentTurn,
+);
+router.post(
+  "/agent/confirm",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  requireBusinessOwner,
+  postRiverAiAgentConfirm,
 );
 
 export default router;
