@@ -7,6 +7,8 @@ export const RIVER_AI_AGENT_READ_TOOLS = [
   "transaction.get",
   "inventory.list",
   "catalog.list",
+  "rider.list",
+  "report.today_summary",
 ] as const;
 
 export const RIVER_AI_AGENT_WRITE_TOOLS = [

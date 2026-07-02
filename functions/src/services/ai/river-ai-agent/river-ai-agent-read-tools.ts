@@ -1,7 +1,10 @@
 import { db } from "../../../config/firebase-admin";
 import { CustomerService } from "../../customers/customer-service";
 import { InventoryService } from "../../inventory/inventory-service";
+import { RiderService } from "../../riders/rider-service";
 import { TransactionService } from "../../transactions/transaction-service";
+import { buildWorkspaceRevenueMetrics } from "../../../utils/ledger-collected-revenue";
+import { manilaDateKey } from "../../../utils/philippine-datetime";
 import type { RiverAiAgentListRow } from "./river-ai-agent-types";
 
 function norm(s: unknown): string {
@@ -275,4 +278,91 @@ export async function listCatalogForAgent(
   }
 
   return { rows, total: rows.length };
+}
+
+export async function listRidersForAgent(
+  businessId: string,
+  params: Record<string, unknown>,
+): Promise<{ rows: RiverAiAgentListRow[]; total: number }> {
+  const all = await RiderService.getRidersByBusiness(businessId);
+  let filtered = [...all];
+
+  const status = norm(params.status);
+  if (status === "active" || status === "inactive") {
+    filtered = filtered.filter((r) => (r.status || "active") === status);
+  }
+
+  const search = norm(params.search || params.name || params.riderName);
+  if (search) {
+    filtered = filtered.filter((r) => includesText([r.name, r.phone, r.vehicle].map(norm).join(" "), search));
+  }
+
+  const limit = Math.min(25, Math.max(1, Number(params.limit) || 15));
+  const total = filtered.length;
+  const rows: RiverAiAgentListRow[] = filtered.slice(0, limit).map((r) => ({
+    id: r.id || "",
+    label: r.name,
+    sublabel: [r.phone, r.vehicle, r.status || "active"].filter(Boolean).join(" · "),
+    meta: {
+      deliveriesToday: r.currentStats?.deliveriesToday ?? 0,
+      status: r.status || "active",
+    },
+  }));
+
+  return { rows, total };
+}
+
+export async function todaySummaryForAgent(
+  businessId: string,
+): Promise<{ rows: RiverAiAgentListRow[]; total: number; metrics: ReturnType<typeof buildWorkspaceRevenueMetrics> }> {
+  const transactions = await TransactionService.getTransactionsByBusiness(businessId, { limit: 400 });
+  const metrics = buildWorkspaceRevenueMetrics(transactions);
+  const todayKey = manilaDateKey(new Date());
+
+  const pendingDeliveriesToday = transactions.filter((tx) => {
+    if (tx.type !== "delivery") return false;
+    const status = norm(tx.deliveryStatus);
+    if (status === "delivered" || status === "cancelled") return false;
+    const scheduled = tx.scheduledAt ? manilaDateKey(new Date(String(tx.scheduledAt))) : null;
+    return scheduled === todayKey;
+  }).length;
+
+  const unpaidCount = transactions.filter((tx) => norm(tx.paymentStatus) !== "paid").length;
+
+  const rows: RiverAiAgentListRow[] = [
+    {
+      id: "collected-today",
+      label: "Collected today",
+      sublabel: `₱${metrics.todayPhp.toLocaleString("en-PH")}`,
+      meta: {
+        cashPhp: metrics.todayBreakdown.cashPhp,
+        onlinePhp: metrics.todayBreakdown.onlinePhp,
+      },
+    },
+    {
+      id: "net-today",
+      label: "Net today",
+      sublabel: `₱${metrics.netTodayPhp.toLocaleString("en-PH")} (expenses ₱${metrics.expensesTodayPhp.toLocaleString("en-PH")})`,
+    },
+    {
+      id: "last-7-days",
+      label: "Last 7 days",
+      sublabel: `₱${metrics.last7DaysPhp.toLocaleString("en-PH")}`,
+      meta: {
+        trendVsPriorWeekPct: metrics.trendVsPriorWeekPct,
+      },
+    },
+    {
+      id: "pending-deliveries",
+      label: "Pending deliveries today",
+      sublabel: String(pendingDeliveriesToday),
+    },
+    {
+      id: "unpaid-open",
+      label: "Open unpaid transactions",
+      sublabel: String(unpaidCount),
+    },
+  ];
+
+  return { rows, total: rows.length, metrics };
 }

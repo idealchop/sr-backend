@@ -7,7 +7,9 @@ import {
   listCatalogForAgent,
   listCustomersForAgent,
   listInventoryForAgent,
+  listRidersForAgent,
   listTransactionsForAgent,
+  todaySummaryForAgent,
 } from "./river-ai-agent-read-tools";
 import { savePendingAction } from "./river-ai-agent-pending-store";
 import { buildWriteDraft } from "./river-ai-agent-write-drafts";
@@ -23,6 +25,7 @@ function formatListReply(tool: string, total: number, shown: number): string {
       "transaction.list": "Walang transaction na tumugma sa filter na iyan.",
       "inventory.list": "Walang inventory item na tumugma sa filter na iyan.",
       "catalog.list": "Walang catalog entries pa sa station na ito.",
+      "rider.list": "Walang rider na tumugma sa hinahanap mo.",
     };
     return emptyByTool[tool] || "Walang resulta para sa filter na iyan.";
   }
@@ -133,6 +136,33 @@ export async function runRiverAiAgentTurn(args: {
       tool,
       rows,
       total,
+    };
+  }
+
+  if (tool === "rider.list") {
+    const { rows, total } = await listRidersForAgent(args.businessId, parameters);
+    return {
+      reply: formatListReply(tool, total, rows.length),
+      tool,
+      rows,
+      total,
+    };
+  }
+
+  if (tool === "report.today_summary") {
+    const { rows, total, metrics } = await todaySummaryForAgent(args.businessId);
+    const trend =
+      metrics.trendVsPriorWeekPct == null ?
+        "" :
+        ` · 7-day trend ${metrics.trendVsPriorWeekPct >= 0 ? "+" : ""}${metrics.trendVsPriorWeekPct}% vs prior week`;
+    return {
+      reply:
+        `**Ngayon:** ₱${metrics.todayPhp.toLocaleString("en-PH")} collected · ` +
+        `₱${metrics.netTodayPhp.toLocaleString("en-PH")} net${trend}.`,
+      tool,
+      rows,
+      total,
+      data: metrics,
     };
   }
 

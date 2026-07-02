@@ -105,6 +105,22 @@ export function parseFastRiverAiAgentIntent(message: string): RiverAiAgentIntent
     return { tool: "catalog.list", parameters: {}, confidence: 0.98 };
   }
 
+  if (
+    /\b(magkano|kinita|kita|sales|revenue|earning|kumita)\b.*\b(today|ngayon)\b/i.test(text) ||
+    /\b(today|ngayon)\b.*\b(magkano|kinita|kita|sales|revenue)\b/i.test(text) ||
+    /\b(today|daily|ngayon)\b.*\b(summary|overview|report)\b/i.test(text)
+  ) {
+    return { tool: "report.today_summary", parameters: {}, confidence: 0.97 };
+  }
+
+  if (
+    /\blist\b.*\b(riders?|delivery\s+staff)\b/i.test(text) ||
+    /\b(riders?|delivery\s+staff)\b.*\blist\b/i.test(text) ||
+    /^show\s+riders\b/i.test(text)
+  ) {
+    return { tool: "rider.list", parameters: {}, confidence: 0.98 };
+  }
+
   const customerHint = extractCustomerSearchHint(text);
   if (
     customerHint &&
@@ -115,6 +131,71 @@ export function parseFastRiverAiAgentIntent(message: string): RiverAiAgentIntent
     !/^suki$/i.test(customerHint)
   ) {
     return { tool: "customer.get", parameters: { search: customerHint }, confidence: 0.96 };
+  }
+
+  return null;
+}
+
+/** Skip Gemini for obvious write drafts (still requires user confirm). */
+export function parseFastWriteRiverAiAgentIntent(message: string): RiverAiAgentIntentResult | null {
+  const text = message.trim();
+  if (!text) return null;
+
+  const addMatch = text.match(/(?:add|create|new)\s+(?:customer|suki)\s+(.+)/i);
+  if (addMatch?.[1]) {
+    const rest = addMatch[1].trim();
+    const phoneMatch = rest.match(/\b(0\d{10})\b/);
+    const phone = phoneMatch?.[1];
+    const name = rest.replace(/\b0\d{10}\b/, "").trim();
+    if (name) {
+      return {
+        tool: "customer.create",
+        parameters: { name, phone: phone || undefined },
+        confidence: 0.92,
+      };
+    }
+  }
+
+  const payMatch = text.match(
+    /record\s+payment\s+(?:of\s+)?(?:₱|php\s*)?(\d+(?:\.\d+)?)\s+(?:for|sa|to)?\s*(.+)/i,
+  );
+  if (payMatch) {
+    const amount = Number(payMatch[1]);
+    const referenceId = payMatch[2].trim().split(/\s+/)[0];
+    if (Number.isFinite(amount) && amount > 0 && referenceId) {
+      return {
+        tool: "transaction.record_payment",
+        parameters: { amount, referenceId },
+        confidence: 0.9,
+      };
+    }
+  }
+
+  const markMatch = text.match(/\bmark\s+(.+?)\s+(?:as\s+)?(?:delivered|complete|done)\b/i);
+  if (markMatch?.[1]) {
+    return {
+      tool: "transaction.set_fulfillment_status",
+      parameters: { referenceId: markMatch[1].trim(), fulfillmentStatus: "delivered" },
+      confidence: 0.9,
+    };
+  }
+
+  const assignMatch = text.match(/\bassign\s+(?:rider\s+)?(.+?)\s+(?:to|sa)\s+(.+)/i);
+  if (assignMatch?.[1] && assignMatch[2]) {
+    return {
+      tool: "transaction.assign_rider",
+      parameters: { riderName: assignMatch[1].trim(), referenceId: assignMatch[2].trim() },
+      confidence: 0.88,
+    };
+  }
+
+  const stockMatch = text.match(/\badjust\s+(?:stock\s+)?(?:for\s+)?(.+?)\s+(?:by\s+)?([+-]?\d+)\b/i);
+  if (stockMatch?.[1] && stockMatch[2]) {
+    return {
+      tool: "inventory.adjust_stock",
+      parameters: { itemName: stockMatch[1].trim(), delta: Number(stockMatch[2]) },
+      confidence: 0.88,
+    };
   }
 
   return null;
@@ -133,6 +214,9 @@ export async function parseRiverAiAgentIntent(input: {
   const fast = parseFastRiverAiAgentIntent(message);
   if (fast) return fast;
 
+  const fastWrite = parseFastWriteRiverAiAgentIntent(message);
+  if (fastWrite) return fastWrite;
+
   if (!getGeminiApiKey()) {
     return {
       tool: "chat.answer",
@@ -146,7 +230,7 @@ export async function parseRiverAiAgentIntent(input: {
     "You route owner commands for a Philippine water refilling station app (SmartRefill). " +
     "Pick exactly one tool id from the allowed list. Output STRICT JSON: " +
     "tool (string), parameters (object), confidence (0-1), clarifyingQuestion (optional, Taglish), replyHint (optional). " +
-    "READ tools: customer.list, customer.get, transaction.list, transaction.get, inventory.list, catalog.list. " +
+    "READ tools: customer.list, customer.get, transaction.list, transaction.get, inventory.list, catalog.list, rider.list, report.today_summary. " +
     "WRITE tools (draft only — user must confirm): customer.create, customer.update, customer.set_status, " +
     "transaction.create, transaction.update, transaction.set_fulfillment_status, transaction.record_payment, " +
     "transaction.assign_rider, transaction.report_collection_issue, inventory.create, inventory.update, " +

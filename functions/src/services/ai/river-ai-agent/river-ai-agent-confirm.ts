@@ -11,6 +11,27 @@ import {
 } from "../../transactions/transaction-service";
 import type { RiverAiAgentConfirmResult, RiverAiAgentPendingAction } from "./river-ai-agent-types";
 import { deletePendingAction } from "./river-ai-agent-pending-store";
+import { logRiverAiAgentConfirm } from "./river-ai-agent-audit";
+
+async function completeConfirm(
+  businessId: string,
+  pending: RiverAiAgentPendingAction,
+  userId: string,
+  result: RiverAiAgentConfirmResult,
+): Promise<RiverAiAgentConfirmResult> {
+  if (result.success) {
+    await deletePendingAction(businessId, pending.id);
+    void logRiverAiAgentConfirm({
+      businessId,
+      userId,
+      tool: pending.tool,
+      summary: result.summary,
+      entityIds: result.entityIds,
+      pendingActionId: pending.id,
+    });
+  }
+  return result;
+}
 
 async function resolveTransactionId(
   businessId: string,
@@ -41,20 +62,22 @@ export async function confirmRiverAiAgentAction(args: {
         businessId,
         p as Parameters<typeof CustomerService.addCustomer>[1],
       );
-      await deletePendingAction(businessId, pending.id);
-      return {
+      return completeConfirm(businessId, pending, userId, {
         success: true,
         summary: `Customer ${created.name} created.`,
         entityIds: created.id ? [created.id] : [],
-      };
+      });
     }
 
     if (tool === "customer.update") {
       const customerId = String(p.customerId || "");
       const updates = (p.updates || {}) as Record<string, unknown>;
       await CustomerService.updateCustomer(businessId, customerId, updates);
-      await deletePendingAction(businessId, pending.id);
-      return { success: true, summary: "Customer updated.", entityIds: [customerId] };
+      return completeConfirm(businessId, pending, userId, {
+        success: true,
+        summary: "Customer updated.",
+        entityIds: [customerId],
+      });
     }
 
     if (tool === "customer.set_status") {
@@ -62,8 +85,11 @@ export async function confirmRiverAiAgentAction(args: {
       await CustomerService.updateCustomer(businessId, customerId, {
         status: p.status === "inactive" ? "inactive" : "active",
       });
-      await deletePendingAction(businessId, pending.id);
-      return { success: true, summary: "Customer status updated.", entityIds: [customerId] };
+      return completeConfirm(businessId, pending, userId, {
+        success: true,
+        summary: "Customer status updated.",
+        entityIds: [customerId],
+      });
     }
 
     if (tool === "transaction.create") {
@@ -96,14 +122,13 @@ export async function confirmRiverAiAgentAction(args: {
         },
         userId,
       );
-      await deletePendingAction(businessId, pending.id);
-      return {
+      return completeConfirm(businessId, pending, userId, {
         success: true,
         summary: created ?
           `Transaction ${transaction.referenceId} created.` :
           `Transaction ${transaction.referenceId} already exists (idempotent).`,
         entityIds: transaction.id ? [transaction.id] : [],
-      };
+      });
     }
 
     if (tool === "transaction.set_fulfillment_status") {
@@ -121,8 +146,11 @@ export async function confirmRiverAiAgentAction(args: {
         { deliveryStatus: (p.fulfillmentStatus || p.deliveryStatus || "delivered") as Transaction["deliveryStatus"] },
         userId,
       );
-      await deletePendingAction(businessId, pending.id);
-      return { success: true, summary: "Transaction status updated.", entityIds: [txId] };
+      return completeConfirm(businessId, pending, userId, {
+        success: true,
+        summary: "Transaction status updated.",
+        entityIds: [txId],
+      });
     }
 
     if (tool === "transaction.record_payment") {
@@ -155,8 +183,11 @@ export async function confirmRiverAiAgentAction(args: {
         { amountPaid: newPaid, paymentStatus, payments },
         userId,
       );
-      await deletePendingAction(businessId, pending.id);
-      return { success: true, summary: `Payment ₱${amount} recorded.`, entityIds: [txId] };
+      return completeConfirm(businessId, pending, userId, {
+        success: true,
+        summary: `Payment ₱${amount} recorded.`,
+        entityIds: [txId],
+      });
     }
 
     if (tool === "transaction.assign_rider") {
@@ -174,8 +205,11 @@ export async function confirmRiverAiAgentAction(args: {
         { riderId: String(p.riderId) },
         userId,
       );
-      await deletePendingAction(businessId, pending.id);
-      return { success: true, summary: "Rider assigned.", entityIds: [txId] };
+      return completeConfirm(businessId, pending, userId, {
+        success: true,
+        summary: "Rider assigned.",
+        entityIds: [txId],
+      });
     }
 
     if (tool === "transaction.report_collection_issue") {
@@ -212,8 +246,11 @@ export async function confirmRiverAiAgentAction(args: {
         },
         userId,
       );
-      await deletePendingAction(businessId, pending.id);
-      return { success: true, summary: "Collection issue recorded.", entityIds: [txId] };
+      return completeConfirm(businessId, pending, userId, {
+        success: true,
+        summary: "Collection issue recorded.",
+        entityIds: [txId],
+      });
     }
 
     if (tool === "inventory.adjust_stock") {
@@ -223,8 +260,11 @@ export async function confirmRiverAiAgentAction(args: {
         reason: String(p.reason || "River AI"),
         userId,
       });
-      await deletePendingAction(businessId, pending.id);
-      return { success: true, summary: "Stock adjusted.", entityIds: [inventoryItemId] };
+      return completeConfirm(businessId, pending, userId, {
+        success: true,
+        summary: "Stock adjusted.",
+        entityIds: [inventoryItemId],
+      });
     }
 
     if (tool === "inventory.create") {
@@ -232,12 +272,11 @@ export async function confirmRiverAiAgentAction(args: {
         businessId,
         p as Parameters<typeof InventoryService.createItem>[1],
       );
-      await deletePendingAction(businessId, pending.id);
-      return {
+      return completeConfirm(businessId, pending, userId, {
         success: true,
         summary: "Inventory item created.",
         entityIds: [itemId],
-      };
+      });
     }
 
     if (tool === "catalog.upsert_water_type") {
@@ -255,8 +294,10 @@ export async function confirmRiverAiAgentAction(args: {
       if (idx >= 0) waterTypes[idx] = row;
       else waterTypes.push(row);
       await ref.update({ waterTypes, updatedAt: FieldValue.serverTimestamp() });
-      await deletePendingAction(businessId, pending.id);
-      return { success: true, summary: `Water type ${name} saved.` };
+      return completeConfirm(businessId, pending, userId, {
+        success: true,
+        summary: `Water type ${name} saved.`,
+      });
     }
 
     if (tool === "catalog.upsert_expense_category") {
@@ -268,8 +309,10 @@ export async function confirmRiverAiAgentAction(args: {
         expenseCategories: [...cats],
         updatedAt: FieldValue.serverTimestamp(),
       });
-      await deletePendingAction(businessId, pending.id);
-      return { success: true, summary: `Expense category ${String(p.name)} saved.` };
+      return completeConfirm(businessId, pending, userId, {
+        success: true,
+        summary: `Expense category ${String(p.name)} saved.`,
+      });
     }
 
     return { success: false, summary: "Unsupported action.", errors: ["UNSUPPORTED"] };
