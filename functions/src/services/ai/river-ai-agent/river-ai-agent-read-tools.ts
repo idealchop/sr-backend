@@ -76,6 +76,18 @@ export async function listCustomersForAgent(
   return { rows, total };
 }
 
+function customerToRow(c: Awaited<ReturnType<typeof CustomerService.getCustomersByBusiness>>[number]): RiverAiAgentListRow {
+  return {
+    id: c.id || "",
+    label: c.name,
+    sublabel: [c.phone, c.address].filter(Boolean).join(" · "),
+    meta: {
+      status: c.status || "active",
+      hasBalance: Boolean(c.hasBalance),
+    },
+  };
+}
+
 export async function getCustomerForAgent(
   businessId: string,
   params: Record<string, unknown>,
@@ -85,23 +97,23 @@ export async function getCustomerForAgent(
   if (customerId) {
     const one = all.find((c) => c.id === customerId);
     if (!one) return { rows: [], total: 0 };
-    return {
-      rows: [
-        {
-          id: one.id || "",
-          label: one.name,
-          sublabel: [one.phone, one.address].filter(Boolean).join(" · "),
-          meta: { status: one.status || "active" },
-        },
-      ],
-      total: 1,
-    };
+    return { rows: [customerToRow(one)], total: 1 };
   }
-  const { matches } = resolveCustomerId(all, String(params.search || params.name || ""));
-  return listCustomersForAgent(businessId, {
-    ...params,
-    search: matches.map((m) => m.name).join(" "),
-  });
+
+  const hint = String(params.search || params.name || params.customerName || "");
+  const { customerId: resolvedId, matches } = resolveCustomerId(all, hint);
+  if (resolvedId && matches[0]) {
+    return { rows: [customerToRow(matches[0])], total: 1 };
+  }
+  if (matches.length > 1) {
+    const rows = matches.map(customerToRow);
+    return { rows, total: rows.length };
+  }
+  if (hint) {
+    return { rows: [], total: 0 };
+  }
+
+  return listCustomersForAgent(businessId, params);
 }
 
 export async function listTransactionsForAgent(

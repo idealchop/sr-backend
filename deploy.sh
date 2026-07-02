@@ -87,6 +87,22 @@ if [[ -f "${SALES_PORTAL_BACKEND}/package.json" ]]; then
   npm --prefix "${SALES_PORTAL_BACKEND}" run check:firestore
 fi
 
+# Plain .env keys that are also bound via Secret Manager break Cloud Functions deploy.
+FUNCTIONS_ENV="${FUNCTIONS_DIR}/.env"
+FUNCTIONS_ENV_DEPLOY_BAK=""
+restore_functions_env() {
+  if [[ -n "${FUNCTIONS_ENV_DEPLOY_BAK}" && -f "${FUNCTIONS_ENV_DEPLOY_BAK}" ]]; then
+    mv "${FUNCTIONS_ENV_DEPLOY_BAK}" "${FUNCTIONS_ENV}"
+    FUNCTIONS_ENV_DEPLOY_BAK=""
+  fi
+}
+if [[ -f "${FUNCTIONS_ENV}" ]] && grep -qE '^(DOCS_ADMIN_TOKEN|SMARTREFILL_BREVO_API_KEY)=' "${FUNCTIONS_ENV}"; then
+  FUNCTIONS_ENV_DEPLOY_BAK="${FUNCTIONS_ENV}.deploy-bak-$$"
+  echo -e "${YELLOW}   Temporarily moving functions/.env aside (Secret Manager overlap).${NC}"
+  mv "${FUNCTIONS_ENV}" "${FUNCTIONS_ENV_DEPLOY_BAK}"
+fi
+trap restore_functions_env EXIT
+
 echo -e "${BLUE}🔥 Deploying Cloud Functions (v3-api codebase: API, schedulers, triggers)...${NC}"
 npx -y firebase-tools deploy --project "${PROJECT_ID}" \
   --only functions:v3-api,firestore:rules,firestore:indexes

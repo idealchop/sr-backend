@@ -17,27 +17,106 @@ function isToolId(v: string): v is RiverAiAgentToolId {
   return (RIVER_AI_AGENT_TOOLS as readonly string[]).includes(v);
 }
 
-/** Skip Gemini for obvious read-only list commands (faster + works without API key). */
-function parseFastListIntent(message: string): RiverAiAgentIntentResult | null {
+function manilaDateISO(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
+}
+
+function extractCustomerSearchHint(text: string): string | null {
+  const patterns = [
+    /(?:show|find|get|lookup|hanapin|sino\s+si)\s+(?:customer|suki|client)?\s*(.+)/i,
+    /(?:customer|suki)\s+(?:named|named?|na\s+si|si)?\s*(.+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const hint = match?.[1]?.trim().replace(/[?.!]+$/, "");
+    if (hint && hint.length >= 2) return hint;
+  }
+  return null;
+}
+
+/** Skip Gemini for obvious ops commands (faster + works without API key). */
+export function parseFastRiverAiAgentIntent(message: string): RiverAiAgentIntentResult | null {
   const text = message.trim();
   if (!text) return null;
 
-  if (/\b(list|show|display|get\s+all)\b.*\b(customers?|suki)\b/i.test(text) ||
-      /\b(customers?|suki)\b.*\b(list|show)\b/i.test(text)) {
+  if (
+    /\b(customers?|suki)\b.*\b(balance|utang|may utang|may balance)\b/i.test(text) ||
+    /\b(balance|utang)\b.*\b(customers?|suki)\b/i.test(text)
+  ) {
+    return { tool: "customer.list", parameters: { hasBalance: true }, confidence: 0.96 };
+  }
+
+  if (
+    /\blist\b.*\b(customers?|suki)\b/i.test(text) ||
+    /\b(customers?|suki)\b.*\blist\b/i.test(text) ||
+    /\b(show|display|get)\s+all\b.*\b(customers?|suki)\b/i.test(text) ||
+    /^show\s+customers\b/i.test(text)
+  ) {
     return { tool: "customer.list", parameters: {}, confidence: 0.98 };
   }
-  if (/\b(list|show|display|get\s+all)\b.*\b(transactions?|orders?|deliveries)\b/i.test(text) ||
-      /\b(transactions?|orders?)\b.*\b(list|show)\b/i.test(text)) {
+
+  if (
+    /\b(today|ngayon|today'?s)\b.*\b(deliveries|transactions?|orders?)\b/i.test(text) ||
+    /\b(deliveries|transactions?|orders?)\b.*\b(today|ngayon)\b/i.test(text) ||
+    /\b(pending|for delivery)\b.*\b(today|ngayon)\b/i.test(text)
+  ) {
+    const today = manilaDateISO();
+    return {
+      tool: "transaction.list",
+      parameters: { startDate: today, endDate: today, type: "delivery" },
+      confidence: 0.96,
+    };
+  }
+
+  if (
+    /\b(unpaid|di\s+bayad|hindi\s+pa\s+bayad|outstanding)\b.*\b(transactions?|orders?|deliveries)\b/i.test(
+      text,
+    ) ||
+    /\b(transactions?|orders?|deliveries)\b.*\b(unpaid|di\s+bayad|outstanding)\b/i.test(text)
+  ) {
+    return { tool: "transaction.list", parameters: { unpaid: true }, confidence: 0.96 };
+  }
+
+  if (
+    /\b(list|show|display|get\s+all)\b.*\b(transactions?|orders?|deliveries)\b/i.test(text) ||
+    /\b(transactions?|orders?)\b.*\b(list|show)\b/i.test(text)
+  ) {
     return { tool: "transaction.list", parameters: {}, confidence: 0.98 };
   }
-  if (/\b(list|show|display)\b.*\b(inventory|stock)\b/i.test(text) ||
-      /\binventory\b.*\b(list|show)\b/i.test(text)) {
+
+  if (
+    /\b(low\s+stock|ubos|konti\s+na|mababa)\b.*\b(inventory|stock)\b/i.test(text) ||
+    /\b(inventory|stock)\b.*\b(low\s+stock|ubos|konti\s+na)\b/i.test(text)
+  ) {
+    return { tool: "inventory.list", parameters: { lowStock: true }, confidence: 0.96 };
+  }
+
+  if (
+    /\b(list|show|display)\b.*\b(inventory|stock)\b/i.test(text) ||
+    /\binventory\b.*\b(list|show)\b/i.test(text)
+  ) {
     return { tool: "inventory.list", parameters: {}, confidence: 0.98 };
   }
-  if (/\b(list|show|display)\b.*\bcatalog\b/i.test(text) ||
-      /\bcatalog\b.*\b(list|show)\b/i.test(text)) {
+
+  if (
+    /\b(list|show|display)\b.*\bcatalog\b/i.test(text) ||
+    /\bcatalog\b.*\b(list|show)\b/i.test(text)
+  ) {
     return { tool: "catalog.list", parameters: {}, confidence: 0.98 };
   }
+
+  const customerHint = extractCustomerSearchHint(text);
+  if (
+    customerHint &&
+    customerHint.length >= 2 &&
+    !/\blist\b/i.test(text) &&
+    !/^all\b/i.test(customerHint) &&
+    !/^customers?$/i.test(customerHint) &&
+    !/^suki$/i.test(customerHint)
+  ) {
+    return { tool: "customer.get", parameters: { search: customerHint }, confidence: 0.96 };
+  }
+
   return null;
 }
 
@@ -51,7 +130,7 @@ export async function parseRiverAiAgentIntent(input: {
   const message = input.message.trim().slice(0, 1500);
   if (!message) return { ...FALLBACK };
 
-  const fast = parseFastListIntent(message);
+  const fast = parseFastRiverAiAgentIntent(message);
   if (fast) return fast;
 
   if (!getGeminiApiKey()) {

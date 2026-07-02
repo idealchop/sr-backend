@@ -17,7 +17,15 @@ function isWriteTool(tool: string): boolean {
 }
 
 function formatListReply(tool: string, total: number, shown: number): string {
-  if (total === 0) return "Walang resulta para sa filter na iyan.";
+  if (total === 0) {
+    const emptyByTool: Record<string, string> = {
+      "customer.list": "Walang customer na tumugma sa hinahanap mo.",
+      "transaction.list": "Walang transaction na tumugma sa filter na iyan.",
+      "inventory.list": "Walang inventory item na tumugma sa filter na iyan.",
+      "catalog.list": "Walang catalog entries pa sa station na ito.",
+    };
+    return emptyByTool[tool] || "Walang resulta para sa filter na iyan.";
+  }
   return `Nakita ko **${total}** row(s). Showing ${shown}.`;
 }
 
@@ -64,8 +72,24 @@ export async function runRiverAiAgentTurn(args: {
 
   if (tool === "customer.get") {
     const { rows, total } = await getCustomerForAgent(args.businessId, parameters);
+    if (total === 0) {
+      return {
+        reply: "Walang customer na tumugma sa pangalan o detalye na iyan.",
+        tool,
+        rows,
+        total,
+      };
+    }
+    if (total > 1) {
+      return {
+        reply: `May **${total}** customers na tumugma — piliin sa listahan o mag-specify ng mas exact na pangalan.`,
+        tool,
+        rows,
+        total,
+      };
+    }
     return {
-      reply: total ? "Customer profile ready." : "Customer not found.",
+      reply: `Customer profile: **${rows[0]?.label || "—"}**.`,
       tool,
       rows,
       total,
@@ -105,7 +129,7 @@ export async function runRiverAiAgentTurn(args: {
   if (tool === "catalog.list") {
     const { rows, total } = await listCatalogForAgent(args.businessId);
     return {
-      reply: `Catalog has ${total} entries.`,
+      reply: total === 0 ? "Walang catalog entries pa sa station na ito." : `Catalog has **${total}** entries.`,
       tool,
       rows,
       total,
