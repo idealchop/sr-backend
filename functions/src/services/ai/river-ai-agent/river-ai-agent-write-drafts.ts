@@ -158,11 +158,13 @@ export async function buildWriteDraft(args: {
     return {
       payload,
       preview: preview(
-        `New ${subtype.replace(/_/g, " ")}`,
-        `${customerName || "Walk-in"} · ${qty} gal · ₱${totalAmount}`,
+        type === "expense" ? "Record expense" : `New ${subtype.replace(/_/g, " ")}`,
+        type === "expense" ?
+          `${str(p.notes) || "Expense"} · ₱${totalAmount}` :
+          `${customerName || "Walk-in"} · ${qty} gal · ₱${totalAmount}`,
         [
           { label: "Type", value: subtype },
-          { label: "Schedule", value: scheduledAt.slice(0, 10) },
+          { label: type === "expense" ? "Date" : "Schedule", value: scheduledAt.slice(0, 10) },
           { label: "Payment", value: String(payload.paymentStatus) },
         ],
         !customerId && type !== "walkin" && type !== "expense" ?

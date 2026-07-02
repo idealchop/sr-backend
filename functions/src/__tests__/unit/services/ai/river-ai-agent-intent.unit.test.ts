@@ -74,4 +74,20 @@ describe("parseFastWriteRiverAiAgentIntent", () => {
     expect(intent?.parameters.quantity).toBe(5);
     expect(String(intent?.parameters.scheduledAt)).toContain("T08:00:00");
   });
+
+  it("drafts walk-in sale", () => {
+    const intent = parseFastWriteRiverAiAgentIntent("record walk-in 5 gallons paid");
+    expect(intent?.tool).toBe("transaction.create");
+    expect(intent?.parameters.subtype).toBe("walkin");
+    expect(intent?.parameters.quantity).toBe(5);
+    expect(intent?.parameters.paymentStatus).toBe("paid");
+  });
+
+  it("drafts expense", () => {
+    const intent = parseFastWriteRiverAiAgentIntent("record expense fuel 500");
+    expect(intent?.tool).toBe("transaction.create");
+    expect(intent?.parameters.subtype).toBe("expense");
+    expect(intent?.parameters.totalAmount).toBe(500);
+    expect(intent?.parameters.notes).toBe("fuel");
+  });
 });

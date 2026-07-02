@@ -39,13 +39,34 @@ function scheduledAtFromHint(text: string): string {
   return new Date().toISOString();
 }
 
+function parseAmountFromText(text: string): number | undefined {
+  const match = text.match(/(?:₱|php\s*)?(\d+(?:\.\d+)?)/i);
+  if (!match) return undefined;
+  const amount = Number(match[1]);
+  return Number.isFinite(amount) && amount > 0 ? amount : undefined;
+}
+
+function isPaidHint(text: string): boolean {
+  return /\b(paid|bayad na|nabayaran|cash paid)\b/i.test(text);
+}
+
 function parseDeliveryCustomerName(rest: string): string {
   return rest
     .replace(/(\d+)\s*(?:gallons?|gal|gals?)\b/gi, " ")
-    .replace(/\b(today|ngayon|tomorrow|bukas)\b/gi, " ")
+    .replace(/\b(today|ngayon|tomorrow|bukas|paid|bayad na|nabayaran|cash paid)\b/gi, " ")
     .replace(/[,.!?]+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function parseExpenseDescription(rest: string, amount?: number): string {
+  let description = rest
+    .replace(/(?:₱|php\s*)?\d+(?:\.\d+)?/gi, " ")
+    .replace(/\b(paid|bayad na|nabayaran|cash)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!description && amount != null) description = "Expense";
+  return description || "Expense";
 }
 
 function extractCustomerSearchHint(text: string): string | null {
@@ -239,6 +260,48 @@ export function parseFastWriteRiverAiAgentIntent(message: string): RiverAiAgentI
           customerName,
           quantity,
           scheduledAt: scheduledAtFromHint(rest),
+        },
+        confidence: 0.9,
+      };
+    }
+  }
+
+  const walkinMatch = text.match(/(?:add|record|create)\s+walk-?in(?:\s+(?:sale|transaction))?\s*(.*)$/i);
+  if (walkinMatch) {
+    const rest = (walkinMatch[1] || "").trim();
+    const qtyMatch = rest.match(/(\d+)\s*(?:gallons?|gal|gals?)\b/i);
+    const quantity = qtyMatch ? Number(qtyMatch[1]) : 1;
+    const totalAmount = parseAmountFromText(rest);
+    const customerName = parseDeliveryCustomerName(rest);
+    return {
+      tool: "transaction.create",
+      parameters: {
+        subtype: "walkin",
+        quantity,
+        customerName: customerName.length >= 2 ? customerName : "Walk-in",
+        totalAmount,
+        paymentStatus: isPaidHint(rest) ? "paid" : undefined,
+        paid: isPaidHint(rest) || undefined,
+        scheduledAt: scheduledAtFromHint(rest),
+      },
+      confidence: 0.9,
+    };
+  }
+
+  const expenseMatch = text.match(/(?:add|record|create)\s+expense\s+(.*)$/i);
+  if (expenseMatch?.[1]) {
+    const rest = expenseMatch[1].trim();
+    const totalAmount = parseAmountFromText(rest);
+    if (totalAmount != null) {
+      return {
+        tool: "transaction.create",
+        parameters: {
+          subtype: "expense",
+          totalAmount,
+          notes: parseExpenseDescription(rest, totalAmount),
+          paymentStatus: isPaidHint(rest) ? "paid" : undefined,
+          paid: isPaidHint(rest) || undefined,
+          scheduledAt: new Date().toISOString(),
         },
         confidence: 0.9,
       };
