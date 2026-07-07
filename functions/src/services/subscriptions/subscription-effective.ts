@@ -131,6 +131,10 @@ export function isEntitlingRow(data: Record<string, unknown>, now: Date): boolea
 
   const cycle = String(data.billingCycle || "");
   if (cycle === "trial") {
+    const meta = data.metadata as Record<string, unknown> | undefined;
+    if (String(meta?.trialState || "running").toLowerCase() === "paused") {
+      return false;
+    }
     return now <= view.expiresAt;
   }
   if (isPaidBillingCycle(cycle)) {
@@ -206,6 +210,14 @@ export function pickPendingPaidUpgrade(
     if (isStarterPlan(String(row.data.planCode || ""))) continue;
 
     if (st === "pending" && ps === "pending_verification") {
+      return row;
+    }
+
+    if (
+      st === "active" &&
+      ps === "pending_verification" &&
+      !isStarterPlan(String(row.data.planCode || ""))
+    ) {
       return row;
     }
 

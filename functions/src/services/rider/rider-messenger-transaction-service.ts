@@ -2,6 +2,7 @@ import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
 import {
   TransactionService,
+  type CollectionItem,
   type Transaction,
 } from "../transactions/transaction-service";
 import {
@@ -77,6 +78,58 @@ async function notifyCustomerIfNeeded(params: {
       err,
     });
   });
+}
+
+export function buildRiderMessengerCompleteUpdates(params: {
+  transaction: Transaction;
+  cashAmount?: number;
+  deliveryProofUrl?: string;
+}): Partial<Transaction> {
+  const updates: Partial<Transaction> = { deliveryStatus: "completed" };
+
+  if (params.deliveryProofUrl?.trim()) {
+    updates.deliveryProofUrl = params.deliveryProofUrl.trim();
+  }
+
+  const cashAmount = params.cashAmount;
+  if (cashAmount != null && cashAmount > 0) {
+    const payment = {
+      id: `rm_${Date.now()}`,
+      amount: cashAmount,
+      date: new Date().toISOString(),
+      method: "cash" as const,
+      confirmedByRider: true,
+      notes: "Cash via Messenger",
+    };
+    const amountPaid = Math.max(0, (params.transaction.amountPaid || 0) + cashAmount);
+    const totalAmount = Math.max(0, params.transaction.totalAmount || 0);
+    const balanceDue = Math.max(0, totalAmount - amountPaid);
+    updates.amountPaid = amountPaid;
+    updates.balanceDue = balanceDue;
+    updates.paymentStatus =
+      balanceDue <= 0 ? "paid" : amountPaid > 0 ? "partial" : "unpaid";
+    updates.payments = [...(params.transaction.payments || []), payment];
+  }
+
+  return updates;
+}
+
+export function applyReportQtyToCollectionItem(
+  item: CollectionItem,
+  qtyCollected: number,
+): CollectionItem {
+  const qty = Math.max(0, Math.floor(qtyCollected));
+  const expected = Math.max(0, item.qtyExpected || 0);
+  const deficitQty = Math.max(0, expected - qty);
+  return {
+    ...item,
+    qtyCollected: qty,
+    qtyOk: qty,
+    qtyDamaged: 0,
+    qtyMissing: deficitQty,
+    deficitQty,
+    status: deficitQty > 0 ? "missing" : "ok",
+  };
 }
 
 export async function patchRiderMessengerTransaction(params: {

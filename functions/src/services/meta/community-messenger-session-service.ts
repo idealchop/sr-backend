@@ -18,6 +18,8 @@ export type CommunityMessengerSession = {
   fields: CommunityOrderFields;
   rawMessage: string;
   awaitingConfirmation?: "delivery" | "order";
+  repairAwait?: "address" | "order";
+  missingFields?: string[];
   wizardStep?: CommunityMessengerWizardStep;
   flow?: "wizard" | "template" | "ai";
   expiresAt: FirebaseFirestore.Timestamp;
@@ -38,6 +40,8 @@ function mergeDefinedFields(
     ...(base.location ? { location: base.location } : {}),
     ...(base.email ? { email: base.email } : {}),
     ...(base.number ? { number: base.number } : {}),
+    ...(base.orderRaw ? { orderRaw: base.orderRaw } : {}),
+    ...(base.orderLines?.length ? { orderLines: base.orderLines } : {}),
     ...(patch.name ? { name: patch.name } : {}),
     ...(patch.delivery !== undefined ? { delivery: patch.delivery } : {}),
     ...(patch.qty !== undefined ? { qty: patch.qty } : {}),
@@ -47,6 +51,8 @@ function mergeDefinedFields(
     ...(patch.location ? { location: patch.location } : {}),
     ...(patch.email ? { email: patch.email } : {}),
     ...(patch.number ? { number: patch.number } : {}),
+    ...(patch.orderRaw ? { orderRaw: patch.orderRaw } : {}),
+    ...(patch.orderLines?.length ? { orderLines: patch.orderLines } : {}),
   };
 }
 
@@ -79,6 +85,8 @@ export async function saveCommunityMessengerSession(params: {
   fields: CommunityOrderFields;
   rawMessage: string;
   awaitingConfirmation?: "delivery" | "order";
+  repairAwait?: "address" | "order";
+  missingFields?: string[];
   wizardStep?: CommunityMessengerWizardStep;
   flow?: "wizard" | "template" | "ai";
 }): Promise<void> {
@@ -94,7 +102,18 @@ export async function saveCommunityMessengerSession(params: {
     updatedAt: FieldValue.serverTimestamp(),
   };
 
-  await db.collection(COLLECTION).doc(params.psid).set(doc, { merge: true });
+  await db.collection(COLLECTION).doc(params.psid).set(
+    {
+      ...doc,
+      ...(params.repairAwait ?
+        { repairAwait: params.repairAwait } :
+        { repairAwait: FieldValue.delete() }),
+      ...(params.missingFields?.length ?
+        { missingFields: params.missingFields } :
+        { missingFields: FieldValue.delete() }),
+    },
+    { merge: true },
+  );
 }
 
 export async function clearCommunityMessengerSession(psid: string): Promise<void> {

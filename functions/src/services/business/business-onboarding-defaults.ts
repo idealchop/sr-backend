@@ -13,15 +13,16 @@ export const DEFAULT_QUICK_TOUR_PAGE = {
 } as const;
 
 export const DEFAULT_GETTING_STARTED = {
-  addCollection: false,
+  verifyEmail: false,
   addCustomer: false,
   addDelivery: false,
-  addExpense: false,
   addInventory: false,
-  addPaymentAccount: false,
   addWalkin: false,
+  addExpense: false,
+  shareStationLink: false,
+  addOnlinePayments: false,
+  chatSupport: false,
   useAi: false,
-  verifyEmail: false,
 } as const;
 
 export type QuickTourPageKey = keyof typeof DEFAULT_QUICK_TOUR_PAGE;

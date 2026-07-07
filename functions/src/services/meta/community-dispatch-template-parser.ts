@@ -1,3 +1,10 @@
+/** One parsed line from the Order: field — qty, container, and water type. */
+export type CommunityOrderLine = {
+  qty: number;
+  container: "round" | "slim";
+  waterType: "alkaline" | "mineral" | "purified";
+};
+
 /** Normalized community Page order fields (CP-03 / order-template-spec). */
 export type CommunityOrderFields = {
   name?: string;
@@ -7,12 +14,15 @@ export type CommunityOrderFields = {
   location?: string;
   email?: string;
   number?: string;
+  /** Raw Order: field text, e.g. "3 slim - alkaline, 4 round - purified". */
+  orderRaw?: string;
+  orderLines?: CommunityOrderLine[];
 };
 
 export type CommunityTemplateParseResult = {
   ok: boolean;
   fields: CommunityOrderFields;
-  /** Missing or invalid field keys, e.g. `number`, `location`. */
+  /** Missing or invalid field keys, e.g. `order`, `location`. */
   errors: string[];
   /** Raw label → value map from the template. */
   raw: Record<string, string>;
@@ -21,8 +31,8 @@ export type CommunityTemplateParseResult = {
 };
 
 type LabelSpec = {
-  key: keyof CommunityOrderFields | "deliveryRaw" | "qtyRaw";
-  field: keyof CommunityOrderFields;
+  key: keyof CommunityOrderFields | "deliveryRaw" | "qtyRaw" | "orderRaw";
+  field: keyof CommunityOrderFields | "orderRaw";
   aliases: string[];
 };
 
@@ -41,6 +51,11 @@ const LABEL_SPECS: LabelSpec[] = [
     key: "qtyRaw",
     field: "qty",
     aliases: ["qty", "quantity", "dami", "galon", "gallon", "gallons", "pcs", "pieces"],
+  },
+  {
+    key: "orderRaw",
+    field: "orderRaw",
+    aliases: ["order", "orders", "refill order", "refill", "my order"],
   },
   {
     key: "preferredWaterType",
@@ -71,13 +86,16 @@ const LABEL_SPECS: LabelSpec[] = [
   },
 ];
 
-const NORMALIZED_LABEL_TO_FIELD = new Map<string, keyof CommunityOrderFields>();
+const NORMALIZED_LABEL_TO_FIELD = new Map<string, keyof CommunityOrderFields | "orderRaw">();
 
 for (const spec of LABEL_SPECS) {
   for (const alias of spec.aliases) {
     NORMALIZED_LABEL_TO_FIELD.set(normalizeLabel(alias), spec.field);
   }
 }
+
+const ORDER_LINE_PATTERN =
+  /(\d+)\s*(round|slim)\s*[-–—]?\s*(alkaline|mineral|purified)/gi;
 
 function normalizeLabel(label: string): string {
   return label.trim().toLowerCase().replace(/\s+/g, " ");
@@ -101,6 +119,22 @@ function splitLabelValue(line: string): { label: string; value: string } | null 
   return null;
 }
 
+function normalizePlaceholderValue(value: string): string {
+  const v = value.trim();
+  if (/^\(required\)$/i.test(v)) return "";
+  if (/^\(optional\)$/i.test(v)) return "";
+  if (/^\(required\)\s+format/i.test(v)) return "";
+  if (/^(none|n\/?a|na|wala|no email|no number|no phone)$/i.test(v)) return "";
+  return v;
+}
+
+function isPlaceholderOrderValue(value: string): boolean {
+  const v = value.trim();
+  if (!v) return true;
+  if (/^\(required\)/i.test(v) && /format/i.test(v)) return true;
+  return false;
+}
+
 function parseDeliveryValue(raw: string): boolean | undefined {
   const v = raw.trim().toLowerCase();
   if (!v) return undefined;
@@ -120,51 +154,106 @@ function parseQtyValue(raw: string): number | undefined {
 }
 
 function parsePhoneValue(raw: string): string | undefined {
-  const digits = raw.replace(/\D/g, "");
+  const normalized = normalizePlaceholderValue(raw);
+  if (!normalized) return undefined;
+  const digits = normalized.replace(/\D/g, "");
   if (digits.length < 10 || digits.length > 13) return undefined;
-  return raw.trim();
+  return normalized;
 }
 
 function parseEmailValue(raw: string): string | undefined {
-  const email = raw.trim();
+  const email = normalizePlaceholderValue(raw);
   if (!email) return undefined;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return undefined;
   return email;
 }
 
+/** Parse Order: lines like "3 slim - alkaline, 4 round - purified". */
+export function parseCommunityOrderLines(raw: string): CommunityOrderLine[] {
+  const lines: CommunityOrderLine[] = [];
+  ORDER_LINE_PATTERN.lastIndex = 0;
+
+  let match = ORDER_LINE_PATTERN.exec(raw);
+  while (match) {
+    const qty = Number(match[1]);
+    if (Number.isFinite(qty) && qty > 0) {
+      lines.push({
+        qty: Math.round(qty),
+        container: match[2].toLowerCase() as "round" | "slim",
+        waterType: match[3].toLowerCase() as "alkaline" | "mineral" | "purified",
+      });
+    }
+    match = ORDER_LINE_PATTERN.exec(raw);
+  }
+
+  return lines;
+}
+
+export function formatCommunityOrderLines(lines: CommunityOrderLine[]): string {
+  return lines
+    .map((line) => `${line.qty} ${line.container} - ${line.waterType}`)
+    .join(", ");
+}
+
+function applyOrderField(
+  fields: CommunityOrderFields,
+  raw: Record<string, string>,
+  value: string,
+): void {
+  const normalized = normalizePlaceholderValue(value);
+  if (isPlaceholderOrderValue(normalized)) return;
+
+  raw.orderRaw = normalized;
+  fields.orderRaw = normalized.slice(0, 240) || undefined;
+
+  const lines = parseCommunityOrderLines(normalized);
+  if (lines.length) {
+    fields.orderLines = lines;
+    fields.qty = lines.reduce((sum, line) => sum + line.qty, 0);
+    fields.preferredWaterType = formatCommunityOrderLines(lines);
+  }
+}
+
 function assignField(
   fields: CommunityOrderFields,
   raw: Record<string, string>,
-  field: keyof CommunityOrderFields,
+  field: keyof CommunityOrderFields | "orderRaw",
   value: string,
 ): void {
-  raw[field] = value;
+  if (field === "orderRaw") {
+    applyOrderField(fields, raw, value);
+    return;
+  }
+
+  const normalized = normalizePlaceholderValue(value);
+  raw[field] = normalized;
+
   if (field === "delivery") {
-    fields.delivery = parseDeliveryValue(value);
+    fields.delivery = parseDeliveryValue(normalized);
     return;
   }
   if (field === "qty") {
-    fields.qty = parseQtyValue(value);
+    fields.qty = parseQtyValue(normalized);
     return;
   }
   if (field === "number") {
-    fields.number = parsePhoneValue(value);
+    fields.number = parsePhoneValue(normalized);
     return;
   }
   if (field === "email") {
-    fields.email = parseEmailValue(value);
+    fields.email = parseEmailValue(normalized);
     return;
   }
   if (field === "name") {
-    fields.name = value.trim().slice(0, 120) || undefined;
+    fields.name = normalized.slice(0, 120) || undefined;
     return;
   }
   if (field === "preferredWaterType") {
-    fields.preferredWaterType = value.trim().slice(0, 80) || undefined;
+    fields.preferredWaterType = normalized.slice(0, 80) || undefined;
     return;
   }
   if (field === "location") {
-    fields.location = value.trim().slice(0, 240) || undefined;
+    fields.location = normalized.slice(0, 240) || undefined;
   }
 }
 
@@ -218,7 +307,7 @@ function extractLabelValuePairs(text: string): Array<{ label: string; value: str
   const linePairs: Array<{ label: string; value: string }> = [];
   for (const line of normalized.split("\n")) {
     const pair = splitLabelValue(line);
-    if (!pair || !pair.value) continue;
+    if (!pair) continue;
     if (!NORMALIZED_LABEL_TO_FIELD.has(normalizeLabel(pair.label))) continue;
     linePairs.push(pair);
   }
@@ -238,21 +327,23 @@ function extractLabelValuePairs(text: string): Array<{ label: string; value: str
     const next = inlineMatches[i + 1];
     const valueEnd = next ? next.labelStart : normalized.length;
     const value = normalized.slice(current.valueStart, valueEnd).trim();
-    if (value) {
-      inlinePairs.push({ label: current.label, value });
-    }
+    inlinePairs.push({ label: current.label, value });
   }
 
   return inlinePairs.length >= 2 ? inlinePairs : linePairs;
 }
 
 function countRecognizedLabels(text: string): number {
-  const fields = new Set<keyof CommunityOrderFields>();
+  const fields = new Set<string>();
   for (const pair of extractLabelValuePairs(text)) {
     const field = NORMALIZED_LABEL_TO_FIELD.get(normalizeLabel(pair.label));
     if (field) fields.add(field);
   }
   return fields.size;
+}
+
+function usesNewOrderFormat(fields: CommunityOrderFields): boolean {
+  return Boolean(fields.orderRaw || fields.orderLines?.length);
 }
 
 /**
@@ -265,7 +356,13 @@ export function parseCommunityOrderTemplate(text: string): CommunityTemplatePars
   const looksLikeTemplate = countRecognizedLabels(trimmed) >= 2;
 
   if (!trimmed) {
-    return { ok: false, fields, errors: ["name", "qty", "number", "location"], raw, looksLikeTemplate: false };
+    return {
+      ok: false,
+      fields,
+      errors: ["name", "order", "location"],
+      raw,
+      looksLikeTemplate: false,
+    };
   }
 
   for (const pair of extractLabelValuePairs(trimmed)) {
@@ -300,21 +397,34 @@ export function validateCommunityOrderFields(fields: CommunityOrderFields): stri
   const errors: string[] = [];
 
   if (!fields.name?.trim()) errors.push("name");
-  if (fields.delivery === undefined) errors.push("delivery");
-  if (fields.qty === undefined || fields.qty <= 0) errors.push("qty");
-  if (!fields.number) errors.push("number");
-  if (fields.delivery === true && !fields.location?.trim()) errors.push("location");
+
+  const hasOrderLines = (fields.orderLines?.length ?? 0) > 0;
+  const hasLegacyQty = fields.qty !== undefined && fields.qty > 0 && !usesNewOrderFormat(fields);
+
+  if (hasOrderLines) {
+    if (fields.delivery === true && !fields.location?.trim()) errors.push("location");
+  } else if (hasLegacyQty) {
+    if (fields.delivery === undefined) errors.push("delivery");
+    if (fields.qty === undefined || fields.qty <= 0) errors.push("qty");
+    if (!fields.number) errors.push("number");
+    if (fields.delivery === true && !fields.location?.trim()) errors.push("location");
+  } else {
+    errors.push("order");
+    if (fields.delivery === true && !fields.location?.trim()) errors.push("location");
+  }
+
   if (fields.email && !parseEmailValue(fields.email)) errors.push("email");
 
   return errors;
 }
 
 export const COMMUNITY_FIELD_LABELS: Record<string, string> = {
-  name: "Name",
-  delivery: "Delivery or pickup (optional — defaults to delivery)",
-  qty: "Quantity",
+  name: "Pangalan (Name)",
+  delivery: "Delivery o pickup (optional — delivery ang default)",
+  qty: "Dami",
+  order: "Order (hal. 3 slim - alkaline)",
   location: "Address",
-  number: "Phone Number",
-  email: "Email",
-  preferredWaterType: "Water",
+  number: "Number (optional lang)",
+  email: "Email (optional lang)",
+  preferredWaterType: "Klase ng tubig",
 };

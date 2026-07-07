@@ -1,6 +1,9 @@
 import { RiderMessengerLinkService } from "./rider-messenger-link-service";
 import { parseRiderMessengerPostback } from "./rider-messenger-command-service";
+import { parseMessengerLocationAttachment } from "../meta/meta-messenger-location";
 import {
+  handleRiderMessengerInboundImage,
+  handleRiderMessengerInboundLocation,
   handleRiderMessengerInboundText,
   handleRiderMessengerPostback,
 } from "./rider-messenger-intake-service";
@@ -11,14 +14,17 @@ export type MetaMessagingEventLike = {
     mid?: string;
     text?: string;
     is_echo?: boolean;
-    attachments?: unknown[];
+    attachments?: Array<{ type?: string; payload?: { url?: string } }>;
     quick_reply?: { payload?: string };
   };
   postback?: { payload?: string };
 };
 
-const RIDER_VERB_RE =
-  /^(LINK|JOBS|START|DONE|FAIL|CANCEL|CLAIM|REPORT|HELP|STATS|YES|NO|OO|HINDI|MENU|CONFIRM)(\s|$)/i;
+const RIDER_VERB_RE = new RegExp(
+  "^(LINK|JOBS|GROUP|NEARBY|START|DONE|FAIL|CANCEL|CLAIM|ORDER|DETAILS|REPORT|REASON|" +
+    "HELP|STATS|CHAT|CLOSE\\s+CHAT|CLOSECHAT|YES|NO|OO|HINDI|MENU|CONFIRM)(\\s|$)",
+  "i",
+);
 
 function readSenderPsid(event: MetaMessagingEventLike): string | undefined {
   const id = event.sender?.id?.trim();
@@ -71,6 +77,28 @@ export async function handleRiderMessengerEvent(
 
   if (event.postback?.payload?.trim()) return;
   if (event.message?.is_echo === true) return;
+
+  const locationPin = parseMessengerLocationAttachment(event.message);
+  if (locationPin) {
+    await handleRiderMessengerInboundLocation({
+      psid,
+      latitude: locationPin.latitude,
+      longitude: locationPin.longitude,
+      metaMessageId: event.message?.mid?.trim(),
+    });
+    return;
+  }
+
+  const imageUrl = event.message?.attachments?.find((a) => a.type === "image")?.payload?.url;
+  if (imageUrl) {
+    await handleRiderMessengerInboundImage({
+      psid,
+      imageUrl,
+      caption: event.message?.text?.trim(),
+      metaMessageId: event.message?.mid?.trim(),
+    });
+    return;
+  }
 
   const text = event.message?.text?.trim();
   if (text) {

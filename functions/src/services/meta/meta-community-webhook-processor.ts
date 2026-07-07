@@ -17,18 +17,15 @@ import { readMetaCommunityPageId } from "./meta-messenger-send-service";
 import {
   handleRiderMessengerEvent,
   shouldRouteToRiderMessenger,
+  type MetaMessagingEventLike,
 } from "../rider/rider-messenger-routing";
+import {
+  handleTeamMessengerEvent,
+  shouldRouteToTeamMessenger,
+} from "../team/team-messenger-routing";
 
-type MetaMessagingEvent = {
-  sender?: { id?: string };
+type MetaMessagingEvent = MetaMessagingEventLike & {
   recipient?: { id?: string };
-  message?: {
-    mid?: string;
-    text?: string;
-    is_echo?: boolean;
-    attachments?: unknown[];
-    quick_reply?: { payload?: string };
-  };
   postback?: { payload?: string; title?: string };
 };
 
@@ -60,6 +57,11 @@ async function handleMessagingEvent(event: MetaMessagingEvent): Promise<void> {
 
   if (await shouldRouteToRiderMessenger(event)) {
     await handleRiderMessengerEvent(event);
+    return;
+  }
+
+  if (await shouldRouteToTeamMessenger(event)) {
+    await handleTeamMessengerEvent(event);
     return;
   }
 

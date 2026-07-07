@@ -15,6 +15,7 @@ import {
   type CommunityChannelContact,
 } from "./community-channel-contact";
 import { sendCommunityChannelText } from "./community-channel-outbound-service";
+import { sendCommunityDeliveryChatDiscoveryButton, closeDeliveryChatOnOrderComplete } from "./delivery-messenger-chat-service";
 import {
   loadCommunityDeliveryReceiptContext,
   markCommunityDeliveryNotified,
@@ -22,38 +23,100 @@ import {
   sendCommunityMessengerReceiptBundle,
 } from "./community-messenger-delivery-receipt-service";
 
+import {
+  formatCommunityOrderLines,
+  type CommunityOrderFields,
+} from "./community-dispatch-template-parser";
+import {
+  COMMUNITY_ORDER_AGAIN_HINT,
+  COMMUNITY_PRICE_BEFORE_ACCEPT_HINT,
+} from "./community-messenger-copy";
+
+/** Minutes after offers go out before a gentle wait nudge (before radius expand). */
+export const COMMUNITY_WAIT_NUDGE_AFTER_MINUTES = 2;
+
+export type CommunityMessengerNotifyResult = { ok: true } | { ok: false; reason: string };
+
 export function buildCommunityOrderSummaryMessage(params: {
-  fields: import("./community-dispatch-template-parser").CommunityOrderFields;
+  fields: CommunityOrderFields;
   referenceId: string;
   geocode?: import("./community-dispatch-request-types").CommunityDispatchGeocode;
   stationName?: string;
 }): string {
-  const deliveryLabel = params.fields.delivery ? "Delivery" : "Pickup";
   const lines = [
-    "Thank you — your order has been received. ✨",
+    "Salamat po — natanggap na ang order mo! ✨",
     "",
     `Reference: ${params.referenceId}`,
     "",
-    "Here's what we captured:",
+    "Narito ang na-save namin:",
     `• Name: ${params.fields.name}`,
-    `• ${deliveryLabel}: ${params.fields.qty} gal`,
-    `• Mobile: ${params.fields.number}`,
   ];
 
+  if (params.fields.orderLines?.length) {
+    lines.push(`• Order: ${formatCommunityOrderLines(params.fields.orderLines)}`);
+    lines.push(`• Total: ${params.fields.qty ?? "—"} container(s)`);
+  } else {
+    const deliveryLabel = params.fields.delivery ? "Delivery" : "Pickup";
+    lines.push(`• ${deliveryLabel}: ${params.fields.qty} gal`);
+  }
+
+  if (params.fields.number) {
+    lines.push(`• Number: ${params.fields.number}`);
+  }
+
   if (params.geocode?.formattedAddress) {
-    lines.push(`• Location verified: ${params.geocode.formattedAddress}`);
+    lines.push(`• Address (verified): ${params.geocode.formattedAddress}`);
   }
   if (params.stationName) {
     lines.push(`• Station: ${params.stationName}`);
   }
 
-  lines.push("", "Salamat po for choosing River Smart Refill! 💧");
+  lines.push("", "Salamat po sa River Smart Refill! 💧");
   return lines.join("\n");
 }
 
-/** Shown on ack / expand messages — cancel only while waiting for accept. */
-export const COMMUNITY_CANCEL_WHILE_WAITING_HINT =
-  "While waiting for a station to accept, reply CANCEL to cancel this request.";
+/** Shown on ack / expand messages — encourage waiting; cancel requires a reason. */
+export const COMMUNITY_CANCEL_WHILE_WAITING_HINT = [
+  "Sandali lang po — hinihintay natin na may tumanggap ng order mo.",
+  "Kung kailangan i-cancel: CANCEL - {reason}",
+].join("\n");
+
+/** Prompt when customer sends CANCEL without a reason. */
+export function buildCommunityCancelReasonRequiredMessage(referenceId?: string): string {
+  const lines = [
+    "Para ma-cancel, pakilagay ang reason sa format na ito:",
+    "",
+    "CANCEL - {reason}",
+    "",
+    "Halimbawa: CANCEL - may mas malapit na station",
+    "",
+  ];
+
+  if (referenceId?.trim()) {
+    lines.unshift(`Reference: ${referenceId.trim()}`, "");
+  }
+
+  lines.push(
+    "Hintayin lang po — wala pang tumatanggap. Salamat sa pasensya! 🙏",
+  );
+
+  return lines.join("\n");
+}
+
+/** Soft reminder while still waiting for first station accept. */
+export function buildCommunityWaitNudgeMessage(referenceId: string): string {
+  return [
+    "Quick update ✨",
+    "",
+    `Reference: ${referenceId}`,
+    "",
+    "Hinahanap pa namin ang station na tatanggap ng order mo. Sandali lang po — usually within a few minutes.",
+    "",
+    COMMUNITY_CANCEL_WHILE_WAITING_HINT,
+    "",
+    "Salamat po! 🙏",
+  ].join("\n");
+}
 
 /** Customer ack after order — nearby WRS count; first station to accept wins. */
 export function buildCommunityNearbyStationsAckMessage(params: {
@@ -64,23 +127,24 @@ export function buildCommunityNearbyStationsAckMessage(params: {
 }): string {
   const count = Math.max(0, params.nearbyCount);
   const stationLabel = count === 1 ? "station" : "stations";
-  const verb = count === 1 ? "can" : "can";
   const waitMinutes = params.offerResponseMinutes ?? COMMUNITY_OFFER_RESPONSE_MINUTES;
   const radius = params.searchRadiusKm;
 
   return [
-    "Thank you — we received your order! ✨",
+    "Salamat po — natanggap na ang order mo! ✨",
     "",
     `Reference: ${params.referenceId}`,
     "",
-    `Current search radius: ${radius} km`,
+    `Hinahanap sa loob ng ${radius} km ang location mo.`,
     "",
     count > 0 ?
-      `${count} nearby refilling ${stationLabel} ${verb} serve your location within ${radius} km.` :
-      `We're searching for refilling stations within ${radius} km of your location.`,
+      `${count} malapit na ${stationLabel} ang pinadalhan namin ng order mo.` :
+      `Naghahanap pa kami ng stations within ${radius} km.`,
     "",
-    `We've notified them now — please wait up to ${waitMinutes} minutes for a station to accept your order.`,
-    "The first station to accept will confirm your order and send your tracking link.",
+    `Hintayin lang po hanggang ${waitMinutes} min — unang tumanggap ang kukuha ng order.`,
+    "Pag may tumanggap, papadalhan ka namin ng tracking link.",
+    "",
+    COMMUNITY_PRICE_BEFORE_ACCEPT_HINT,
     "",
     COMMUNITY_CANCEL_WHILE_WAITING_HINT,
     "",
@@ -97,25 +161,23 @@ export function buildCommunitySearchRadiusExpandMessage(params: {
 }): string {
   const reasonLine =
     params.reason === "no_stations" ?
-      `No refilling stations were found within ${params.fromRadiusKm} km of your location yet.` :
-      `No station has accepted your order within ${params.fromRadiusKm} km yet.`;
+      `Walang station within ${params.fromRadiusKm} km pa.` :
+      `Walang tumanggap within ${params.fromRadiusKm} km pa.`;
 
   const nextLine =
     params.nearbyCount != null && params.nearbyCount > 0 ?
-      `We found ${params.nearbyCount} station${params.nearbyCount === 1 ? "" : "s"} within ${params.toRadiusKm} km and notified them now.` :
-      `We're now searching within ${params.toRadiusKm} km.`;
+      `May ${params.nearbyCount} station within ${params.toRadiusKm} km — pinadalhan na namin sila.` :
+      `Naghahanap na kami within ${params.toRadiusKm} km.`;
 
   return [
-    "Update on your order ✨",
+    "Update sa order mo ✨",
     "",
     `Reference: ${params.referenceId}`,
     "",
     reasonLine,
-    `Expanding search to ${params.toRadiusKm} km.`,
+    `Lalakihan namin ang search to ${params.toRadiusKm} km.`,
     "",
     nextLine,
-    "",
-    `Current search radius: ${params.toRadiusKm} km`,
     "",
     COMMUNITY_CANCEL_WHILE_WAITING_HINT,
     "",
@@ -126,28 +188,30 @@ export function buildCommunitySearchRadiusExpandMessage(params: {
 /** No WRS found in any search radius (5 / 10 / 15 km). */
 export function buildCommunityFinalNoWrsMessage(referenceId: string): string {
   return [
-    "We're sorry — we couldn't find a refilling station near your location right now.",
+    "Pasensya na po — walang station malapit sa location mo ngayon.",
     "",
     `Reference: ${referenceId}`,
     "",
-    "We searched within 5 km, then 10 km, and up to 15 km from your delivery location, but no eligible stations are available in your area yet.",
+    "Tinry namin sa 5 km, 10 km, at hanggang 15 km — wala pa kaming partner doon.",
     "",
-    "Please try again next time — we're growing our partner network and hope to serve you soon.",
+    COMMUNITY_ORDER_AGAIN_HINT,
     "",
-    "Salamat po for choosing River Smart Refill! 🙏",
+    "Salamat po! 🙏",
   ].join("\n");
 }
 
 /** Stations were found but none accepted within the search window. */
 export function buildCommunityFinalBusyMessage(referenceId: string): string {
   return [
-    "We're sorry — nearby refilling stations may be busy at the moment.",
+    "Pasensya na po — busy ang mga malapit na stations ngayon.",
     "",
     `Reference: ${referenceId}`,
     "",
-    "We searched within 5 km, then 10 km, and up to 15 km, and notified eligible stations, but none could accept your order in time.",
+    "Tinry namin sa 5 km, 10 km, at 15 km, pero walang nakapag-accept in time.",
     "",
-    "Please try again a little later — salamat po for your patience! 🙏",
+    COMMUNITY_ORDER_AGAIN_HINT,
+    "",
+    "Salamat po sa pasensya! 🙏",
   ].join("\n");
 }
 
@@ -158,13 +222,15 @@ export function buildCommunityDispatchExhaustedMessage(referenceId: string): str
 
 export function buildCommunityOrderCancelledMessage(referenceId: string): string {
   return [
-    "Your order request has been cancelled.",
+    "Na-cancel na ang order request mo.",
     "",
     `Reference: ${referenceId}`,
     "",
-    "No station had accepted yet, so nothing was charged or assigned.",
+    "Wala pang tumanggap, kaya walang charge o assignment.",
     "",
-    "You can send a new order anytime when you're ready. Salamat po! 🙏",
+    COMMUNITY_ORDER_AGAIN_HINT,
+    "",
+    "Salamat po! 🙏",
   ].join("\n");
 }
 
@@ -191,7 +257,7 @@ export function buildCommunityOrderAcceptedMessage(params: {
 }): string {
   const delivery = params.fields?.delivery !== false;
   const lines = [
-    "Great news — your order has been accepted! ✨",
+    "Good news — may tumanggap na ng order mo! ✨",
     "",
     `Station: ${params.stationName}`,
     `Reference: ${params.referenceId}`,
@@ -199,22 +265,27 @@ export function buildCommunityOrderAcceptedMessage(params: {
   ];
 
   if (params.fields?.name) {
-    lines.push("Order summary:");
+    lines.push("Order mo:");
     lines.push(`• Name: ${params.fields.name}`);
-    lines.push(`• ${delivery ? "Delivery" : "Pickup"}: ${params.fields.qty ?? "—"} gal`);
+    if (params.fields.orderLines?.length) {
+      lines.push(`• Order: ${formatCommunityOrderLines(params.fields.orderLines)}`);
+      lines.push(`• Total: ${params.fields.qty ?? "—"} container(s)`);
+    } else {
+      lines.push(`• ${delivery ? "Delivery" : "Pickup"}: ${params.fields.qty ?? "—"} gal`);
+    }
     if (params.fields.number) {
-      lines.push(`• Mobile: ${params.fields.number}`);
+      lines.push(`• Number: ${params.fields.number}`);
     }
     if (params.geocode?.formattedAddress) {
-      lines.push(`• Location: ${params.geocode.formattedAddress}`);
+      lines.push(`• Address: ${params.geocode.formattedAddress}`);
     } else if (params.fields.location?.trim()) {
-      lines.push(`• Location: ${params.fields.location.trim()}`);
+      lines.push(`• Address: ${params.fields.location.trim()}`);
     }
     lines.push("");
   }
 
   if (params.distanceKm != null) {
-    lines.push(`Distance from station: ${formatDistanceKmForMessenger(params.distanceKm)}`);
+    lines.push(`Layo mula sa station: ${formatDistanceKmForMessenger(params.distanceKm)}`);
   }
 
   if (params.etaMinutes != null) {
@@ -228,13 +299,78 @@ export function buildCommunityOrderAcceptedMessage(params: {
 
   lines.push(
     "",
-    "Tap the link below to open your order page and track delivery:",
+    "Buksan ang link para i-track ang delivery mo:",
     params.trackUrl,
     "",
-    "Salamat po for choosing River Smart Refill! 💧",
+    "Salamat po! 💧",
   );
 
   return lines.join("\n");
+}
+
+/** On the way — sent when station marks order in-transit. */
+export function buildCommunityOrderInTransitMessage(params: {
+  referenceId: string;
+  trackUrl: string;
+  riderName?: string;
+}): string {
+  const riderLine = params.riderName?.trim() ?
+    `Rider: ${params.riderName.trim()}` :
+    "Papunta na ang delivery mo.";
+
+  return [
+    "Update sa order mo! 🚚",
+    "",
+    `Reference: ${params.referenceId}`,
+    "",
+    riderLine,
+    "",
+    "Track dito:",
+    params.trackUrl,
+    "",
+    "Salamat po! 🙏",
+  ].join("\n");
+}
+
+export async function notifyCommunityOrderInTransit(params: {
+  businessId: string;
+  referenceId: string;
+  riderName?: string;
+}): Promise<CommunityMessengerNotifyResult> {
+  const context = await loadCommunityDeliveryReceiptContext({
+    businessId: params.businessId,
+    referenceId: params.referenceId,
+  });
+  if (!context) {
+    return { ok: false, reason: "not_community_order" };
+  }
+
+  const contact = buildCommunityChannelContact({
+    sourceChannel: context.sourceChannel ?? "community_messenger",
+    contactId: context.psid,
+  });
+  const trackUrl = buildCommunityOrderTrackUrl({
+    businessId: params.businessId,
+    referenceId: params.referenceId,
+  });
+  const message = buildCommunityOrderInTransitMessage({
+    referenceId: params.referenceId,
+    trackUrl,
+    riderName: params.riderName,
+  });
+
+  const result = await sendCommunityChannelText(contact, message);
+  if (!result.ok) {
+    logger.warn("notifyCommunityOrderInTransit send_failed", {
+      referenceId: params.referenceId,
+      reason: result.reason,
+    });
+    return { ok: false, reason: result.reason };
+  }
+
+  await sendCommunityDeliveryChatDiscoveryButton(contact);
+
+  return { ok: true };
 }
 
 export function resolveCommunityOrderAcceptedMetrics(params: {
@@ -291,7 +427,7 @@ export function buildCommunityDeliveryCompleteMessage(params: {
   const paymentReminder = params.paymentReminder ?? "none";
   const receiptChannel = params.receiptChannel ?? "messenger";
   const lines = [
-    "Your delivery is complete! 🎉",
+    "Tapos na ang delivery mo! 🎉",
     "",
     `Reference: ${params.referenceId}`,
     "",
@@ -299,19 +435,19 @@ export function buildCommunityDeliveryCompleteMessage(params: {
 
   if (paymentReminder === "unpaid") {
     lines.push(
-      "Please confirm receipt, rate your experience, and pay your order using your order tracker:",
+      "Pakiconfirm na natanggap mo, mag-rate, at magbayad sa order tracker:",
     );
   } else if (paymentReminder === "partial") {
     const balanceHint =
       params.balanceDue != null && params.balanceDue > 0 ?
-        ` (${formatMessengerPeso(params.balanceDue)} balance remaining)` :
+        ` (${formatMessengerPeso(params.balanceDue)} balance pa)` :
         "";
     lines.push(
-      `Please confirm receipt, rate your experience, and pay your remaining balance${balanceHint} using your order tracker:`,
+      `Pakiconfirm na natanggap mo, mag-rate, at bayaran ang natitira${balanceHint} sa order tracker:`,
     );
   } else {
     lines.push(
-      "Please confirm receipt and rate your experience using your order tracker:",
+      "Pakiconfirm na natanggap mo at mag-rate sa order tracker:",
     );
   }
 
@@ -319,23 +455,21 @@ export function buildCommunityDeliveryCompleteMessage(params: {
 
   if (receiptChannel === "email" && params.receiptEmail?.trim()) {
     lines.push(
-      "Your official receipt will be sent to the email you provided:",
+      "Ipapadala ang official receipt sa email mo:",
       `• ${params.receiptEmail.trim()}`,
       "",
     );
   } else {
     lines.push(
-      "Your official receipt will follow here in Messenger shortly.",
+      "Ipapadala ang official receipt dito sa Messenger.",
       "",
     );
   }
 
-  lines.push("Salamat po — we hope you enjoy your refill! 💧");
+  lines.push("Salamat po — enjoy your refill! 💧");
 
   return lines.join("\n");
 }
-
-export type CommunityMessengerNotifyResult = { ok: true } | { ok: false; reason: string };
 
 function resolveNotifyContact(params: {
   contact?: CommunityChannelContact;
@@ -395,6 +529,8 @@ export async function notifyCommunityOrderAccepted(params: {
     return { ok: false, reason: result.reason };
   }
 
+  await sendCommunityDeliveryChatDiscoveryButton(contact);
+
   return { ok: true };
 }
 
@@ -446,6 +582,17 @@ export async function maybeSendCommunityMessengerDeliveryComplete(params: {
     referenceId: params.referenceId,
   });
   if (!context) return;
+
+  await closeDeliveryChatOnOrderComplete({
+    businessId: params.businessId,
+    referenceId: params.referenceId,
+  }).catch((err) => {
+    logger.warn("delivery_chat_close_on_complete_failed", {
+      businessId: params.businessId,
+      referenceId: params.referenceId,
+      err,
+    });
+  });
 
   const trackUrl = buildCommunityOrderTrackUrl({
     businessId: params.businessId,

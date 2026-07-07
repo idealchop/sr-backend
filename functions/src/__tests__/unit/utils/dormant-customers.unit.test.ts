@@ -45,17 +45,17 @@ describe("buildDormantCustomerRows", () => {
   it("skips customers with non-string names without throwing", () => {
     const rows = buildDormantCustomerRows(
       [customer({ name: undefined as unknown as string })],
-      [delivery({ customerId: "c1", daysAgo: 10 })],
+      [delivery({ customerId: "c1", daysAgo: 18 })],
       { now },
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]?.name).toBe("Untitled Suki");
   });
 
-  it("flags suki with no fulfilled order in 7+ days", () => {
+  it("flags suki with no fulfilled order past the inactive threshold", () => {
     const rows = buildDormantCustomerRows(
       [customer()],
-      [delivery({ customerId: "c1", daysAgo: 10 })],
+      [delivery({ customerId: "c1", daysAgo: 18 })],
       { now },
     );
     expect(rows).toHaveLength(1);
@@ -120,7 +120,7 @@ describe("buildDormantCustomerRows", () => {
     const rows = buildDormantCustomerRows(
       [
         customer({
-          lastFulfilledAt: new Date(now.getTime() - 10 * 86_400_000).toISOString(),
+          lastFulfilledAt: new Date(now.getTime() - 18 * 86_400_000).toISOString(),
           lastFulfilledType: "delivery",
         }),
       ],
@@ -136,7 +136,7 @@ describe("buildDormantSignalsSnapshot", () => {
   it("returns counts and sample for AI snapshots", () => {
     const snapshot = buildDormantSignalsSnapshot(
       [customer()],
-      [delivery({ customerId: "c1", daysAgo: 12 })],
+      [delivery({ customerId: "c1", daysAgo: 16 })],
       now,
     );
     expect(snapshot.dormantCount).toBe(1);

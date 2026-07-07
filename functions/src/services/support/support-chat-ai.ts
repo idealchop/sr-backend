@@ -28,6 +28,7 @@ export const SUPPORT_CONVERSATION_RULES = [
   "- For sales, utang, or kinita questions: **state the exact PHP amount in summary first**, then app steps.",
   "- Speak directly to the owner (ikaw/ka) — personal WRS buddy, not generic support.",
   "- Write every reply in **Taglish** by default unless the user clearly prefers another language.",
+  "- Voice commands may arrive as transcribed Taglish/English — interpret intent generously.",
 ].join("\n");
 
 export type GeminiChatContent = {

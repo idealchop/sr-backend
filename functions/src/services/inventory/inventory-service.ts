@@ -5,6 +5,12 @@ import {
 } from "firebase-admin/firestore";
 import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
+import {
+  assertUniqueContainerShapeRole,
+  inferInventoryItemRole,
+  normalizeKitComponentIds,
+  normalizeSellingPrice,
+} from "./container-kit";
 
 export interface InventoryItem {
   id?: string;
@@ -27,6 +33,15 @@ export interface InventoryItem {
   cost: number;
   imageUrl?: string;
   avgUsage?: number;
+  /** Catalog role for WRS kit: shell, round, slim, accessory part, or general stock. */
+  inventoryRole?:
+    | "container_shell"
+    | "container_round"
+    | "container_slim"
+    | "kit_component"
+    | "general";
+  /** Kit part ids bundled with a container shell item. */
+  kitComponentIds?: string[];
   createdAt?: any;
   updatedAt?: any;
 }
@@ -72,6 +87,31 @@ export type StockDeltaApplyResult = {
  * Service for managing inventory items within a business.
  */
 export class InventoryService {
+  private static applyInventoryItemNormalization(
+    saveData: Partial<InventoryItem> & { category?: string },
+    fallbackName = "",
+  ): void {
+    const itemName = String(saveData.name || fallbackName || "");
+    if (saveData.cost !== undefined) {
+      saveData.cost = normalizeSellingPrice(saveData.cost);
+    }
+    if (saveData.categoryId && !saveData.category) {
+      saveData.category = saveData.categoryId;
+    }
+    if (saveData.name || saveData.inventoryRole !== undefined) {
+      saveData.inventoryRole = inferInventoryItemRole(
+        itemName,
+        saveData.inventoryRole,
+      );
+    }
+    if (saveData.kitComponentIds !== undefined) {
+      saveData.kitComponentIds = normalizeKitComponentIds(saveData.kitComponentIds);
+    }
+    if (saveData.inventoryRole !== "container_shell") {
+      saveData.kitComponentIds = [];
+    }
+  }
+
   /**
    * Lists all inventory items for a business.
    * @param {string} businessId The business ID.
@@ -152,6 +192,11 @@ export class InventoryService {
 
       const saveData = { ...data };
       delete saveData.id;
+      InventoryService.applyInventoryItemNormalization(saveData);
+      await assertUniqueContainerShapeRole(
+        businessId,
+        saveData.inventoryRole ?? "general",
+      );
       const newItem = {
         ...saveData,
         id: itemRef.id, // Store the doc id inside the document as well
@@ -195,6 +240,17 @@ export class InventoryService {
 
       const saveData = { ...data };
       delete saveData.id;
+      let existingName = String(saveData.name || "");
+      if (saveData.inventoryRole !== undefined && !saveData.name) {
+        const existing = await itemRef.get();
+        existingName = String(existing.data()?.name || "");
+      }
+      InventoryService.applyInventoryItemNormalization(saveData, existingName);
+      await assertUniqueContainerShapeRole(
+        businessId,
+        saveData.inventoryRole ?? "general",
+        itemId,
+      );
       const updateData = {
         ...saveData,
         id: itemId, // Ensure internal id matches the doc id

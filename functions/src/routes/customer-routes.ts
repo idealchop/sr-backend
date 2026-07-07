@@ -7,7 +7,9 @@ import {
   updateCustomer,
   deleteCustomer,
   getSingleCustomerStats,
+  claimNearbyDormantCustomer,
 } from "../handlers/customer-handler";
+import { acceptContainerCustodyAgreement } from "../handlers/customers/container-custody-handler";
 import { statementShareHandler } from "../handlers/customers/statement-share-handler";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
 import { validateBusinessAccess } from "../middleware/business-middleware";
@@ -46,6 +48,18 @@ router.patch(
   validateFirebaseIdToken,
   validateBusinessAccess,
   updateCustomer,
+);
+router.post(
+  "/:customerId/container-custody-agreement/accept",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  acceptContainerCustodyAgreement,
+);
+router.post(
+  "/:customerId/claim-nearby-dormant",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  claimNearbyDormantCustomer,
 );
 router.delete(
   "/:customerId",

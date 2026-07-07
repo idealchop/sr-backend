@@ -491,7 +491,7 @@ async function generateAiTurn(input: {
     "  \"detectedSatisfied\": boolean — user expressed thanks/satisfaction,",
     "  \"detectedDissatisfied\": boolean — user said answer was not helpful,",
     "  \"detectedHumanRequest\": boolean — user asked for a person/agent,",
-    "  \"topicOutOfScope\": boolean — true if unrelated to water refilling or Smart Refill",
+    "  \"topicOutOfScope\": boolean — true only for clearly unrelated topics (coding homework, politics, medical diagnosis)",
     "}",
   ].join("\n");
 

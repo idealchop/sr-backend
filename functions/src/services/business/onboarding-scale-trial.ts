@@ -1,6 +1,8 @@
 import { FieldValue, Timestamp } from "../../config/firebase-admin";
 import type { DocumentReference } from "firebase-admin/firestore";
+import { logAuditEvent } from "../observability/logging/logger";
 import { SubscriptionService } from "../subscriptions/subscription-service";
+import { TrialLifecycleService } from "../subscriptions/trial-lifecycle-service";
 
 const TRIAL_DAYS = 7;
 
@@ -41,7 +43,7 @@ export async function ensureScaleTrialSubscription(
     planName = p.name || planName;
   }
 
-  const subPayload = {
+  const subPayload = TrialLifecycleService.withTrialBudgetMetadata(expiresAt, {
     planId,
     planCode: "scale",
     planName,
@@ -55,12 +57,17 @@ export async function ensureScaleTrialSubscription(
       gracePeriodExpiresAt: Timestamp.fromDate(gracePeriodExpiresAt),
     },
     updatedAt: FieldValue.serverTimestamp(),
-  };
+  });
 
   if (subsSnap.empty) {
-    await businessRef.collection("subscriptions").doc().set({
+    const subRef = businessRef.collection("subscriptions").doc();
+    await subRef.set({
       ...subPayload,
       createdAt: FieldValue.serverTimestamp(),
+    });
+    logAuditEvent("TRIAL_STARTED", {
+      businessId: businessRef.id,
+      subscriptionId: subRef.id,
     });
     return;
   }
@@ -74,7 +81,24 @@ export async function ensureScaleTrialSubscription(
     String(data?.planCode || "").toLowerCase() === "scale" &&
     String(data?.billingCycle || "") === "trial";
 
+  if (isScaleTrial && hasValidExpiry) {
+    return;
+  }
+
+  const usedTrial = await TrialLifecycleService.hasUsedTrialBudget(
+    businessRef.id,
+  );
+  if (usedTrial && !isScaleTrial) {
+    return;
+  }
+
   if (!hasValidExpiry || !isScaleTrial) {
     await subDoc.ref.set(subPayload, { merge: true });
+    if (!isScaleTrial) {
+      logAuditEvent("TRIAL_STARTED", {
+        businessId: businessRef.id,
+        subscriptionId: subDoc.id,
+      });
+    }
   }
 }

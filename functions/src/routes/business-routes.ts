@@ -14,6 +14,10 @@ import {
   getMyPlatformFeedback,
   postPlatformFeedback,
 } from "../handlers/platform-feedback-handler";
+import {
+  getMyFeatureRatings,
+  postFeatureRatings,
+} from "../handlers/feature-ratings-handler";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
 
 import customerRoutes from "./customer-routes";
@@ -39,13 +43,34 @@ import {
   postDeclineCommunityDispatchOffer,
   postNotifyCommunityDispatchOffer,
 } from "../handlers/community-dispatch-handler";
+import {
+  listCommunityInquiryMessagesHandler,
+  listCommunityInquiryThreadsHandler,
+  postCommunityInquiryReplyHandler,
+} from "../handlers/community-inquiry-handler";
 import { validateBusinessAccess, requireBusinessOwner } from "../middleware/business-middleware";
 import { getOfflineSnapshot } from "../handlers/offline-snapshot-handler";
 import {
   deleteRiderMessengerLink,
+  deleteRiderMessengerLinkMe,
   getRiderMessengerLinkStatus,
+  getRiderMessengerLinkStatusMe,
   postRiderMessengerLinkCode,
+  postRiderMessengerLinkCodeMe,
 } from "../handlers/rider-messenger-handler";
+import {
+  deleteTeamMessengerLinkMe,
+  getTeamMessengerLinkStatusMe,
+  postTeamMessengerLinkCodeMe,
+} from "../handlers/team-messenger-handler";
+import {
+  getDeliveryMessengerChatByReferenceHandler,
+  getDeliveryMessengerChatUnreadCountHandler,
+  listDeliveryMessengerChatMessagesHandler,
+  listDeliveryMessengerChatsHandler,
+  postDeliveryMessengerChatMarkReadHandler,
+  postDeliveryMessengerChatReplyHandler,
+} from "../handlers/delivery-messenger-chat-handler";
 
 const router = express.Router(); // eslint-disable-line new-cap
 
@@ -65,6 +90,21 @@ router.post(
   "/community-dispatch/ops/notify-offer",
   validateFirebaseIdToken,
   postNotifyCommunityDispatchOffer,
+);
+router.get(
+  "/community-dispatch/inquiry-threads",
+  validateFirebaseIdToken,
+  listCommunityInquiryThreadsHandler,
+);
+router.get(
+  "/community-dispatch/inquiry-threads/:threadId/messages",
+  validateFirebaseIdToken,
+  listCommunityInquiryMessagesHandler,
+);
+router.post(
+  "/community-dispatch/inquiry-threads/:threadId/reply",
+  validateFirebaseIdToken,
+  postCommunityInquiryReplyHandler,
 );
 router.get("/:businessId", validateFirebaseIdToken, getBusiness);
 router.put("/:businessId", validateFirebaseIdToken, updateBusiness);
@@ -118,6 +158,42 @@ router.post(
   postDeclineCommunityDispatchOffer,
 );
 router.get(
+  "/:businessId/community-dispatch/delivery-chats/unread-count",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  getDeliveryMessengerChatUnreadCountHandler,
+);
+router.get(
+  "/:businessId/community-dispatch/delivery-chats/by-reference/:referenceId",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  getDeliveryMessengerChatByReferenceHandler,
+);
+router.get(
+  "/:businessId/community-dispatch/delivery-chats",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  listDeliveryMessengerChatsHandler,
+);
+router.get(
+  "/:businessId/community-dispatch/delivery-chats/:threadId/messages",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  listDeliveryMessengerChatMessagesHandler,
+);
+router.post(
+  "/:businessId/community-dispatch/delivery-chats/:threadId/reply",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  postDeliveryMessengerChatReplyHandler,
+);
+router.post(
+  "/:businessId/community-dispatch/delivery-chats/:threadId/read",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  postDeliveryMessengerChatMarkReadHandler,
+);
+router.get(
   "/:businessId/getting-started/sync",
   validateFirebaseIdToken,
   validateBusinessAccess,
@@ -134,22 +210,56 @@ router.post(
   "/:businessId/rider-messenger/link-code",
   validateFirebaseIdToken,
   validateBusinessAccess,
-  requireBusinessOwner,
   postRiderMessengerLinkCode,
 );
 router.get(
   "/:businessId/rider-messenger/link-code/:riderId",
   validateFirebaseIdToken,
   validateBusinessAccess,
-  requireBusinessOwner,
   getRiderMessengerLinkStatus,
 );
 router.delete(
   "/:businessId/rider-messenger/link/:riderId",
   validateFirebaseIdToken,
   validateBusinessAccess,
-  requireBusinessOwner,
   deleteRiderMessengerLink,
+);
+router.post(
+  "/:businessId/rider-messenger/me/link-code",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  postRiderMessengerLinkCodeMe,
+);
+router.get(
+  "/:businessId/rider-messenger/me/link-status",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  getRiderMessengerLinkStatusMe,
+);
+router.delete(
+  "/:businessId/rider-messenger/me/link",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  deleteRiderMessengerLinkMe,
+);
+
+router.post(
+  "/:businessId/team-messenger/me/link-code",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  postTeamMessengerLinkCodeMe,
+);
+router.get(
+  "/:businessId/team-messenger/me/link-status",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  getTeamMessengerLinkStatusMe,
+);
+router.delete(
+  "/:businessId/team-messenger/me/link",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  deleteTeamMessengerLinkMe,
 );
 
 router.get(
@@ -163,6 +273,19 @@ router.post(
   validateFirebaseIdToken,
   validateBusinessAccess,
   postPlatformFeedback,
+);
+
+router.get(
+  "/:businessId/feature-ratings/me",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  getMyFeatureRatings,
+);
+router.post(
+  "/:businessId/feature-ratings",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  postFeatureRatings,
 );
 
 router.use(

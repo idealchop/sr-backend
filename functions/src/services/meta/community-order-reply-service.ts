@@ -2,17 +2,30 @@ import { getGeminiApiKey } from "../ai/gemini-config";
 import { geminiGenerateJson } from "../ai/gemini-client";
 import {
   COMMUNITY_FIELD_LABELS,
+  formatCommunityOrderLines,
   type CommunityOrderFields,
 } from "./community-dispatch-template-parser";
 import {
-  COMMUNITY_ORDER_TEMPLATE_BLOCK,
+  COMMUNITY_DELIVERY_LOCATION_TIP,
   buildCommunityOrderTemplateMessage,
 } from "./community-order-template";
+import {
+  COMMUNITY_ORDER_IN_PROGRESS_NOTE,
+  COMMUNITY_PRICE_BEFORE_ACCEPT_HINT,
+} from "./community-messenger-copy";
 
 function formatMissingList(errors: string[]): string {
   return errors
     .map((key) => `• ${COMMUNITY_FIELD_LABELS[key] ?? key}`)
     .join("\n");
+}
+
+function formatMissingFieldsPrompt(errors: string[]): string {
+  const count = errors.length;
+  if (count === 1) {
+    return "Kulang pa ang field na ito:";
+  }
+  return "Kulang pa ang mga field na ito:";
 }
 
 /** CP-04 — deterministic clarification when template fields are missing. */
@@ -26,38 +39,38 @@ export function buildCommunityClarificationMessage(
     Object.values(partialFields).some((v) => v !== undefined && v !== "");
 
   const intro = hasPartial ?
-    "Thank you — we received your order details and we're almost ready to route your request." :
-    "Thank you for reaching out to River Smart Refill.";
+    "Salamat po — natanggap na namin ang order mo. Konti na lang!" :
+    "Salamat po sa pag-message sa River Smart Refill.";
 
   return [
     intro,
     "",
-    "To complete your order, please provide:",
+    COMMUNITY_ORDER_IN_PROGRESS_NOTE,
+    "",
+    formatMissingFieldsPrompt(errors),
     missing,
     "",
-    "You may reply with the missing details, or copy and resend the form below:",
+    "Paki-send ang kulang — pwede isa-isa o sabay-sabay.",
     "",
-    COMMUNITY_ORDER_TEMPLATE_BLOCK,
-    "",
-    "We're here to help — salamat po! 🙏",
+    "Salamat po! 🙏",
   ].join("\n");
 }
 
 /** Acknowledgement when a pin is saved but the order is still incomplete. */
 export function buildLocationPinReceivedMessage(errors: string[]): string {
   const lines = [
-    "Salamat po — we received your location pin. 📍",
+    "Salamat po — natanggap na ang location pin mo. 📍",
     "",
   ];
 
   if (errors.length > 0) {
     lines.push(
-      "To finish your order, please send:",
+      COMMUNITY_ORDER_IN_PROGRESS_NOTE,
+      "",
+      formatMissingFieldsPrompt(errors),
       formatMissingList(errors),
       "",
-      "You may copy our order form below and fill in the remaining lines:",
-      "",
-      COMMUNITY_ORDER_TEMPLATE_BLOCK,
+      "Paki-send ang kulang — pwede isa-isa o sabay-sabay.",
       "",
     );
   }
@@ -66,30 +79,100 @@ export function buildLocationPinReceivedMessage(errors: string[]): string {
   return lines.join("\n");
 }
 
-/** CP-29 — summary shown before routing AI / wizard orders. */
+/** Address could not be geocoded — ask customer to resend a Google Maps–locatable address. */
+export function buildCommunityAddressRepairMessage(providedAddress?: string): string {
+  const addressLine = providedAddress?.trim() ?
+    `Address mo: ${providedAddress.trim()}` :
+    "Hindi namin mahanap ang address sa form mo.";
+
+  return [
+    "Salamat po — natanggap ang order mo, pero hindi namin ma-verify ang address.",
+    "",
+    COMMUNITY_ORDER_IN_PROGRESS_NOTE,
+    "",
+    addressLine,
+    "",
+    "Paki-send ulit ang buong address (street/landmark, barangay, city). Dapat makita sa Google Maps.",
+    "",
+    "Tip: Hanapin sa Google Maps ang lugar mo, copy ang address — o mag-send ng location pin dito.",
+    "",
+    COMMUNITY_DELIVERY_LOCATION_TIP,
+    "",
+    "Salamat po! 🙏",
+  ].join("\n");
+}
+
+/** Order line unreadable — remind container, water type, and format. */
+export function buildCommunityOrderFormatRepairMessage(providedOrder?: string): string {
+  const orderLine = providedOrder?.trim() ?
+    `Order mo: ${providedOrder.trim()}` :
+    "Hindi namin mabasa ang Order line sa form mo.";
+
+  return [
+    "Salamat po — okay na ang address, pero hindi namin mabasa ang Order mo.",
+    "",
+    COMMUNITY_ORDER_IN_PROGRESS_NOTE,
+    "",
+    orderLine,
+    "",
+    "Gamitin ang format na ito:",
+    "{qty} {slim o round} - {alkaline, mineral, o purified}",
+    "",
+    "Halimbawa: 3 slim - alkaline, 4 round - purified",
+    "Maraming items? Paghiwalayin ng comma — hal. 2 round - mineral, 1 slim - alkaline",
+    "",
+    "Salamat po! 🙏",
+  ].join("\n");
+}
+
+function appendCommunityOrderQuantityLines(
+  lines: string[],
+  fields: CommunityOrderFields,
+): void {
+  if (fields.orderLines?.length) {
+    lines.push(`• Order: ${formatCommunityOrderLines(fields.orderLines)}`);
+    lines.push(`• Total: ${fields.qty ?? "—"} container(s)`);
+    return;
+  }
+
+  const deliveryLabel = fields.delivery ? "Delivery" : "Pickup";
+  lines.push(`• ${deliveryLabel}: ${fields.qty ?? "—"} gal`);
+  if (fields.preferredWaterType) {
+    lines.push(`• Tubig: ${fields.preferredWaterType}`);
+  }
+}
+
+/** CP-29 — summary shown before routing AI / template orders. */
 export function buildCommunityOrderConfirmSummary(
   fields: CommunityOrderFields,
 ): string {
-  const deliveryLabel = fields.delivery ? "Delivery" : "Pickup";
   const lines = [
-    "Please confirm your order:",
+    "Pakicheck muna ang order mo:",
     "",
     `• Name: ${fields.name ?? "—"}`,
-    `• ${deliveryLabel}: ${fields.qty ?? "—"} gal`,
-    `• Mobile: ${fields.number ?? "—"}`,
   ];
+
+  if (fields.number) {
+    lines.push(`• Number: ${fields.number}`);
+  }
 
   if (fields.delivery && fields.location) {
     lines.push(`• Address: ${fields.location}`);
   }
-  if (fields.preferredWaterType) {
-    lines.push(`• Water: ${fields.preferredWaterType}`);
-  }
+
+  appendCommunityOrderQuantityLines(lines, fields);
+
   if (fields.email) {
     lines.push(`• Email: ${fields.email}`);
   }
 
-  lines.push("", "Tap Confirm order to send to nearby stations.");
+  lines.push(
+    "",
+    COMMUNITY_PRICE_BEFORE_ACCEPT_HINT,
+    "",
+    "Tap Confirm order para ipadala sa malapit na stations.",
+    "(Pwede rin sumagot ng \"yes\" kung walang buttons.)",
+  );
   return lines.join("\n");
 }
 
@@ -98,9 +181,8 @@ export function buildCommunityOrderReceivedMessage(
   fields: CommunityOrderFields,
   referenceId?: string,
 ): string {
-  const deliveryLabel = fields.delivery ? "Delivery" : "Pickup";
   const lines = [
-    "Thank you — your order has been received. ✨",
+    "Salamat po — natanggap na ang order mo! ✨",
     "",
   ];
 
@@ -109,27 +191,31 @@ export function buildCommunityOrderReceivedMessage(
   }
 
   lines.push(
-    "Here's what we captured:",
+    "Narito ang na-save namin:",
     `• Name: ${fields.name}`,
-    `• ${deliveryLabel}: ${fields.qty} gal`,
-    `• Mobile: ${fields.number}`,
   );
 
+  if (fields.number) {
+    lines.push(`• Number: ${fields.number}`);
+  }
+
   if (fields.delivery && fields.location) {
-    lines.push(`• Location: ${fields.location}`);
+    lines.push(`• Address: ${fields.location}`);
   }
-  if (fields.preferredWaterType) {
-    lines.push(`• Water type: ${fields.preferredWaterType}`);
-  }
+
+  appendCommunityOrderQuantityLines(lines, fields);
+
   if (fields.email) {
     lines.push(`• Email: ${fields.email}`);
   }
 
   lines.push(
     "",
-    "Our team is notifying nearby refilling stations. The first to accept will confirm your order.",
+    "Ipinapaalam na namin sa malapit na stations. Unang tumanggap ang kukuha ng order.",
     "",
-    "Salamat po for choosing River Smart Refill! 💧",
+    COMMUNITY_PRICE_BEFORE_ACCEPT_HINT,
+    "",
+    "Salamat po sa River Smart Refill! 💧",
   );
 
   return lines.join("\n");
@@ -168,13 +254,13 @@ export async function buildCommunityTemplateRepairReply(params: {
 
   const ai = await geminiGenerateJson<{ message?: string }>({
     system:
-      "You write short, professional, warm Messenger replies for a water refilling community page in the Philippines. " +
-      "The customer sent a partial order form. Ask ONLY for the missing fields listed. " +
-      "Use polite English with light Taglish (Salamat po). No markdown. Max 600 characters. " +
-      "End by inviting them to complete the missing info. Output JSON: { message: string }.",
+      "You write short, warm Messenger replies for a water refilling page in the Philippines. " +
+      "Use simple English with light Taglish (Salamat po). No jargon. " +
+      "The customer sent a partial order. Ask ONLY for the missing fields listed. " +
+      "Do NOT paste the full order form. Max 500 characters. Output JSON: { message: string }.",
     user:
-      `Missing fields: ${missingLabels.join(", ")}\n` +
-      `Already provided: ${filled || "none"}\n` +
+      `Missing: ${missingLabels.join(", ")}\n` +
+      `Already have: ${filled || "none"}\n` +
       `Customer message:\n${rawMessage.slice(0, 800)}`,
     fallback: {},
     temperature: 0.4,
@@ -183,21 +269,32 @@ export async function buildCommunityTemplateRepairReply(params: {
 
   const message =
     typeof ai.message === "string" && ai.message.trim().length > 20 ?
-      ai.message.trim().slice(0, 900) :
+      `${ai.message.trim().slice(0, 700)}\n\n${COMMUNITY_ORDER_IN_PROGRESS_NOTE}` :
       buildCommunityClarificationMessage(errors, partialFields);
 
   return { message, source: typeof ai.message === "string" ? "ai" : "deterministic" };
 }
 
-/** Wrap AI-04 clarifying question with template reminder. */
+/** Wrap AI-04 clarifying question with optional order form fallback. */
 export function buildCommunityFreeTextClarificationMessage(
   clarifyingQuestion: string,
 ): string {
   return [
     clarifyingQuestion,
     "",
-    "Or, if you prefer, use our order form:",
+    "Kung mas madali, pwede mo rin gamitin ang order form:",
     "",
     buildCommunityOrderTemplateMessage(),
+  ].join("\n");
+}
+
+/** Customer chose Edit on confirm — resend guidance. */
+export function buildCommunityOrderEditPromptMessage(): string {
+  return [
+    "Sige po — i-send ulit ang tamang details, o kopyahin ang form below:",
+    "",
+    buildCommunityOrderTemplateMessage(),
+    "",
+    "Salamat po! 🙏",
   ].join("\n");
 }

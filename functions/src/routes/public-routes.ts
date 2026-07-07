@@ -11,6 +11,7 @@ import {
   searchTrackOrders,
   cancelPortalOrder,
   patchPortalCustomerProfile,
+  getContainerCustodyAgreementPdf,
 } from "../handlers/portal/portal-public-handler";
 import {
   getPublicPlantMaintenanceTasks,
@@ -28,6 +29,10 @@ import {
 } from "../handlers/marketing-handler";
 import { metaCommunityWebhook } from "../handlers/meta/meta-community-webhook-handler";
 import { metaCommunityWhatsappWebhook } from "../handlers/meta/meta-community-whatsapp-webhook-handler";
+import {
+  getMockPaymentCheckout,
+  paymentProviderWebhook,
+} from "../handlers/payments/payment-intent-handler";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
 
 const router = express.Router(); // eslint-disable-line new-cap
@@ -66,6 +71,11 @@ router.get(
 
 router.get("/qr.png", getQrPng);
 router.get("/portal/customer", portalLimiter, getPortalCustomerContext);
+router.get(
+  "/portal/container-custody-agreement",
+  portalLimiter,
+  getContainerCustodyAgreementPdf,
+);
 router.get("/portal/business-profile", portalLimiter, getPortalBusinessProfile);
 router.get("/portal/track/search", portalLimiter, searchTrackOrders);
 router.get("/portal/track/:referenceId", portalLimiter, trackOrder);
@@ -100,5 +110,10 @@ router.get("/webhooks/meta/community", metaCommunityWebhook);
 router.post("/webhooks/meta/community", metaCommunityWebhook);
 router.get("/webhooks/meta/whatsapp/community", metaCommunityWhatsappWebhook);
 router.post("/webhooks/meta/whatsapp/community", metaCommunityWhatsappWebhook);
+
+router.post("/webhooks/payments/mock", paymentProviderWebhook("mock"));
+router.post("/webhooks/payments/paymongo", paymentProviderWebhook("paymongo"));
+router.get("/payments/mock-checkout/:intentId", portalLimiter, getMockPaymentCheckout);
+router.post("/payments/mock-checkout/:intentId", portalLimiter, getMockPaymentCheckout);
 
 export default router;

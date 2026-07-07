@@ -6,15 +6,17 @@ import {
 import { isCasualMessengerGreeting } from "../../../../services/meta/community-order-template";
 
 describe("community-order-reply-service", () => {
-  it("lists missing fields in clarification message", () => {
-    const msg = buildCommunityClarificationMessage(["number", "location"], {
+  it("lists missing fields without embedding the order form", () => {
+    const msg = buildCommunityClarificationMessage(["order", "location"], {
       name: "Ana",
-      qty: 2,
     });
-    expect(msg).toContain("Phone Number");
+    expect(msg).toContain("Kulang pa ang mga field na ito:");
+    expect(msg).toContain("Order (hal. 3 slim - alkaline)");
     expect(msg).toContain("Address");
-    expect(msg).toContain("almost ready");
-    expect(msg).toContain("Name:");
+    expect(msg).toContain("Konti na lang!");
+    expect(msg).toContain("Paki-send ang kulang");
+    expect(msg).not.toContain("Name:\nAddress:");
+    expect(msg).not.toContain("copy and resend the form");
   });
 
   it("builds confirmation with captured summary and reference", () => {
@@ -22,18 +24,22 @@ describe("community-order-reply-service", () => {
       {
         name: "Maria",
         delivery: true,
-        qty: 5,
+        qty: 7,
         number: "09171234567",
         location: "Malabon",
-        preferredWaterType: "alkaline",
+        orderLines: [
+          { qty: 3, container: "slim", waterType: "alkaline" },
+          { qty: 4, container: "round", waterType: "purified" },
+        ],
       },
       "CR-ABC12345",
     );
     expect(msg).toContain("Reference: CR-ABC12345");
-    expect(msg).toContain("order has been received");
+    expect(msg).toContain("natanggap na ang order mo");
     expect(msg).toContain("Maria");
-    expect(msg).toContain("Delivery: 5 gal");
-    expect(msg).toContain("alkaline");
+    expect(msg).toContain("3 slim - alkaline, 4 round - purified");
+    expect(msg).toContain("Total: 7 container(s)");
+    expect(msg).toContain("Presyo:");
   });
 });
 

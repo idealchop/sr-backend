@@ -11,17 +11,18 @@ import { parseCommunityOrderTemplate } from "../services/meta/community-dispatch
 import {
   COMMUNITY_DELIVERY_LOCATION_TIP,
   COMMUNITY_ORDER_TEMPLATE_BLOCK,
+  buildCommunityOrderFormExampleMessage,
   buildCommunityOrderFormMessage,
+  buildCommunityWaterDeliveryIntroMessage,
+  buildCommunityWelcomeGreeting,
   buildCommunityWelcomeMessage,
 } from "../services/meta/community-order-template";
 
-const SAMPLE_ORDER = `Name: Justfer (Testing)
-Quantity: 10
-Water Station:
-Water: alkaline
-Address: Alabang, Muntinlupa City
-Email: justfer15@gmail.com
-Phone Number: 09773907598`;
+const SAMPLE_ORDER = `Name: John Doe
+Address: 12 Jasmine St, Brgy. San Roque, Antipolo City
+Email: john@example.com
+Number: 09171234567
+Order: 3 slim - alkaline, 4 round - purified`;
 
 function readParseInput(argv: string[]): string {
   const parseFlagIndex = argv.indexOf("--parse");
@@ -43,17 +44,26 @@ function printSection(title: string, body: string): void {
 }
 
 function main(): void {
-  const welcome = buildCommunityWelcomeMessage();
+  const welcomeNew = buildCommunityWelcomeMessage({ isReturningUser: false });
+  const welcomeReturning = buildCommunityWelcomeMessage({ isReturningUser: true });
+  const intro = buildCommunityWaterDeliveryIntroMessage();
   const form = buildCommunityOrderFormMessage();
+  const example = buildCommunityOrderFormExampleMessage();
   const parseInput = readParseInput(process.argv.slice(2));
   const parsed = parseCommunityOrderTemplate(parseInput);
 
-  printSection("Message 1 — Welcome (greeting + delivery tip)", welcome);
-  printSection("Message 2 — Order form", form);
+  printSection("Greeting — New user (PSID)", buildCommunityWelcomeGreeting({ isReturningUser: false }));
+  printSection("Greeting — Returning user (PSID)", buildCommunityWelcomeGreeting({ isReturningUser: true }));
+  printSection("Message 1 — Welcome new (full)", welcomeNew);
+  printSection("Message 1 — Welcome returning (full)", welcomeReturning);
+  printSection("Message 2 — Service choice", "What can we help you with today?\n[Water Delivery] [Inquiry / Others]");
+  printSection("Message 3 — Water delivery intro", intro);
+  printSection("Message 4 — Order form", form);
+  printSection("Message 5 — Example + tips", example);
 
   console.log("\nChecks:");
-  console.log(`  • Delivery tip in welcome: ${welcome.includes(COMMUNITY_DELIVERY_LOCATION_TIP) ? "yes" : "NO"}`);
-  console.log(`  • Delivery tip in form: ${form.includes(COMMUNITY_DELIVERY_LOCATION_TIP) ? "NO (unexpected)" : "no (ok)"}`);
+  console.log(`  • Delivery tip in welcome: ${welcomeNew.includes(COMMUNITY_DELIVERY_LOCATION_TIP) ? "YES (unexpected)" : "no (ok)"}`);
+  console.log(`  • Delivery tip in example: ${example.includes(COMMUNITY_DELIVERY_LOCATION_TIP) ? "yes (ok)" : "no (unexpected)"}`);
   console.log(`  • delivery: line in form block: ${COMMUNITY_ORDER_TEMPLATE_BLOCK.includes("delivery:") ? "YES (unexpected)" : "no (ok)"}`);
 
   printSection("Parse result", JSON.stringify(parsed, null, 2));

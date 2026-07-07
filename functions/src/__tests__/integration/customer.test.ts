@@ -157,6 +157,18 @@ vi.mock("../../services/inventory/inventory-service", async (importOriginal) => 
   };
 });
 
+vi.mock("../../services/customers/customer-active-limit-service", () => ({
+  CustomerActiveLimitService: {
+    assertCanAddActiveCustomer: vi.fn().mockResolvedValue(undefined),
+    assertCanActivateCustomer: vi.fn().mockResolvedValue(undefined),
+  },
+  CustomerActiveLimitError: class CustomerActiveLimitError extends Error {
+    code = "ACTIVE_CUSTOMER_CAP";
+    activeCount = 0;
+    cap = 0;
+  },
+}));
+
 describe("Customer API Endpoints", () => {
   beforeEach(() => {
     vi.clearAllMocks();

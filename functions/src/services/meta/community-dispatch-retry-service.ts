@@ -81,6 +81,8 @@ export function mergeCommunityOrderFields(
     ...(base.location ? { location: base.location } : {}),
     ...(base.email ? { email: base.email } : {}),
     ...(base.number ? { number: base.number } : {}),
+    ...(base.orderRaw ? { orderRaw: base.orderRaw } : {}),
+    ...(base.orderLines?.length ? { orderLines: base.orderLines } : {}),
     ...(patch.name ? { name: patch.name } : {}),
     ...(patch.delivery !== undefined ? { delivery: patch.delivery } : {}),
     ...(patch.qty !== undefined ? { qty: patch.qty } : {}),
@@ -90,6 +92,8 @@ export function mergeCommunityOrderFields(
     ...(patch.location ? { location: patch.location } : {}),
     ...(patch.email ? { email: patch.email } : {}),
     ...(patch.number ? { number: patch.number } : {}),
+    ...(patch.orderRaw ? { orderRaw: patch.orderRaw } : {}),
+    ...(patch.orderLines?.length ? { orderLines: patch.orderLines } : {}),
   };
 }
 

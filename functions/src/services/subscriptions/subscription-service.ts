@@ -27,6 +27,8 @@ import { isBusinessEligibleForCommunityMessenger } from "../../utils/community-m
 import { readCommunityOrdersAcceptedThisMonth } from "../meta/community-dispatch-station-usage-service";
 import { syncCommunityDispatchEnrollment } from "../meta/community-dispatch-enrollment-service";
 import { SupportAiUsageService } from "../support/support-ai-usage-service";
+import { runSubscriptionLifecycleMaintenance } from "./subscription-lifecycle-maintenance";
+import { TrialLifecycleService } from "./trial-lifecycle-service";
 import {
   resolveSupportAiPlanLimits,
   type SupportAiUsageSnapshot,
@@ -552,7 +554,12 @@ export class SubscriptionService {
 
     const currentPlanName = String(oldSub?.planName || oldSub?.planCode || "plan");
 
-    if (deferUntil) {
+    if (paymentPending && !deferUntil) {
+      status = "pending";
+      notifyMessage =
+        `Your ${action.toLowerCase()} to ${planData.name} is pending payment verification. ` +
+        "We'll activate your plan once payment is confirmed.";
+    } else if (deferUntil) {
       status = "scheduled";
       dates.activatesAt = Timestamp.fromDate(deferUntil);
       if (action === "DOWNGRADE") {
@@ -667,6 +674,7 @@ export class SubscriptionService {
     if (pickPendingScheduled(rows, now)) return;
     if (pickPendingPaidUpgrade(rows, now)) return;
     if (pickEffectiveEntitling(rows, now)) return;
+    if (await TrialLifecycleService.hasResumablePausedTrial(businessId)) return;
     await this.handleAutoDowngrade(businessId);
   }
 
@@ -737,8 +745,10 @@ export class SubscriptionService {
   }
 
   static async getSubscriptionStatus(businessId: string) {
+    await TrialLifecycleService.resumeTrialIfPaused(businessId);
     await this.repairStuckApprovedSubscriptions(businessId);
     await promoteDueScheduledSubscriptions(businessId);
+    const lifecycle = await runSubscriptionLifecycleMaintenance(businessId);
     await this.ensureStarterWhenNoPaidAccess(businessId);
 
     const now = new Date();
@@ -780,6 +790,7 @@ export class SubscriptionService {
         isExpired: false,
         isGracePeriod: false,
         daysUntilExpiration: 0,
+        sessionResetRequired: lifecycle.graceEnded && lifecycle.downgradedToStarter,
         paymentStatus: pendingPaidUpgrade ?
           String(pendingPaidUpgrade.data.paymentStatus || "pending_verification") :
           undefined,
@@ -880,6 +891,7 @@ export class SubscriptionService {
       status,
       isExpired: view.isExpired,
       isGracePeriod: view.isGracePeriod,
+      sessionResetRequired: lifecycle.graceEnded && lifecycle.downgradedToStarter,
       daysUntilExpiration: Math.max(
         0,
         Math.ceil(

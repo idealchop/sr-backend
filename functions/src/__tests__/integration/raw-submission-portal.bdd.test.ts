@@ -3,9 +3,16 @@ import express from "express";
 import request from "supertest";
 import publicRoutes from "../../routes/public-routes";
 
-const { assertValidMock, createPendingMock } = vi.hoisted(() => ({
+const { assertValidMock, createPendingMock, getCustomerMock } = vi.hoisted(() => ({
   assertValidMock: vi.fn(),
   createPendingMock: vi.fn(),
+  getCustomerMock: vi.fn(),
+}));
+
+vi.mock("../../services/customers/customer-service", () => ({
+  CustomerService: {
+    getCustomer: getCustomerMock,
+  },
 }));
 
 vi.mock("../../services/customers/qr-customer-service", () => ({
@@ -79,12 +86,24 @@ describe("Feature: Verified public QR portal", () => {
   beforeEach(() => {
     assertValidMock.mockReset();
     createPendingMock.mockReset();
+    getCustomerMock.mockReset();
     assertValidMock.mockResolvedValue({
       name: "Justfer Customer",
       qrToken: "valid-token",
       status: "active",
       qrCodeUrl: "https://api.test/public/qr.png?b=b1&c=c1&t=valid-token",
       portalDeepLink: "http://localhost:3000/order?b=b1&c=c1&t=valid-token",
+    });
+    getCustomerMock.mockResolvedValue({
+      id: "c1",
+      businessId: "b1",
+      name: "Justfer Customer",
+      status: "active",
+      type: "residential",
+      phone: "09170000000",
+      address: "Manila",
+      isDeliveryEnabled: true,
+      isCollectionEnabled: true,
     });
     createPendingMock.mockResolvedValue({ id: "raw-sub-1" });
   });

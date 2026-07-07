@@ -1,11 +1,35 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatCommunityOrderLines,
+  parseCommunityOrderLines,
   parseCommunityOrderTemplate,
   validateCommunityOrderFields,
 } from "../../../../services/meta/community-dispatch-template-parser";
 
 describe("community-dispatch-template-parser", () => {
-  it("parses delivery-first template without delivery line", () => {
+  it("parses revised order form with multi-item order lines", () => {
+    const text = `Name: John Doe
+Address: 12 Jasmine St, Brgy. San Roque, Antipolo City
+Email:
+Number:
+Order: 3 slim - alkaline, 4 round - purified`;
+
+    const result = parseCommunityOrderTemplate(text);
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.fields.name).toBe("John Doe");
+    expect(result.fields.delivery).toBe(true);
+    expect(result.fields.location).toBe("12 Jasmine St, Brgy. San Roque, Antipolo City");
+    expect(result.fields.qty).toBe(7);
+    expect(result.fields.orderLines).toEqual([
+      { qty: 3, container: "slim", waterType: "alkaline" },
+      { qty: 4, container: "round", waterType: "purified" },
+    ]);
+    expect(result.fields.preferredWaterType).toBe("3 slim - alkaline, 4 round - purified");
+    expect(result.looksLikeTemplate).toBe(true);
+  });
+
+  it("parses legacy delivery-first template without delivery line", () => {
     const text = `name: Justfer (Testing)
 qty: 10
 preferred water type: alkaline
@@ -20,7 +44,7 @@ number: 09773907598`;
     expect(result.fields.location).toBe("Alabang, Muntinlupa City");
   });
 
-  it("parses a complete template", () => {
+  it("parses a complete legacy template", () => {
     const text = `name: Maria Santos
 delivery: yes
 qty: 5
@@ -39,7 +63,17 @@ number: 09171234567`;
     expect(result.looksLikeTemplate).toBe(true);
   });
 
-  it("reports missing phone number", () => {
+  it("reports missing order on new form without legacy qty", () => {
+    const text = `name: Juan
+location: QC`;
+
+    const result = parseCommunityOrderTemplate(text);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("order");
+    expect(result.looksLikeTemplate).toBe(true);
+  });
+
+  it("reports missing phone number on legacy form only", () => {
     const text = `name: Juan
 delivery: no
 qty: 2`;
@@ -51,16 +85,35 @@ qty: 2`;
   });
 
   it("requires location when delivery is yes", () => {
-    const result = parseCommunityOrderTemplate(`name: Ana
-delivery: yes
-qty: 3
-number: 09181234567`);
+    const result = parseCommunityOrderTemplate(`Name: Ana
+Order: 2 round - mineral`);
 
     expect(result.ok).toBe(false);
     expect(result.errors).toContain("location");
   });
 
-  it("accepts Tagalog delivery aliases and pickup", () => {
+  it("does not require number on new order form", () => {
+    const result = parseCommunityOrderTemplate(`Name: Ana
+Address: QC
+Order: 2 round - mineral`);
+
+    expect(result.ok).toBe(true);
+    expect(result.errors).not.toContain("number");
+  });
+
+  it("treats none and n/a as empty optional contact fields", () => {
+    const result = parseCommunityOrderTemplate(`Name: Ana
+Address: QC
+Email: none
+Number: n/a
+Order: 2 round - mineral`);
+
+    expect(result.ok).toBe(true);
+    expect(result.fields.email).toBeUndefined();
+    expect(result.fields.number).toBeUndefined();
+  });
+
+  it("accepts Tagalog delivery aliases and pickup on legacy form", () => {
     const pickup = parseCommunityOrderTemplate(`name: Ben
 delivery: pickup
 qty: 1
@@ -76,7 +129,7 @@ location: QC`);
     expect(padala.fields.delivery).toBe(true);
   });
 
-  it("tolerates dash separators and blank lines", () => {
+  it("tolerates dash separators and blank lines on legacy form", () => {
     const text = `name - Carla
 
 qty: 4
@@ -127,31 +180,32 @@ number: 09773907598
     expect(result.fields.delivery).toBe(true);
   });
 
-  it("parses simplified order form labels", () => {
-    const text = `Name: Justfer
-Quantity: 3
-Water: alkaline
-Address: muntinlupa
-Email: justfer15@gmail.com
-Phone Number: 09773907598`;
+  it("ignores unfilled (Required) and (optional) placeholders", () => {
+    const text = `Name: (Required)
+Address: Alabang, Muntinlupa City
+Email: (optional)
+Number: (optional)
+Order: 1 slim - purified`;
 
     const result = parseCommunityOrderTemplate(text);
-    expect(result.looksLikeTemplate).toBe(true);
-    expect(result.ok).toBe(true);
-    expect(result.fields.name).toBe("Justfer");
-    expect(result.fields.qty).toBe(3);
-    expect(result.fields.preferredWaterType).toBe("alkaline");
-    expect(result.fields.location).toBe("muntinlupa");
-    expect(result.fields.number).toBe("09773907598");
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("name");
+    expect(result.fields.email).toBeUndefined();
+    expect(result.fields.number).toBeUndefined();
+    expect(result.fields.orderLines).toEqual([
+      { qty: 1, container: "slim", waterType: "purified" },
+    ]);
   });
 
-  it("parses shorthand quantity with unit suffix", () => {
-    const result = parseCommunityOrderTemplate(`Name: Ana
-Quantity: 3 gal
-Address: QC
-Phone Number: 09171234567`);
-    expect(result.ok).toBe(true);
-    expect(result.fields.qty).toBe(3);
+  it("parseCommunityOrderLines handles optional dash and casing", () => {
+    expect(parseCommunityOrderLines("3 SLIM alkaline, 2 Round — Mineral")).toEqual([
+      { qty: 3, container: "slim", waterType: "alkaline" },
+      { qty: 2, container: "round", waterType: "mineral" },
+    ]);
+    expect(formatCommunityOrderLines([
+      { qty: 3, container: "slim", waterType: "alkaline" },
+      { qty: 2, container: "round", waterType: "mineral" },
+    ])).toBe("3 slim - alkaline, 2 round - mineral");
   });
 
   it("validateCommunityOrderFields flags invalid email", () => {

@@ -23,6 +23,17 @@ import type {
 } from "../../services/portal/raw-submission-types";
 import { resolvePortalRiderTrackProfile } from "../../services/portal/portal-rider-track-profile";
 import { searchPortalTrackOrders } from "../../services/portal/portal-track-search";
+import {
+  customerNeedsContainerCustodyAcceptance,
+  normalizeCustomerContainerCustodyAgreement,
+  resolveBusinessContainerCustodyAgreement,
+  stampCustomerContainerCustodyAcceptance,
+} from "../../services/customers/container-custody-agreement";
+import { buildDefaultContainerCustodyAgreementPdf } from "../../services/customers/container-custody-agreement-pdf";
+import { applyPortalContainerSetup } from "../../services/portal/portal-container-setup-service";
+import { submissionHasDeliveryOwnedAssetAddons } from "../../services/portal/delivery-owned-asset-addon";
+import { reconcileByogRefillPolicyIfNeeded } from "../../services/customers/byog-refill-policy";
+import { resolvePortalTrackCustomerId } from "../../services/portal/resolve-portal-track-customer";
 
 const SUBMISSION_TYPES: RawSubmissionType[] = [
   "PROFILE_UPDATE",
@@ -32,12 +43,22 @@ const SUBMISSION_TYPES: RawSubmissionType[] = [
   "MARK_TX_COMPLETE",
   "PORTAL_PAY_BALANCE",
   "PORTAL_PREFERRED_SCHEDULE",
+  "PORTAL_CONTAINER_SETUP",
   "PORTAL_TX_RATINGS",
 ];
 
 function parseQueryString(v: unknown): string | undefined {
   if (typeof v !== "string" || !v.trim()) return undefined;
   return v.trim();
+}
+
+function resolvePublicApiBase(req: Request): string {
+  const fromEnv = process.env.PUBLIC_API_BASE_URL?.trim();
+  if (fromEnv) return fromEnv.replace(/\/$/, "");
+  const proto = req.get("x-forwarded-proto") || req.protocol || "https";
+  const host = req.get("x-forwarded-host") || req.get("host");
+  if (host) return `${proto}://${host}`.replace(/\/$/, "");
+  return "https://asia-southeast1-aquaflow-management-suite.cloudfunctions.net/smartrefillV3Api";
 }
 
 function serializePortalTimestamp(value: unknown): string | null {
@@ -295,6 +316,19 @@ export const getPortalCustomerContext = async (req: Request, res: Response) => {
     });
 
     const first = (customer?.name || "Suki").split(/\s+/)[0];
+    const resolvedCustody = resolveBusinessContainerCustodyAgreement(
+      businessId,
+      biz?.containerCustodyAgreement,
+      resolvePublicApiBase(req),
+    );
+    const customerCustody = customer ?
+      normalizeCustomerContainerCustodyAgreement(
+        customer.containerCustodyAgreement,
+      ) :
+      null;
+    const needsCustodyAcceptance = customer ?
+      customerNeedsContainerCustodyAcceptance(customer, biz as Record<string, unknown>) :
+      resolvedCustody?.enabled === true;
     const bizLat = biz?.location?.lat ?? biz?.latitude;
     const bizLng = biz?.location?.lng ?? biz?.longitude;
     const businessLocation =
@@ -343,6 +377,20 @@ export const getPortalCustomerContext = async (req: Request, res: Response) => {
         isCollectionEnabled: customer?.isCollectionEnabled === true,
         deliveryConfig: customer?.deliveryConfig ?? null,
         collectionConfig: customer?.collectionConfig ?? null,
+        containerCustodyAgreement: resolvedCustody ?
+          {
+            documentUrl: resolvedCustody.documentUrl,
+            version: resolvedCustody.version,
+            source: resolvedCustody.source,
+            needsAcceptance: needsCustodyAcceptance,
+            accepted: customerCustody,
+          } :
+          null,
+        containerPolicy: customer?.containerPolicy ?? "unspecified",
+        possession: customer?.possession ?? {},
+        containerDefaultPolicy: biz?.containerDefaultPolicy ?? "wrs_rotation",
+        deliveryInventorySalesEnabled:
+          biz?.deliveryInventorySalesEnabled === true,
       },
     });
   } catch (e: any) {
@@ -394,6 +442,7 @@ export const postPortalSubmission = async (req: Request, res: Response) => {
   const token = parseBodyString(req.body?.token);
   const submissionType = req.body?.submissionType as RawSubmissionType;
   const legalAgreed = req.body?.legalAgreed === true;
+  const containerCustodyAgreed = req.body?.containerCustodyAgreed === true;
   const payload = (req.body?.payload || {}) as RawSubmissionPayload;
 
   if (!businessId) {
@@ -593,38 +642,22 @@ export const postPortalSubmission = async (req: Request, res: Response) => {
         });
       }
       try {
-        let resolvedCustomerId = "";
-        if (cid && tok) {
-          await QrCustomerService.assertValidPortalToken(businessId, cid, tok);
-          resolvedCustomerId = cid;
-        } else {
-          const targetTxId =
+        const resolvedCustomerId = await resolvePortalTrackCustomerId(businessId, {
+          customerId: cid,
+          token: tok,
+          targetTransactionId:
             typeof payload.targetTransactionId === "string" ?
-              payload.targetTransactionId.trim() :
-              "";
-          const txRef =
+              payload.targetTransactionId :
+              "",
+          transactionReferenceId:
             typeof payload.transactionReferenceId === "string" ?
-              payload.transactionReferenceId.trim() :
-              "";
-          let txCustomerId = "";
-          if (targetTxId) {
-            const tx = await TransactionService.getTransaction(businessId, targetTxId);
-            txCustomerId = String(tx?.customerId || "").trim();
-          }
-          if (!txCustomerId && txRef) {
-            const txSnap = await db
-              .collection("businesses")
-              .doc(businessId)
-              .collection("transactions")
-              .where("referenceId", "==", txRef)
-              .limit(1)
-              .get();
-            if (!txSnap.empty) {
-              txCustomerId = String(txSnap.docs[0].data()?.customerId || "").trim();
-            }
-          }
-          resolvedCustomerId = txCustomerId;
-        }
+              payload.transactionReferenceId :
+              "",
+          customerIdHint:
+            typeof payload.customerIdHint === "string" ?
+              payload.customerIdHint :
+              "",
+        });
         if (!resolvedCustomerId) {
           return res.status(401).json({
             error: "Open the portal from your station QR link to save your preferred schedule.",
@@ -643,6 +676,62 @@ export const postPortalSubmission = async (req: Request, res: Response) => {
         return res.json({ data: { success: true } });
       } catch (e) {
         logger.error("portal PORTAL_PREFERRED_SCHEDULE failed", e);
+        return res.status(500).json({ error: "Server error" });
+      }
+    }
+
+    if (submissionType === "PORTAL_CONTAINER_SETUP") {
+      const cid = parseBodyString(req.body?.customerId);
+      const tok = parseBodyString(req.body?.token);
+      const setup = payload.containerSetup;
+      if (!setup || typeof setup !== "object") {
+        return res.status(400).json({ error: "Container setup details are required." });
+      }
+      const policy = setup.containerPolicy;
+      if (policy !== "byog" && policy !== "wrs_rotation") {
+        return res.status(400).json({
+          error: "Choose whether the station provides containers or you bring your own.",
+        });
+      }
+      try {
+        const resolvedCustomerId = await resolvePortalTrackCustomerId(businessId, {
+          customerId: cid,
+          token: tok,
+          targetTransactionId:
+            typeof payload.targetTransactionId === "string" ?
+              payload.targetTransactionId :
+              "",
+          transactionReferenceId:
+            typeof payload.transactionReferenceId === "string" ?
+              payload.transactionReferenceId :
+              "",
+          customerIdHint:
+            typeof payload.customerIdHint === "string" ?
+              payload.customerIdHint :
+              "",
+        });
+        if (!resolvedCustomerId) {
+          return res.status(401).json({
+            error: "Open the portal from your station QR link to save your container setup.",
+          });
+        }
+        await applyPortalContainerSetup(businessId, resolvedCustomerId, {
+          containerPolicy: policy,
+          ownContainers: setup.ownContainers,
+        });
+        return res.json({ data: { success: true } });
+      } catch (e: any) {
+        if (e?.message === "BYOG_CONTAINERS_REQUIRED") {
+          return res.status(400).json({
+            error: "Add at least one container type you bring to the station.",
+          });
+        }
+        if (e?.message === "INVALID_CONTAINER_ITEM") {
+          return res.status(400).json({
+            error: "One or more container types are not valid for this station.",
+          });
+        }
+        logger.error("portal PORTAL_CONTAINER_SETUP failed", e);
         return res.status(500).json({ error: "Server error" });
       }
     }
@@ -726,6 +815,50 @@ export const postPortalSubmission = async (req: Request, res: Response) => {
         customerId,
         token,
       );
+
+      let placeOrderHasOwnedAssetAddons = false;
+
+      if (submissionType === "PLACE_ORDER") {
+        const bizSnap = await db.collection("businesses").doc(businessId).get();
+        const biz = bizSnap.data() as Record<string, unknown> | undefined;
+        placeOrderHasOwnedAssetAddons = await submissionHasDeliveryOwnedAssetAddons(
+          businessId,
+          payload.inventoryItems,
+          biz?.deliveryInventorySalesEnabled === true,
+        );
+
+        if (!placeOrderHasOwnedAssetAddons) {
+          await reconcileByogRefillPolicyIfNeeded(
+            businessId,
+            customerId,
+            payload.refillItems,
+          );
+        }
+      }
+
+      const bizSnap = await db.collection("businesses").doc(businessId).get();
+      const biz = bizSnap.data() as Record<string, unknown> | undefined;
+      const customer = await CustomerService.getCustomer(businessId, customerId);
+      const skipCustodyForOwnedAssetAddons =
+        submissionType === "PLACE_ORDER" && placeOrderHasOwnedAssetAddons;
+      if (
+        customer &&
+        biz &&
+        !skipCustodyForOwnedAssetAddons &&
+        customerNeedsContainerCustodyAcceptance(customer, biz)
+      ) {
+        if (!containerCustodyAgreed) {
+          return res.status(400).json({
+            error: "CUSTODY_AGREEMENT_REQUIRED",
+            message: "Container custody agreement must be accepted.",
+          });
+        }
+        await stampCustomerContainerCustodyAcceptance(
+          businessId,
+          customerId,
+          "portal",
+        );
+      }
     }
 
     if (payload.type === "walkin") {
@@ -1042,6 +1175,7 @@ export const trackOrder = async (req: Request, res: Response) => {
           type: "submission",
           id: subSnap.docs[0].id,
           referenceId: sub.referenceId,
+          customerId: String(sub.customerId || "").trim() || null,
           status: displayStatus,
           typeLabel: sub.submissionType,
           totalAmount: sub.payload?.totalAmount,
@@ -1137,6 +1271,36 @@ export const cancelPortalOrder = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Not found" });
     }
     logger.error("cancelPortalOrder failed", e);
+    return res.status(500).json({ error: "Server error" });
+  }
+};
+
+/** Default or station-branded container custody agreement PDF (Smart Refill template). */
+export const getContainerCustodyAgreementPdf = async (
+  req: Request,
+  res: Response,
+) => {
+  const businessId = parseQueryString(req.query.b);
+  if (!businessId) {
+    return res.status(400).json({ error: "Missing business ID (b)" });
+  }
+
+  try {
+    const bizSnap = await db.collection("businesses").doc(businessId).get();
+    if (!bizSnap.exists) {
+      return res.status(404).json({ error: "Station not found" });
+    }
+    const biz = bizSnap.data() || {};
+    const stationName = String(biz.businessName || biz.name || "Water Refilling Station");
+    const pdf = await buildDefaultContainerCustodyAgreementPdf({ stationName });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="container-custody-${businessId}.pdf"`,
+    );
+    return res.send(pdf);
+  } catch (e) {
+    logger.error("getContainerCustodyAgreementPdf failed", e);
     return res.status(500).json({ error: "Server error" });
   }
 };

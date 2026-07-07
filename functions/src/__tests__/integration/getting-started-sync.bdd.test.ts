@@ -34,17 +34,18 @@ describe("Feature: Getting started sync", () => {
     (syncGettingStartedOnBusiness as ReturnType<typeof vi.fn>).mockResolvedValue({
       gettingStarted: {
         verifyEmail: true,
-        addPaymentAccount: true,
-        addInventory: false,
         addCustomer: false,
         addDelivery: false,
-        addCollection: false,
+        addInventory: false,
         addWalkin: false,
         addExpense: false,
+        shareStationLink: false,
+        addOnlinePayments: true,
+        chatSupport: false,
         useAi: false,
       },
       updated: true,
-      patch: { addPaymentAccount: true },
+      patch: { addOnlinePayments: true },
     });
 
     const res = await request(app)
@@ -52,9 +53,9 @@ describe("Feature: Getting started sync", () => {
       .set("Authorization", "Bearer mock");
 
     expect(res.status).toBe(200);
-    expect(res.body.data.gettingStarted.addPaymentAccount).toBe(true);
+    expect(res.body.data.gettingStarted.addOnlinePayments).toBe(true);
     expect(res.body.data.updated).toBe(true);
-    expect(res.body.data.patch).toEqual({ addPaymentAccount: true });
+    expect(res.body.data.patch).toEqual({ addOnlinePayments: true });
     expect(syncGettingStartedOnBusiness).toHaveBeenCalledWith("biz-1", {
       emailVerified: true,
     });

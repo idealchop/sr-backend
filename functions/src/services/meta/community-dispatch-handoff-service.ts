@@ -41,13 +41,41 @@ async function resolveWaterTypeId(
   return readWaterTypeLabel(waterTypes[0]) || "Water";
 }
 
+async function resolveRefillItems(
+  businessId: string,
+  fields: CommunityOrderFields,
+): Promise<Array<{ type: string; qty: number }>> {
+  if (fields.orderLines?.length) {
+    const items: Array<{ type: string; qty: number }> = [];
+    for (const line of fields.orderLines) {
+      const waterTypeId = await resolveWaterTypeId(businessId, line.waterType);
+      items.push({
+        type: `${waterTypeId} (${line.container})`,
+        qty: line.qty,
+      });
+    }
+    return items;
+  }
+
+  const waterTypeId = await resolveWaterTypeId(businessId, fields.preferredWaterType);
+  return [{ type: waterTypeId, qty: fields.qty ?? 1 }];
+}
+
+function buildOrderNotes(referenceId: string | undefined, fields: CommunityOrderFields): string {
+  const ref = referenceId?.trim() ?? "";
+  const base = `Community Messenger order ${ref}`.trim();
+  if (fields.orderRaw?.trim()) {
+    return `${base}. Order: ${fields.orderRaw.trim()}`;
+  }
+  return base;
+}
+
 function buildSubmissionPayload(params: {
   fields: CommunityOrderFields;
   request: CommunityDispatchRequestDoc;
-  waterTypeId: string;
+  refillItems: Array<{ type: string; qty: number }>;
 }): RawSubmissionPayload {
-  const { fields, request, waterTypeId } = params;
-  const qty = fields.qty ?? 1;
+  const { fields, request, refillItems } = params;
   const isDelivery = fields.delivery === true;
 
   return {
@@ -57,7 +85,7 @@ function buildSubmissionPayload(params: {
       phone: fields.number,
       ...(fields.email ? { email: fields.email } : {}),
     },
-    refillItems: [{ type: waterTypeId, qty }],
+    refillItems,
     ...(isDelivery && fields.location ?
       {
         address: {
@@ -72,8 +100,7 @@ function buildSubmissionPayload(params: {
         },
       } :
       {}),
-    notes:
-      `Community Messenger order ${request.referenceId ?? ""}`.trim(),
+    notes: buildOrderNotes(request.referenceId, fields),
     deliveryStatus: "placed",
   };
 }
@@ -88,15 +115,12 @@ export async function createCommunityDispatchSubmission(params: {
   acceptedByUid: string;
 }): Promise<{ submissionId: string; submissionReferenceId: string }> {
   const fields = params.request.parsed;
-  const waterTypeId = await resolveWaterTypeId(
-    params.businessId,
-    fields.preferredWaterType,
-  );
+  const refillItems = await resolveRefillItems(params.businessId, fields);
 
   const payload = buildSubmissionPayload({
     fields,
     request: params.request,
-    waterTypeId,
+    refillItems,
   });
 
   const created = await RawSubmissionService.createPending(

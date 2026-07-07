@@ -236,3 +236,183 @@ export async function claimNearbyStopForRider(params: {
 
   return { ok: true, previousRiderId: previousRiderId ?? null };
 }
+
+/**
+ * Nearby claim for linked riders (Messenger / record-only) — no Firebase auth user required.
+ */
+export async function claimNearbyStopForLinkedRider(params: {
+  businessId: string;
+  transactionId: string;
+  riderId: string;
+  riderLat: number;
+  riderLng: number;
+  actorId: string;
+}): Promise<{ ok: true; previousRiderId: string | null }> {
+  const {
+    businessId,
+    transactionId,
+    riderId,
+    riderLat,
+    riderLng,
+    actorId,
+  } = params;
+
+  if (
+    typeof riderLat !== "number" ||
+    typeof riderLng !== "number" ||
+    !Number.isFinite(riderLat) ||
+    !Number.isFinite(riderLng)
+  ) {
+    throw new ClaimNearbyStopError(400, "riderLat and riderLng are required");
+  }
+
+  const claimerRider = await RiderService.getRider(businessId, riderId);
+  if (!claimerRider?.id) {
+    throw new ClaimNearbyStopError(403, "Rider profile not found");
+  }
+
+  const txRef = db
+    .collection("businesses")
+    .doc(businessId)
+    .collection("transactions")
+    .doc(transactionId);
+  const txSnap = await txRef.get();
+  if (!txSnap.exists) {
+    throw new ClaimNearbyStopError(404, "Transaction not found");
+  }
+  const tx = txSnap.data() as Record<string, unknown>;
+  const type = tx.type as string;
+  if (type !== "delivery" && type !== "collection") {
+    throw new ClaimNearbyStopError(
+      400,
+      "Only delivery or collection transactions can be claimed this way",
+    );
+  }
+
+  const ds = tx.deliveryStatus as string | undefined;
+  if (ds !== "pending" && ds !== "placed") {
+    throw new ClaimNearbyStopError(
+      400,
+      "Only pending or placed orders can be added from nearby",
+    );
+  }
+
+  const customerId = tx.customerId as string | undefined;
+  if (!customerId) {
+    throw new ClaimNearbyStopError(400, "Transaction has no customer");
+  }
+
+  const customer = await CustomerService.getCustomer(businessId, customerId);
+  if (!customer) {
+    throw new ClaimNearbyStopError(400, "Customer not found");
+  }
+
+  const lat = customer.latitude;
+  const lng = customer.longitude;
+  if (
+    typeof lat !== "number" ||
+    typeof lng !== "number" ||
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lng)
+  ) {
+    throw new ClaimNearbyStopError(
+      400,
+      "Customer location is missing; cannot verify distance",
+    );
+  }
+
+  const km = haversineKm(riderLat, riderLng, lat, lng);
+  if (km > NEARBY_STOP_RADIUS_KM) {
+    throw new ClaimNearbyStopError(
+      400,
+      `Stop is outside the ${NEARBY_STOP_RADIUS_KM} km nearby radius`,
+    );
+  }
+
+  const previousRiderId =
+    typeof tx.riderId === "string" ? tx.riderId : undefined;
+
+  if (previousRiderId === claimerRider.id) {
+    return { ok: true, previousRiderId: previousRiderId ?? null };
+  }
+
+  await TransactionService.updateTransaction(
+    businessId,
+    transactionId,
+    { riderId: claimerRider.id },
+    actorId,
+  );
+
+  const customerName =
+    (tx.customerName as string) || customer.name || "Customer";
+  const claimerName = claimerRider.name || "A rider";
+  const reassigned = previousRiderId ? " (reassigned)" : "";
+  const msg = `${claimerName} added ${customerName} to their route from nearby${reassigned}.`;
+
+  let previousUserId: string | undefined;
+  if (previousRiderId) {
+    const prevRider = await RiderService.getRider(businessId, previousRiderId);
+    if (prevRider?.userId) {
+      previousUserId = prevRider.userId;
+    }
+    if (previousUserId) {
+      await NotificationService.send({
+        userId: previousUserId,
+        businessId,
+        title: "Stop moved to another rider",
+        message: `${customerName} was reassigned to ${claimerName}'s route from Messenger nearby.`,
+        type: "warning",
+        metadata: { transactionId, customerId },
+      });
+    }
+  }
+
+  const biz = await db.collection("businesses").doc(businessId).get();
+  const ownerId = biz.data()?.ownerId as string | undefined;
+  if (ownerId) {
+    await NotificationService.send({
+      userId: ownerId,
+      businessId,
+      title: "Nearby stop claimed",
+      message: msg,
+      type: "info",
+      metadata: { transactionId, customerId },
+    });
+  }
+
+  const membersSnap = await db
+    .collection("businesses")
+    .doc(businessId)
+    .collection("members")
+    .get();
+  for (const doc of membersSnap.docs) {
+    if (doc.data()?.role === "admin") {
+      await NotificationService.send({
+        userId: doc.id,
+        businessId,
+        title: "Nearby stop claimed",
+        message: msg,
+        type: "info",
+        metadata: { transactionId, customerId },
+      });
+    }
+  }
+
+  await logAuditEvent(
+    "NEARBY_STOP_CLAIMED",
+    {
+      businessId,
+      transactionId,
+      claimerRiderId: claimerRider.id,
+      previousRiderId: previousRiderId || null,
+      distanceKm: Math.round(km * 1000) / 1000,
+      source: "rider_messenger",
+    },
+    null,
+    { riderId: claimerRider.id },
+    transactionId,
+    ["riderId"],
+  );
+
+  return { ok: true, previousRiderId: previousRiderId ?? null };
+}

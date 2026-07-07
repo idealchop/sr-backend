@@ -104,6 +104,8 @@ export const smartrefillV3Api = onRequest(
       "META_COMMUNITY_PAGE_ACCESS_TOKEN",
       "META_COMMUNITY_PAGE_ID",
       "META_COMMUNITY_APP_SECRET",
+      "PAYMONGO_SECRET_KEY",
+      "PAYMONGO_WEBHOOK_SECRET",
     ],
   },
   api,
@@ -117,6 +119,7 @@ export { dormantDigestNotification } from "./jobs/dormant-digest-notification";
 export { morningOwnerIntelligence } from "./jobs/morning-owner-intelligence";
 export { proactiveInsightPushNotification } from "./jobs/proactive-insight-push-notification";
 export { pmRecurrenceScheduler } from "./jobs/pm-recurrence-scheduler";
+export { subscriptionAutoRenewScheduler } from "./jobs/subscription-auto-renew-scheduler";
 export { communityDispatchExpireOffers } from "./jobs/community-dispatch-expire-offers";
 export { ownerDataWarehouseExport } from "./jobs/owner-data-warehouse-export";
 export { onSubscriptionUpdated } from "./triggers/subscription-triggers";

@@ -54,6 +54,8 @@ export type CommunityDispatchRequestDoc = {
   /** True once any station was found within any search radius. */
   stationsFoundEver?: boolean;
   routingNotes?: string;
+  /** Soft wait reminder sent while still offered. */
+  waitNudgeSentAt?: unknown;
   createdAt?: unknown;
   updatedAt?: unknown;
 };

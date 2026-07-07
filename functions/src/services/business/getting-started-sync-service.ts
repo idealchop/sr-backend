@@ -6,6 +6,22 @@ import {
 
 export type GettingStartedFlags = Record<GettingStartedKey, boolean>;
 
+type LegacyGettingStartedStored = Partial<GettingStartedFlags> & {
+  addPaymentAccount?: boolean;
+  addCollection?: boolean;
+};
+
+function normalizeStoredGettingStarted(
+  stored: LegacyGettingStartedStored | undefined,
+): Partial<GettingStartedFlags> {
+  if (!stored) return {};
+  const normalized: Partial<GettingStartedFlags> = { ...stored };
+  if (stored.addPaymentAccount === true) {
+    normalized.addOnlinePayments = true;
+  }
+  return normalized;
+}
+
 /**
  * Derives checklist completion from Firestore collections (source of truth).
  * @param {string} businessId The business ID.
@@ -22,7 +38,6 @@ export async function detectGettingStartedFromCollections(
     inventorySnap,
     customersSnap,
     deliverySnap,
-    collectionSnap,
     walkinSnap,
     expenseSnap,
     aiSnap,
@@ -31,7 +46,6 @@ export async function detectGettingStartedFromCollections(
     bizRef.collection("inventory_items").limit(1).get(),
     bizRef.collection("customers").limit(1).get(),
     bizRef.collection("transactions").where("type", "==", "delivery").limit(1).get(),
-    bizRef.collection("transactions").where("type", "==", "collection").limit(1).get(),
     bizRef
       .collection("transactions")
       .where("type", "in", ["walkin", "direct_sale"])
@@ -43,11 +57,10 @@ export async function detectGettingStartedFromCollections(
   ]);
 
   const detected: Partial<GettingStartedFlags> = {
-    addPaymentAccount: !paymentInfoSnap.empty,
+    addOnlinePayments: !paymentInfoSnap.empty,
     addInventory: !inventorySnap.empty,
     addCustomer: !customersSnap.empty,
     addDelivery: !deliverySnap.empty,
-    addCollection: !collectionSnap.empty,
     addWalkin: !walkinSnap.empty,
     addExpense: !expenseSnap.empty,
     useAi: !aiSnap.empty,
@@ -61,10 +74,10 @@ export async function detectGettingStartedFromCollections(
 }
 
 function mergeGettingStartedFlags(
-  stored: Partial<GettingStartedFlags> | undefined,
+  stored: LegacyGettingStartedStored | undefined,
   detected: Partial<GettingStartedFlags>,
 ): GettingStartedFlags {
-  const merged = { ...DEFAULT_GETTING_STARTED, ...(stored || {}) };
+  const merged = { ...DEFAULT_GETTING_STARTED, ...normalizeStoredGettingStarted(stored) };
   for (const key of Object.keys(DEFAULT_GETTING_STARTED) as GettingStartedKey[]) {
     if (detected[key] === true) {
       merged[key] = true;
@@ -93,13 +106,14 @@ export async function syncGettingStartedOnBusiness(
     throw new Error("Business not found");
   }
 
-  const stored = snap.data()?.gettingStarted as Partial<GettingStartedFlags> | undefined;
+  const stored = snap.data()?.gettingStarted as LegacyGettingStartedStored | undefined;
+  const normalizedStored = normalizeStoredGettingStarted(stored);
   const detected = await detectGettingStartedFromCollections(businessId, options);
   const merged = mergeGettingStartedFlags(stored, detected);
 
   const patch: Partial<GettingStartedFlags> = {};
   for (const key of Object.keys(DEFAULT_GETTING_STARTED) as GettingStartedKey[]) {
-    if (merged[key] && !stored?.[key]) {
+    if (merged[key] && !normalizedStored?.[key]) {
       patch[key] = true;
     }
   }

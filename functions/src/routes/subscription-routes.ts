@@ -13,7 +13,9 @@ import {
   validateCheckoutVoucher,
   seedSubscriptionCatalog,
   resetSubscriptionTrialForBdd,
+  pauseTrialSubscription,
 } from "../handlers/subscription-handler";
+import { postSubscriptionPaymentIntent } from "../handlers/payments/payment-intent-handler";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
 
 const router = express.Router(); // eslint-disable-line new-cap
@@ -35,6 +37,11 @@ router.post(
   validateFirebaseIdToken,
   validateCheckoutVoucher,
 );
+router.post(
+  "/:businessId/payment-intent",
+  validateFirebaseIdToken,
+  postSubscriptionPaymentIntent,
+);
 router.get(
   "/:businessId/status",
   validateFirebaseIdToken,
@@ -53,6 +60,11 @@ router.post(
 );
 router.post("/:businessId/cancel", validateFirebaseIdToken, cancelSubscription);
 router.post("/:businessId/resume", validateFirebaseIdToken, resumeSubscription);
+router.post(
+  "/:businessId/trial/pause",
+  validateFirebaseIdToken,
+  pauseTrialSubscription,
+);
 router.get(
   "/:businessId/history/:subscriptionId/invoice-pdf",
   validateFirebaseIdToken,

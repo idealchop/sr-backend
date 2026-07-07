@@ -58,7 +58,7 @@ test.describe("Subscription management (BDD)", () => {
     expect(history[0].paymentReference).toBe("PAY-BDD-TEST");
     expect(history[0].voucherCode).toBe("WELCOME10");
 
-    // 5. Cancel Subscription
+    // 5. Cancel on trial / Starter is rejected — use Pricing to change plans
     const cancelRes = await request.post(
       `${API_PATH}/subscriptions/${businessId}/cancel`,
       {
@@ -66,6 +66,8 @@ test.describe("Subscription management (BDD)", () => {
         data: {},
       },
     );
-    expect(cancelRes.status()).toBe(200);
+    expect(cancelRes.status()).toBe(400);
+    const cancelBody = await cancelRes.json();
+    expect(String(cancelBody.error || "")).toMatch(/starter|trial|cancel/i);
   });
 });

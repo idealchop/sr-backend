@@ -62,7 +62,7 @@ export const getDormantCustomersAnalytics = async (req: Request, res: Response) 
   const user = (req as any).user;
   const page = parseInt(String(req.query.page || "1"), 10) || 1;
   const limit = parseInt(String(req.query.limit || "50"), 10) || 50;
-  const thresholdDays = parseInt(String(req.query.thresholdDays || "7"), 10) || 7;
+  const thresholdDays = parseInt(String(req.query.thresholdDays || "15"), 10) || 15;
 
   try {
     const { hasAccess } = await checkBusinessAccess(user.uid, businessId);

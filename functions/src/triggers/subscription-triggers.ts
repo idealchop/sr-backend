@@ -5,11 +5,12 @@ import {
   paymentReadyForActivation,
   promoteDueScheduledSubscriptions,
 } from "../services/subscriptions/subscription-effective";
+import { runSubscriptionLifecycleMaintenance } from "../services/subscriptions/subscription-lifecycle-maintenance";
 
 /**
  * Subscription status transitions:
  * - `approved` → `scheduled` (if activatesAt in future) or `active` now
- * - Paid period ended → promote due scheduled renewals, then expire / downgrade
+ * - Paid period ended → grace → expired → Starter downgrade (via lifecycle maintenance)
  */
 export const onSubscriptionUpdated = onDocumentUpdated(
   {
@@ -51,24 +52,7 @@ export const onSubscriptionUpdated = onDocumentUpdated(
       return;
     }
 
-    const now = new Date();
-    const expiresAt = newData.dates?.expiresAt?.toDate?.() as Date | undefined;
-    if (!expiresAt || now <= expiresAt) return;
-    if (newData.status !== "active") return;
-
     await promoteDueScheduledSubscriptions(businessId);
-
-    const afterPromote = event.data.after.data();
-    if (afterPromote?.status !== "active") return;
-
-    logger.info(
-      `Subscription ${event.params.subscriptionId} expired; updating status`,
-    );
-    await event.data.after.ref.update({ status: "expired" });
-
-    const planCode = String(newData.planCode || "").toLowerCase();
-    if (planCode !== "starter") {
-      await SubscriptionService.handleAutoDowngrade(businessId);
-    }
+    await runSubscriptionLifecycleMaintenance(businessId);
   },
 );

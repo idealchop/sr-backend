@@ -14,6 +14,10 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 - **Viewing** (lists on dashboard): customers, transactions, and pending portal submissions
   update **live** via Firestore while you work—Refresh does not re-download the full customer/ledger lists when sync is healthy.
 - **Inventory**: one shared load per workspace (page and dialogs), not a request per screen.
+  Catalog roles: **Round** and **Slim** (one each, customer-owned sales), **rotation shell** (WRS borrow/return),
+  kit parts, general supplies. **Delivery add-on items** (Account → Catalog) enables priced Round/Slim/supplies on
+  delivery and portal orders; when refills exceed suki's owned Round/Slim count, add-ons auto-fill the gap.
+  Delete/restock update the list immediately; CRUD/restock sends in-app notifications.
 - **Saving** (create/edit/delete): all business changes go through Smart Refill's secure server;
   the dashboard sends the change, then live lists update.
 - **Plan & notifications**: subscription status and the notification bell use API reads on a schedule.

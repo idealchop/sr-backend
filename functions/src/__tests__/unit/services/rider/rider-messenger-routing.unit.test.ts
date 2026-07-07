@@ -47,6 +47,37 @@ describe("shouldRouteToRiderMessenger", () => {
     expect(result).toBe(true);
   });
 
+  it("routes NEARBY from unlinked PSID", async () => {
+    const result = await shouldRouteToRiderMessenger({
+      sender: { id: "psid-new" },
+      message: { text: "NEARBY" },
+    });
+    expect(result).toBe(true);
+  });
+
+  it("routes GROUP # from unlinked PSID", async () => {
+    const result = await shouldRouteToRiderMessenger({
+      sender: { id: "psid-new" },
+      message: { text: "GROUP 1" },
+    });
+    expect(result).toBe(true);
+  });
+
+  it("routes DETAILS and ORDER from unlinked PSID", async () => {
+    expect(
+      await shouldRouteToRiderMessenger({
+        sender: { id: "psid-new" },
+        message: { text: "DETAILS 2" },
+      }),
+    ).toBe(true);
+    expect(
+      await shouldRouteToRiderMessenger({
+        sender: { id: "psid-new" },
+        message: { text: "ORDER 2 DELIVERY 5" },
+      }),
+    ).toBe(true);
+  });
+
   it("does not route normal customer order text", async () => {
     const result = await shouldRouteToRiderMessenger({
       sender: { id: "psid-customer" },

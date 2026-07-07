@@ -13,6 +13,11 @@ import {
 } from "../inventory/inventory-service";
 import { resolveStockInventoryLineId, transactionSkipsSalesInventoryStock } from "./transaction-line-inventory";
 import { CustomerLastFulfilledService } from "../customers/customer-last-fulfilled-service";
+import { CustomerService } from "../customers/customer-service";
+import {
+  customerUsesWrContainerRotation,
+  getBusinessContainerDefaultPolicy,
+} from "../customers/container-policy";
 import {
   notifyTransactionCreated,
   notifyTransactionUpdated,
@@ -27,8 +32,28 @@ import {
   isIdempotentPaymentPatch,
   normalizeClientMutationId,
 } from "./client-mutation-id";
+import {
+  applyOwnedShapePossessionTarget,
+  dueDiligenceOwnedPossessionTarget,
+  dueDiligenceRequiresWrPossessionSync,
+  isRiderContainerDueDiligence,
+} from "./delivery-rider-due-diligence";
 
 export { InsufficientStockError };
+
+async function shouldSyncWrContainerPossession(
+  businessId: string,
+  customerId: string,
+): Promise<boolean> {
+  const [customer, businessSnap] = await Promise.all([
+    CustomerService.getCustomer(businessId, customerId),
+    db.collection("businesses").doc(businessId).get(),
+  ]);
+  const businessDefault = getBusinessContainerDefaultPolicy(
+    businessSnap.data() as Record<string, unknown> | undefined,
+  );
+  return customerUsesWrContainerRotation(customer, businessDefault);
+}
 
 
 export interface TransactionRefill {
@@ -146,6 +171,7 @@ export interface Transaction {
    * behaviour: stock was applied at transaction creation.
    */
   salesStockApplied?: boolean;
+  riderContainerDueDiligence?: import("./delivery-rider-due-diligence").RiderContainerDueDiligence;
 }
 
 export type AddTransactionResult = {
@@ -655,24 +681,26 @@ export class TransactionService {
         if (!customerId) {
           throw new Error("Customer ID is required when syncing possession");
         }
-        await TransactionService.syncCustomerAssetPossession(
-          businessId,
-          customerId,
-          newTransaction.items || [],
-          newTransaction.collectionItems || [],
-          docRef.id,
-          userId,
-        );
-        if ((newTransaction.collectionItems || []).length > 0) {
-          await TransactionService.logCollectionContainerAudit(
+        if (await shouldSyncWrContainerPossession(businessId, customerId)) {
+          await TransactionService.syncCustomerAssetPossession(
             businessId,
-            docRef.id,
             customerId,
+            newTransaction.items || [],
             newTransaction.collectionItems || [],
+            docRef.id,
             userId,
-            "COLLECTION_CONTAINER_RECORDED",
-            newTransaction.referenceId,
           );
+          if ((newTransaction.collectionItems || []).length > 0) {
+            await TransactionService.logCollectionContainerAudit(
+              businessId,
+              docRef.id,
+              customerId,
+              newTransaction.collectionItems || [],
+              userId,
+              "COLLECTION_CONTAINER_RECORDED",
+              newTransaction.referenceId,
+            );
+          }
         }
       }
 
@@ -1297,31 +1325,53 @@ export class TransactionService {
       const possessionSyncType = current.type;
       const itemsChanged =
         updates.items !== undefined || updates.collectionItems !== undefined;
+      const riderDueDiligence = isRiderContainerDueDiligence(
+        updates.riderContainerDueDiligence,
+      ) ?
+        updates.riderContainerDueDiligence :
+        isRiderContainerDueDiligence(
+          (current as Transaction).riderContainerDueDiligence,
+        ) ?
+          (current as Transaction).riderContainerDueDiligence :
+          undefined;
       const shouldSyncPossession =
         customerId &&
         (possessionSyncType === "delivery" ||
           possessionSyncType === "collection") &&
-        (itemsChanged || becomingDispatched);
+        (itemsChanged || becomingDispatched || riderDueDiligence);
       if (shouldSyncPossession) {
         const mergedCollection =
           updates.collectionItems ?? current.collectionItems ?? [];
-        await TransactionService.syncCustomerAssetPossession(
-          businessId,
-          customerId,
-          updates.items ?? current.items ?? [],
-          mergedCollection,
-          transactionId,
-          userId,
-        );
-        if (updates.collectionItems !== undefined && mergedCollection.length > 0) {
-          await TransactionService.logCollectionContainerAudit(
+        const syncWrShellPossession =
+          dueDiligenceRequiresWrPossessionSync(riderDueDiligence) ||
+          (await shouldSyncWrContainerPossession(businessId, customerId));
+        if (syncWrShellPossession) {
+          await TransactionService.syncCustomerAssetPossession(
             businessId,
-            transactionId,
             customerId,
+            updates.items ?? current.items ?? [],
             mergedCollection,
+            transactionId,
             userId,
-            "COLLECTION_CONTAINER_UPDATED",
-            current.referenceId,
+          );
+          if (updates.collectionItems !== undefined && mergedCollection.length > 0) {
+            await TransactionService.logCollectionContainerAudit(
+              businessId,
+              transactionId,
+              customerId,
+              mergedCollection,
+              userId,
+              "COLLECTION_CONTAINER_UPDATED",
+              current.referenceId,
+            );
+          }
+        }
+        const ownedTarget = dueDiligenceOwnedPossessionTarget(riderDueDiligence);
+        if (ownedTarget != null) {
+          await applyOwnedShapePossessionTarget(
+            businessId,
+            customerId,
+            ownedTarget,
           );
         }
       }
@@ -1509,7 +1559,7 @@ export class TransactionService {
     }
 
     // 3. Revert customer possession
-    if (customerId) {
+    if (customerId && (await shouldSyncWrContainerPossession(businessId, customerId))) {
       await TransactionService.syncCustomerAssetPossession(
         businessId,
         customerId,

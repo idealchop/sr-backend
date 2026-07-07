@@ -2,7 +2,7 @@ import type { Customer } from "../services/customers/customer-service";
 import type { Transaction } from "../services/transactions/transaction-service";
 import { isWalkInCustomerName } from "../services/ai/ledger-scan-customer-match";
 
-export const DEFAULT_DORMANT_THRESHOLD_DAYS = 7;
+export const DEFAULT_DORMANT_THRESHOLD_DAYS = 15;
 
 export type DormantTier = "watch" | "at_risk" | "churned";
 
@@ -97,7 +97,7 @@ function countUnits(tx: Transaction): number {
 
 function dormantTier(days: number): DormantTier {
   if (days >= 30) return "churned";
-  if (days >= 14) return "at_risk";
+  if (days >= 21) return "at_risk";
   return "watch";
 }
 
@@ -265,7 +265,7 @@ export function buildDormantSignalsSnapshot(
 
   const fourteenAgo = new Date(now.getTime() - 14 * 86_400_000);
   const priorRows = buildDormantCustomerRows(customers, transactions, {
-    thresholdDays: 7,
+    thresholdDays: DEFAULT_DORMANT_THRESHOLD_DAYS,
     now: fourteenAgo,
   });
 

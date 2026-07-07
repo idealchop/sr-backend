@@ -6,6 +6,7 @@ import {
   logAuditEvent,
 } from "../services/observability/logging/logger";
 import { SubscriptionService } from "../services/subscriptions/subscription-service";
+import { TrialLifecycleService } from "../services/subscriptions/trial-lifecycle-service";
 import {
   fetchRecentSubscriptionRows,
   pickEffectiveEntitling,
@@ -16,6 +17,7 @@ import {
   formatBusinessAddressForPdf,
 } from "../services/subscriptions/subscription-invoice-pdf";
 import { NotificationService } from "../services/notifications/notification-service";
+import { PaymongoRecurringService } from "../services/payments/paymongo-recurring-service";
 import {
   addonExtensionMatchesPlan,
   hasCappedQuotas,
@@ -458,10 +460,24 @@ export const cancelSubscription = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "No active subscription" });
     }
 
+    const planCode = String(effective.data.planCode || "").toLowerCase();
+    const cycle = String(effective.data.billingCycle || "");
+    if (
+      planCode === "starter" ||
+      planCode === "free" ||
+      cycle === "trial"
+    ) {
+      return res.status(400).json({
+        error: "Starter and trial plans cannot be cancelled. Open pricing to change plans.",
+      });
+    }
+
     await effective.ref.update({
       "cancelAtPeriodEnd": true,
       "dates.cancelledAt": FieldValue.serverTimestamp(),
     });
+
+    await PaymongoRecurringService.cancelSubscription(businessId);
 
     logAuditEvent("SUBSCRIPTION_CANCELLED", { businessId, userId: user.uid });
     await NotificationService.send({
@@ -523,6 +539,33 @@ export const resumeSubscription = async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+};
+
+/**
+ * Pauses an in-progress Scale trial when the owner signs out (MIA).
+ * Remaining trial time can be resumed on next login.
+ */
+export const pauseTrialSubscription = async (req: Request, res: Response) => {
+  const { businessId } = req.params;
+  const user = (req as { user?: { uid: string } }).user;
+  try {
+    const { hasAccess, role } = await checkBusinessAccess(
+      user?.uid || "",
+      businessId,
+    );
+    if (!hasAccess || role !== "owner") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const result = await TrialLifecycleService.pauseTrialIfRunning(
+      businessId,
+      user!.uid,
+    );
+    return res.json({ data: result });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Pause failed";
+    return res.status(500).json({ error: message });
   }
 };
 

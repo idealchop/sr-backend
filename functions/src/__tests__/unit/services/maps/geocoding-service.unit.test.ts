@@ -1,5 +1,17 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { GeocodingService } from "../../../../services/maps/geocoding-service";
+import {
+  GOOGLE_MAPS_SECRET_ID,
+  GOOGLE_MAPS_SERVER_SECRET_ID,
+} from "../../../../services/maps/maps-config";
+
+function clearMapsApiKeyEnv(): void {
+  delete process.env.GOOGLE_MAPS_API_KEY;
+  delete process.env.GOOGLE_MAPS_SERVER_API_KEY;
+  delete process.env.SMARTREFILL_GOOGLE_MAPS_API_KEY;
+  delete process.env[GOOGLE_MAPS_SECRET_ID];
+  delete process.env[GOOGLE_MAPS_SERVER_SECRET_ID];
+}
 
 describe("GeocodingService", () => {
   const originalFetch = global.fetch;
@@ -50,7 +62,7 @@ describe("GeocodingService", () => {
   });
 
   it("logs and returns null when maps API key is missing", async () => {
-    delete process.env.GOOGLE_MAPS_API_KEY;
+    clearMapsApiKeyEnv();
     await expect(
       GeocodingService.geocodeAddress("123 Rizal St, Quezon City"),
     ).resolves.toBeNull();

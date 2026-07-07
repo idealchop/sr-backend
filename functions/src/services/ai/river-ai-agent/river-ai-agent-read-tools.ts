@@ -80,7 +80,9 @@ export async function listCustomersForAgent(
   return { rows, total };
 }
 
-function customerToRow(c: Awaited<ReturnType<typeof CustomerService.getCustomersByBusiness>>[number]): RiverAiAgentListRow {
+function customerToRow(
+  c: Awaited<ReturnType<typeof CustomerService.getCustomersByBusiness>>[number],
+): RiverAiAgentListRow {
   return {
     id: c.id || "",
     label: c.name,
@@ -318,8 +320,15 @@ export async function listRidersForAgent(
 
 export async function todaySummaryForAgent(
   businessId: string,
-): Promise<{ rows: RiverAiAgentListRow[]; total: number; metrics: ReturnType<typeof buildWorkspaceRevenueMetrics> }> {
-  const transactions = await TransactionService.getTransactionsByBusiness(businessId, { limit: 400 });
+): Promise<{
+  rows: RiverAiAgentListRow[];
+  total: number;
+  metrics: ReturnType<typeof buildWorkspaceRevenueMetrics>;
+}> {
+  const transactions = await TransactionService.getTransactionsByBusiness(
+    businessId,
+    { limit: 400 },
+  );
   const metrics = buildWorkspaceRevenueMetrics(transactions);
   const todayKey = manilaDateKey(new Date());
 

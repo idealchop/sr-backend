@@ -5,8 +5,38 @@ import { getInventoryItemStockHistory } from "../services/inventory/inventory-st
 import { checkBusinessAccess } from "../utils/auth-utils";
 import { logAuditEvent } from "../services/observability/logging/logger";
 import {
+  notifyInventoryItemCreated,
+  notifyInventoryItemDeleted,
+  notifyInventoryItemUpdated,
   notifyInventoryStockAdjusted,
 } from "../services/notifications/station-activity-notification-service";
+
+function summarizeInventoryUpdate(
+  before: Awaited<ReturnType<typeof InventoryService.getItem>>,
+  data: Record<string, unknown>,
+): string | undefined {
+  const parts: string[] = [];
+  if (typeof data.name === "string" && data.name.trim() && data.name !== before?.name) {
+    parts.push("name");
+  }
+  if (data.cost !== undefined && data.cost !== before?.cost) {
+    parts.push("price");
+  }
+  if (data.inventoryRole !== undefined && data.inventoryRole !== before?.inventoryRole) {
+    parts.push("catalog role");
+  }
+  if (data.stock && typeof data.stock === "object") {
+    const stock = data.stock as { min?: number };
+    if (stock.min !== undefined && stock.min !== before?.stock?.min) {
+      parts.push("low-stock alert");
+    }
+  }
+  if (Array.isArray(data.kitComponentIds)) {
+    parts.push("kit parts");
+  }
+  if (parts.length === 0) return undefined;
+  return parts.join(", ");
+}
 
 export const listInventory = async (req: Request, res: Response) => {
   const { businessId } = req.params;
@@ -75,6 +105,18 @@ export const createInventoryItem = async (req: Request, res: Response) => {
       data,
     );
 
+    const itemName = String(data?.name || "Stock item");
+    const startingStock = Number(data?.stock?.current) || 0;
+    const unit = String(data?.stock?.unit || "units");
+    void notifyInventoryItemCreated(
+      businessId,
+      itemName,
+      startingStock,
+      unit,
+      user.uid,
+      itemId,
+    ).catch((err) => logger.warn("notifyInventoryItemCreated failed", err));
+
     res.status(201).json({ success: true, itemId });
   } catch (error: any) {
     logger.error(`Error creating inventory item for ${businessId}`, error);
@@ -94,6 +136,7 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
       return;
     }
 
+    const before = await InventoryService.getItem(businessId, itemId);
     await InventoryService.updateItem(businessId, itemId, data);
 
     logAuditEvent(
@@ -106,6 +149,16 @@ export const updateInventoryItem = async (req: Request, res: Response) => {
       null,
       data,
     );
+
+    const itemName = String(data?.name || before?.name || "Stock item");
+    const summary = summarizeInventoryUpdate(before, data);
+    void notifyInventoryItemUpdated(
+      businessId,
+      itemName,
+      user.uid,
+      itemId,
+      summary,
+    ).catch((err) => logger.warn("notifyInventoryItemUpdated failed", err));
 
     res.json({ success: true });
   } catch (error: any) {
@@ -125,6 +178,7 @@ export const deleteInventoryItem = async (req: Request, res: Response) => {
       return;
     }
 
+    const item = await InventoryService.getItem(businessId, itemId);
     await InventoryService.deleteItem(businessId, itemId);
 
     logAuditEvent("INVENTORY_ITEM_DELETED", {
@@ -132,6 +186,15 @@ export const deleteInventoryItem = async (req: Request, res: Response) => {
       userId: user.uid,
       itemId,
     });
+
+    if (item?.name) {
+      void notifyInventoryItemDeleted(
+        businessId,
+        item.name,
+        user.uid,
+        itemId,
+      ).catch((err) => logger.warn("notifyInventoryItemDeleted failed", err));
+    }
 
     res.json({ success: true });
   } catch (error: any) {

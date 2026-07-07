@@ -1,6 +1,9 @@
 import { db, FieldValue } from "../../config/firebase-admin";
 import { CustomerActiveLimitService } from "../customers/customer-active-limit-service";
 import { CustomerService } from "../customers/customer-service";
+import {
+  getBusinessContainerDefaultPolicy,
+} from "../customers/container-policy";
 import { ensureCustomerActiveForPortalAcceptance } from "./portal-customer-activation";
 import { InventoryService } from "../inventory/inventory-service";
 import { logger } from "../observability/logging/logger";
@@ -253,16 +256,14 @@ const submissionHandlers: Record<string, SubmissionHandler> = {
         const item = await InventoryService.getItem(businessId, i.inventoryId);
         const rawUnit = (i as { unitPrice?: number }).unitPrice;
         let unitPrice = 0;
-        if (isWalkinPayload) {
-          if (
-            typeof rawUnit === "number" &&
-            Number.isFinite(rawUnit) &&
-            rawUnit >= 0
-          ) {
-            unitPrice = rawUnit;
-          } else if (item && typeof item.cost === "number") {
-            unitPrice = item.cost;
-          }
+        if (
+          typeof rawUnit === "number" &&
+          Number.isFinite(rawUnit) &&
+          rawUnit >= 0
+        ) {
+          unitPrice = rawUnit;
+        } else if (isWalkinPayload && item && typeof item.cost === "number") {
+          unitPrice = item.cost;
         }
         const qty = i.qty ?? 0;
         return {
@@ -299,9 +300,10 @@ const submissionHandlers: Record<string, SubmissionHandler> = {
     const pay = submission.payload.payment;
     const amountPaid = pay?.amountPaid ?? 0;
     const refillSubtotal = refills.reduce((acc, r) => acc + r.subtotal, 0);
-    const itemSubtotal = isWalkinPayload ?
-      invItems.reduce((acc, item) => acc + (item.subtotal ?? 0), 0) :
-      0;
+    const itemSubtotal = invItems.reduce(
+      (acc, item) => acc + (item.subtotal ?? 0),
+      0,
+    );
     const calculatedTotal = refillSubtotal + itemSubtotal;
     const payloadTotal = submission.payload.totalAmount;
     const declaredTotal =
@@ -568,6 +570,13 @@ export class RawSubmissionProcessor {
         const addr = submission.payload.address || {};
         const sukiType =
           profile.sukiType === "commercial" ? "commercial" : "residential";
+        const businessSnap = await db
+          .collection("businesses")
+          .doc(businessId)
+          .get();
+        const containerPolicy = getBusinessContainerDefaultPolicy(
+          businessSnap.data() as Record<string, unknown> | undefined,
+        );
         customer = await CustomerService.addCustomer(businessId, {
           name: (profile.name as string) || "New Suki",
           phone: (profile.phone as string) || "",
@@ -580,6 +589,7 @@ export class RawSubmissionProcessor {
             sukiType === "commercial" && typeof profile.companyName === "string" ?
               profile.companyName.trim() || undefined :
               undefined,
+          containerPolicy,
         });
         if (customer.id) {
           await RawSubmissionService.updateStatus(businessId, subId, {

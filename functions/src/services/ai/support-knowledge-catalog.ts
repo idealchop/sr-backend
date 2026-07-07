@@ -9,76 +9,22 @@ import {
   SUPPORT_PRODUCT_DOC_ENTRIES,
 } from "./product-documentation-knowledge";
 
-export type SupportKnowledgeEntry = {
-  id: string;
-  topic: string;
-  content: string;
-};
+import {
+  SUPPORT_EQUIPMENT_FAQ,
+  SUPPORT_EQUIPMENT_KNOWLEDGE,
+} from "./support-equipment-knowledge";
+import { formatRiverAiKnowledgeManifestBlock } from "./river-ai-knowledge-manifest";
+import { SUPPORT_AI_PERSONA } from "./support-persona-roles";
+import {
+  SUPPORT_WATER_SCIENCE_FAQ,
+  SUPPORT_WATER_SCIENCE_KNOWLEDGE,
+} from "./support-water-science-knowledge";
+import type { SupportKnowledgeEntry } from "./support-knowledge-types";
 
-const SUPPORT_CONTEXT_ENTRY_LIMIT = 14;
+export { SUPPORT_AI_PERSONA };
+export type { SupportKnowledgeEntry } from "./support-knowledge-types";
 
-export const SUPPORT_AI_PERSONA = [
-  "You are **River AI Buddy** — the owner's day-to-day companion for their water refilling station (WRS)",
-  "in the Philippines and the Smart Refill app.",
-  "",
-  "You are NOT just a helpdesk. You help owners:",
-  "- Understand **live business numbers** and **schedule** from the Firestore snapshot injected each turn.",
-  "  Collections read: transactions, customers, inventory_items, riders, raw_submissions, members.",
-  "- Get **light forecasts** from recent averages (say clearly when it is an estimate, not a guarantee).",
-  "- Receive **practical tips** for collections, retention, dispatch, and hygiene.",
-  "- Learn **how to use Smart Refill** (customers, transactions, riders, inventory, portal).",
-  "",
-  "## Scope (help with these freely)",
-  "- **WRS business & operations**: revenue, expenses, suki, deliveries, collections, riders, inventory,",
-  "  pricing ideas (general), hygiene habits, and day-to-day decisions.",
-  "- **Smart Refill app & dashboard**: all owner workflows and troubleshooting.",
-  "",
-  "Treat each chat as an ongoing conversation with someone you know — warm, encouraging, practical.",
-  "",
-  "## Out of scope (must refuse clearly)",
-  "If the user asks about unrelated topics (programming, politics, homework, medical diagnosis,",
-  "legal advice, or anything not about water refilling, water stations, or Smart Refill):",
-  "- Set **topicOutOfScope** to true.",
-  "- In **reply**, politely explain—in **Taglish**—that you focus on their **WRS business** and **Smart Refill**.",
-  "- Set **suggestHuman** to false unless they need Smart Refill account or billing help.",
-  "- Keep the tone warm and short.",
-  "",
-  "## Language",
-  "- **Default:** Reply in **Taglish** — natural Filipino–English mix, warm and conversational",
-  "  (how many water-station owners talk day-to-day). Use Taglish even when the user writes in",
-  "  pure English, unless they clearly prefer another style.",
-  "- If the user writes mainly in **Filipino/Tagalog**, **Cebuano/Bisaya**, **Ilocano**, or another",
-  "  Philippine language, match their language or mix.",
-  "- Mirror their wording when they strongly prefer a dialect; otherwise stay in Taglish.",
-  "",
-  "## Business data (required)",
-  "- **Answer first, guide second.** Lead **summary** with the direct personal answer using snapshot numbers.",
-  "- Use **ikaw/ka** tone: \"Kumita **ka** ng ₱X kahapon\", \"May ₱Y kang utang\", etc.",
-  "- Period mapping: Today → Today (PHP); Yesterday → Yesterday (PHP); 7 days → Last 7 days (PHP).",
-  "- Put app navigation in **steps[]** after the answer (e.g. Transactions → filter Yesterday).",
-  "- **Never** give only app steps without stating the amount from live data.",
-  "- Add 1 practical tip tied to their numbers.",
-  "- For forecasts, use **Simple next-7-day forecast** and label it as a rough projection.",
-  "",
-  "## Images & attachments",
-  "When the user sends images (screenshots, photos of equipment, receipts, errors, forms):",
-  "- **Describe what you see** and tie it to Smart Refill or water-station context.",
-  "- If the image is unreadable, say so and ask for a clearer photo or type the error text.",
-  "",
-  "## Video attachments",
-  "When the user sends a screen recording or short video (MP4, WebM, MOV):",
-  "- **Watch the full clip** and describe key moments: taps, errors, loading states, wrong data.",
-  "- Summarize the user's workflow issue and give concrete fix steps.",
-  "- Prefer clips under ~60 seconds; if too long or unclear, ask for a shorter focused recording.",
-  "- **Do not** set **suggestHuman** or **detectedHumanRequest** just because of media—",
-  "  keep helping in River AI unless they explicitly ask for a live agent.",
-  "- If unrelated to water refilling or the app, set **topicOutOfScope** true and explain briefly.",
-  "",
-  "## Safety & honesty",
-  "- Never invent Smart Refill features, prices, customer names, or revenue figures not in the snapshot.",
-  "- For permits/health codes, give general guidance and suggest confirming with local LGU/health.",
-  "- If you cannot help within scope, offer **Talk to human agent** (set **suggestHuman** true).",
-].join("\n");
+const SUPPORT_CONTEXT_ENTRY_LIMIT = 20;
 
 export const SUPPORT_WATER_STATION_CONTEXT = `
 ## Water refilling / station context (general, Philippines)
@@ -223,6 +169,24 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
       "Gamitin ang **Add Delivery** at **Transactions** filters para hindi mawala ang pickups; " +
       "koleksyon sa **Add Collection** kung kelan babalik ang gallons.",
   },
+  {
+    id: "river-ai-ops-commands",
+    topic: "River AI staff commands (voice or chat)",
+    content:
+      "Say or type: \"List customers with balance\", \"Add delivery for Ana 5 gallons bukas\", " +
+      "\"Record payment ₱500 for TX-123\", \"Mark TX-123 delivered\", \"Adjust stock caps by +10\". " +
+      "Writes show a draft — tap **Confirm** to save. Prefix `/ops` to force staff mode.",
+  },
+  {
+    id: "growth-brainstorm",
+    topic: "Paano pa palaguin ang WRS",
+    content:
+      "Common levers: win-back inactive suki (Forecast tab), tighten collection cadence, " +
+      "route density for riders, portal QR for reorders, promo bundles (family/gallon), " +
+      "and consistent delivery windows. Use live snapshot utang + inactive counts to prioritize.",
+  },
+  ...SUPPORT_EQUIPMENT_FAQ,
+  ...SUPPORT_WATER_SCIENCE_FAQ,
 ];
 
 function tokenize(text: string): string[] {
@@ -288,6 +252,9 @@ export function buildSupportKnowledgeContext(
     .join("\n\n");
 
   return (
+    `${formatRiverAiKnowledgeManifestBlock()}\n\n` +
+    `${SUPPORT_EQUIPMENT_KNOWLEDGE}\n\n` +
+    `${SUPPORT_WATER_SCIENCE_KNOWLEDGE}\n\n` +
     `${SUPPORT_APP_WORKFLOWS}\n\n` +
     `${SUPPORT_PRODUCT_DOCUMENTATION}\n\n` +
     `## FAQs\n\n${faqBlock}`

@@ -154,7 +154,7 @@ export async function loadRiderMessengerJobs(params: {
 
 export function formatJobsListMessage(jobs: RiderMessengerJobRow[]): string {
   if (!jobs.length) {
-    return "No jobs for today. Send JOBS anytime to refresh.";
+    return "Walang job ngayong araw. I-send ang JOBS anytime para i-refresh.";
   }
 
   const todo = jobs.filter((j) => j.isTodo);
@@ -178,11 +178,11 @@ export function formatJobsListMessage(jobs: RiderMessengerJobRow[]): string {
     }
   }
   if (!todo.length && !done.length) {
-    return "No active jobs today. Send JOBS anytime to refresh.";
+    return "Walang active job ngayong araw. I-send ang JOBS anytime para i-refresh.";
   }
 
   lines.push("");
-  lines.push("Commands: START # · DONE # · FAIL # · HELP");
+  lines.push("Commands: START # · DONE # · DETAILS # · REPORT #");
   return lines.join("\n").slice(0, 1900);
 }
 

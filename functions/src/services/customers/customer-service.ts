@@ -4,6 +4,10 @@ import {
   applyCustomerLocationPatch,
   resolveCustomerLocationForWrite,
 } from "./customer-location";
+import {
+  normalizeCustomerContainerPolicy,
+  type CustomerContainerPolicy,
+} from "./container-policy";
 
 export interface Customer {
   id?: string;
@@ -31,6 +35,8 @@ export interface Customer {
 
   // Pricing Configuration (waterTypeId -> customPrice)
   pricing?: Record<string, number>;
+  /** Preferred water type label or id (portal, community, CRM). */
+  preferredWaterType?: string;
 
   // Inventory/Possession (Physical assets in customer possession)
   // Maps itemIds (from inventory) to their quantities
@@ -41,6 +47,24 @@ export interface Customer {
       quantity: number;
     }
   >;
+
+  /** WRS rotation vs own gallon; unspecified inherits station default. */
+  containerPolicy?: CustomerContainerPolicy;
+
+  /** Accepted container custody agreement (WRS rotation customers). */
+  containerCustodyAgreement?: {
+    status: "accepted";
+    versionId: string;
+    acceptedAt: string;
+    channel: "crm" | "portal";
+  };
+
+  /** Refundable WRS container deposit (separate from water balance). */
+  containerDeposit?: {
+    balance: number;
+    shellsCovered: number;
+    updatedAt: string;
+  };
 
   // Logistics
   isDeliveryEnabled: boolean;
@@ -170,6 +194,9 @@ export class CustomerService {
         address: location.address,
         pricing: customer.pricing || {},
         possession: customer.possession || {},
+        containerPolicy: normalizeCustomerContainerPolicy(
+          customer.containerPolicy,
+        ),
         isDeliveryEnabled: !!customer.isDeliveryEnabled,
         isCollectionEnabled: !!customer.isCollectionEnabled,
         deliveryConfig: customer.isDeliveryEnabled ?

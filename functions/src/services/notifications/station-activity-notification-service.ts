@@ -15,7 +15,7 @@ import {
   type NotificationPayload,
 } from "./notification-service";
 import { maybeSendCustomerTxnNotification, maybeNotifyCustomerOnPaymentUpdate, mapDeliveryStatusToEvent } from "../portal/customer-transaction-notifier";
-import { maybeSendCommunityMessengerDeliveryComplete } from "../meta/community-messenger-customer-notifier";
+import { maybeSendCommunityMessengerDeliveryComplete, notifyCommunityOrderInTransit } from "../meta/community-messenger-customer-notifier";
 
 type NotifyType = NotificationPayload["type"];
 
@@ -450,6 +450,20 @@ export async function notifyTransactionUpdated(
     ) {
       title = prefixTitleForTransaction("Rider en route", after);
       message = `${riderName || "Rider"} is on the way to ${customer} (${ref}).`;
+
+      if (before.deliveryStatus !== "in-transit") {
+        void notifyCommunityOrderInTransit({
+          businessId,
+          referenceId: ref,
+          riderName: riderName || undefined,
+        }).catch((err) => {
+          logger.warn("community_messenger_in_transit_notify_failed", {
+            businessId,
+            referenceId: ref,
+            err,
+          });
+        });
+      }
     } else if (
       after.deliveryStatus === "failed" ||
       after.deliveryStatus === "cancelled"
@@ -911,6 +925,79 @@ export async function notifyInventoryLowStock(
   });
 }
 
+export async function notifyInventoryItemCreated(
+  businessId: string,
+  itemName: string,
+  startingStock: number,
+  unit: string,
+  actorUserId?: string,
+  itemId?: string,
+): Promise<void> {
+  const actor = await resolveActorLabel(businessId, actorUserId);
+  const name = cleanLabel(itemName, "Stock item");
+  const stockLine =
+    startingStock > 0 ?
+      ` with ${startingStock} ${unit || "units"} on hand` :
+      "";
+  await notifyManagement(businessId, {
+    title: "Inventory item added",
+    message: `${actor} added ${name}${stockLine}.`,
+    type: "success",
+    metadata: {
+      reviewTab: "inventory",
+      category: "inventory",
+      itemId,
+      itemName: name,
+      inventoryAction: "created",
+    },
+  });
+}
+
+export async function notifyInventoryItemUpdated(
+  businessId: string,
+  itemName: string,
+  actorUserId?: string,
+  itemId?: string,
+  summary?: string,
+): Promise<void> {
+  const actor = await resolveActorLabel(businessId, actorUserId);
+  const name = cleanLabel(itemName, "Stock item");
+  await notifyManagement(businessId, {
+    title: "Inventory item updated",
+    message: `${actor} updated ${name}${summary ? ` — ${summary}` : ""}.`,
+    type: "info",
+    metadata: {
+      reviewTab: "inventory",
+      category: "inventory",
+      itemId,
+      itemName: name,
+      inventoryAction: "updated",
+    },
+  });
+}
+
+export async function notifyInventoryItemDeleted(
+  businessId: string,
+  itemName: string,
+  actorUserId?: string,
+  itemId?: string,
+): Promise<void> {
+  const actor = await resolveActorLabel(businessId, actorUserId);
+  const name = cleanLabel(itemName, "Stock item");
+  await notifyManagement(businessId, {
+    title: "Inventory item removed",
+    message: `${actor} removed ${name} from the catalog.`,
+    type: "warning",
+    metadata: {
+      reviewTab: "inventory",
+      category: "inventory",
+      itemId,
+      itemName: name,
+      inventoryAction: "deleted",
+    },
+  });
+}
+
 export async function notifyInventoryStockAdjusted(
   businessId: string,
   itemName: string,
@@ -924,17 +1011,20 @@ export async function notifyInventoryStockAdjusted(
   const name = cleanLabel(itemName, "Stock item");
   const direction = amount >= 0 ? "added" : "removed";
   const qty = Math.abs(amount);
+  const title =
+    amount > 0 ? "Stock restocked" : amount < 0 ? "Stock reduced" : "Stock adjusted";
   await notifyManagement(businessId, {
-    title: "Stock adjusted",
+    title,
     message:
       `${actor} ${direction} ${qty} ${unit || "units"} of ${name} ` +
       `(now ${newStock} on hand).`,
-    type: "info",
+    type: amount > 0 ? "success" : "info",
     metadata: {
       reviewTab: "inventory",
       category: "inventory",
       itemId,
       itemName: name,
+      inventoryAction: amount > 0 ? "restocked" : "adjusted",
     },
   });
 }

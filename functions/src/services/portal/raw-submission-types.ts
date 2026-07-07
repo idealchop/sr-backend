@@ -20,6 +20,8 @@ export type RawSubmissionType =
   | "PORTAL_PAY_BALANCE"
   /** Customer sets preferred delivery/collection cadence (no one-off order date). */
   | "PORTAL_PREFERRED_SCHEDULE"
+  /** Customer declares WRS vs own-gallon container policy (optional BYOG inventory). */
+  | "PORTAL_CONTAINER_SETUP"
   /** Customer submits or updates service/rider ratings (no staff review). */
   | "PORTAL_TX_RATINGS";
 
@@ -40,7 +42,7 @@ export interface RawSubmissionPayload {
     [key: string]: any;
   };
   refillItems?: Array<{ type: string; qty: number; unitPrice?: number }>;
-  inventoryItems?: Array<{ inventoryId: string; qty: number }>;
+  inventoryItems?: Array<{ inventoryId: string; qty: number; unitPrice?: number }>;
   returnContainers?: Array<{ inventoryId: string; qty: number }>;
   address?: {
     line?: string;
@@ -90,6 +92,17 @@ export interface RawSubmissionPayload {
     deliveryConfig?: Record<string, unknown>;
     collectionConfig?: Record<string, unknown>;
   };
+  /** Portal: customer container policy and BYOG inventory declaration. */
+  containerSetup?: {
+    containerPolicy: "byog" | "wrs_rotation";
+    ownContainers?: Array<{
+      inventoryId: string;
+      itemName?: string;
+      quantity: number;
+    }>;
+  };
+  /** Portal track quick actions: linked suki when QR session is absent. */
+  customerIdHint?: string;
 
   /** Full Transaction alignment fields */
   type?: "delivery" | "walkin" | "direct_sale" | "expense" | "collection";

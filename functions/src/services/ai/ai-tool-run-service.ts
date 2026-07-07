@@ -113,7 +113,7 @@ function toolLabel(tool: AiToolId): string {
   case "warehouse_risk":
     return "Warehouse & low-stock risk";
   case "retention_pulse":
-    return "Dormant suki pulse";
+    return "Inactive suki pulse";
   case "plant_health":
     return "Plant health brief";
   case "dashboard_qa":

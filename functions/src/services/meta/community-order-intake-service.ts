@@ -1,6 +1,7 @@
 import { logger } from "../observability/logging/logger";
 import {
   parseCommunityOrderTemplate,
+  applyCommunityOrderDefaults,
   validateCommunityOrderFields,
   type CommunityOrderFields,
 } from "./community-dispatch-template-parser";
@@ -19,24 +20,43 @@ import {
   buildRetryFieldsFromFollowUp,
   findPendingCommunityDispatchRequest,
   mergeCommunityOrderFields,
-} from "./community-dispatch-retry-service";
+  looksLikeAddressFollowUp } from "./community-dispatch-retry-service";
 import { incrementCommunityChannelIntake } from "./community-platform-channel-usage-service";
 import { GeocodingService } from "../maps/geocoding-service";
 import { parseCommunityFreeTextOrder } from "./community-order-nlu-service";
 import {
   buildCommunityClarificationMessage,
+  buildCommunityAddressRepairMessage,
+  buildCommunityOrderFormatRepairMessage,
   buildCommunityFreeTextClarificationMessage,
-  buildCommunityTemplateRepairReply,
   buildLocationPinReceivedMessage,
 } from "./community-order-reply-service";
 import {
+  applyCommunityOrderTextPatch,
+  isCommunityOrderFormatInvalid,
+  validateCommunityOrderIntakeQuality,
+} from "./community-order-intake-validation";
+import type { CommunityMessengerSession } from "./community-messenger-session-service";
+import {
   handleCommunityWizardText,
+  handleCommunityInquiryInboundText,
+  maybeRestartCommunitySessionAfterInactivity,
+  promptCommunityServiceChoiceIfNeeded,
   registerCommunityOrderConfirmHandler,
   replyCommunityWelcomeWithChoice,
   sendCommunityOrderConfirmPrompt,
   wizardSessionLooksLikeTemplate,
 } from "./community-order-wizard-service";
 import { tryCancelActiveCommunityRequest } from "./community-dispatch-cancel-service";
+import { tryHandleCustomerDeliveryChatInbound } from "./delivery-messenger-chat-intake-service";
+import {
+  blockIfActiveCommunityOrder,
+} from "./community-active-order-guard-service";
+import {
+  getCommunityMessengerServiceMode,
+  clearCommunityPendingOrderIntent,
+  touchCommunityMessengerInboundActivity,
+} from "./community-messenger-contact-registry";
 import {
   applySessionFollowUp,
   clearCommunityMessengerSession,
@@ -129,6 +149,10 @@ async function confirmPersistedOrder(params: {
   logContext: string;
   geocodeHint?: CommunityDispatchGeocode;
 }): Promise<void> {
+  if (await blockIfActiveCommunityOrder({ contact: params.contact })) {
+    return;
+  }
+
   const messageId =
     params.metaMessageId?.trim() ||
     buildFallbackMetaMessageId(params.contact.contactId, params.rawMessage);
@@ -152,6 +176,7 @@ async function confirmPersistedOrder(params: {
   }
 
   await clearCommunityMessengerSession(sessionKey(params.contact));
+  await clearCommunityPendingOrderIntent(params.contact);
   await incrementCommunityChannelIntake(params.contact.sourceChannel);
 
   try {
@@ -169,6 +194,278 @@ async function confirmPersistedOrder(params: {
       "routing_failed_fallback",
     );
   }
+}
+
+function mergeTemplateFollowUpFields(params: {
+  session: CommunityMessengerSession;
+  trimmed: string;
+  templateParse: ReturnType<typeof parseCommunityOrderTemplate>;
+}): CommunityOrderFields {
+  const { session, trimmed, templateParse } = params;
+
+  if (templateParse.looksLikeTemplate) {
+    return mergeDefinedFields(session.fields, templateParse.fields);
+  }
+
+  if (session.repairAwait === "address") {
+    const location = looksLikeAddressFollowUp(trimmed) ? trimmed.trim() : undefined;
+    return location ?
+      mergeDefinedFields(session.fields, { location }) :
+      session.fields;
+  }
+
+  if (session.repairAwait === "order") {
+    return applyCommunityOrderTextPatch(session.fields, trimmed);
+  }
+
+  return session.fields;
+}
+
+function mergeMissingFieldsFromFollowUp(params: {
+  session: CommunityMessengerSession;
+  trimmed: string;
+  templateParse: ReturnType<typeof parseCommunityOrderTemplate>;
+}): CommunityOrderFields {
+  let merged = mergeDefinedFields(params.session.fields, params.templateParse.fields);
+  const awaiting = params.session.missingFields ?? [];
+  const unlabeled =
+    !params.templateParse.looksLikeTemplate && !params.trimmed.includes(":");
+
+  if (!unlabeled) {
+    return merged;
+  }
+
+  if (awaiting.includes("name") && !merged.name?.trim() && params.trimmed.length <= 120) {
+    merged = mergeDefinedFields(merged, { name: params.trimmed.trim() });
+  }
+  if (
+    awaiting.includes("location") &&
+    !merged.location?.trim() &&
+    looksLikeAddressFollowUp(params.trimmed)
+  ) {
+    merged = mergeDefinedFields(merged, { location: params.trimmed.trim() });
+  }
+  if (awaiting.includes("order") && !merged.orderLines?.length) {
+    merged = applyCommunityOrderTextPatch(merged, params.trimmed);
+  }
+
+  return merged;
+}
+
+async function handleCommunityMissingFieldsFollowUp(params: {
+  contact: CommunityChannelContact;
+  trimmed: string;
+  metaMessageId?: string;
+  session: CommunityMessengerSession;
+  templateParse: ReturnType<typeof parseCommunityOrderTemplate>;
+}): Promise<boolean> {
+  const mergedFields = applyCommunityOrderDefaults(
+    mergeMissingFieldsFromFollowUp({
+      session: params.session,
+      trimmed: params.trimmed,
+      templateParse: params.templateParse,
+    }),
+  );
+
+  await attemptTemplateOrderSubmission({
+    contact: params.contact,
+    rawMessage: params.trimmed,
+    metaMessageId: params.metaMessageId,
+    fields: mergedFields,
+    logContext: "template_missing_fields_confirmed",
+    priorSession: params.session,
+  });
+  return true;
+}
+
+async function saveTemplateMissingFieldsSession(params: {
+  contact: CommunityChannelContact;
+  fields: CommunityOrderFields;
+  rawMessage: string;
+  missingFields: string[];
+  priorSession?: CommunityMessengerSession | null;
+}): Promise<void> {
+  const key = sessionKey(params.contact);
+  await saveCommunityMessengerSession({
+    psid: key,
+    sourceChannel: params.contact.sourceChannel,
+    fields: params.fields,
+    rawMessage: params.priorSession ?
+      `${params.priorSession.rawMessage}\n---\n${params.rawMessage}` :
+      params.rawMessage,
+    flow: "template",
+    missingFields: params.missingFields,
+  });
+}
+
+async function saveTemplateRepairSession(params: {
+  contact: CommunityChannelContact;
+  fields: CommunityOrderFields;
+  rawMessage: string;
+  repairAwait: "address" | "order";
+  priorSession?: CommunityMessengerSession | null;
+}): Promise<void> {
+  const key = sessionKey(params.contact);
+  await saveCommunityMessengerSession({
+    psid: key,
+    sourceChannel: params.contact.sourceChannel,
+    fields: params.fields,
+    rawMessage: params.priorSession ?
+      `${params.priorSession.rawMessage}\n---\n${params.rawMessage}` :
+      params.rawMessage,
+    flow: "template",
+    repairAwait: params.repairAwait,
+  });
+}
+
+async function attemptTemplateOrderSubmission(params: {
+  contact: CommunityChannelContact;
+  rawMessage: string;
+  metaMessageId?: string;
+  fields: CommunityOrderFields;
+  logContext: string;
+  priorSession?: CommunityMessengerSession | null;
+  geocodeHint?: CommunityDispatchGeocode;
+}): Promise<void> {
+  const normalizedFields = applyCommunityOrderDefaults(params.fields);
+  const baseErrors = validateCommunityOrderFields(normalizedFields);
+
+  if (baseErrors.length > 0) {
+    if (baseErrors.includes("order") && normalizedFields.orderRaw?.trim()) {
+      await saveTemplateRepairSession({
+        contact: params.contact,
+        fields: normalizedFields,
+        rawMessage: params.rawMessage,
+        repairAwait: "order",
+        priorSession: params.priorSession,
+      });
+      await sendReply(
+        params.contact,
+        buildCommunityOrderFormatRepairMessage(normalizedFields.orderRaw),
+        "template_order_repair",
+      );
+      return;
+    }
+
+    await saveTemplateMissingFieldsSession({
+      contact: params.contact,
+      fields: normalizedFields,
+      rawMessage: params.rawMessage,
+      missingFields: baseErrors,
+      priorSession: params.priorSession,
+    });
+    await sendReply(
+      params.contact,
+      buildCommunityClarificationMessage(baseErrors, normalizedFields),
+      "template_missing_fields",
+    );
+    return;
+  }
+
+  const quality = await validateCommunityOrderIntakeQuality(
+    normalizedFields,
+    params.geocodeHint,
+  );
+  if (!quality.ok) {
+    const repairAwait = quality.issue ?? "address";
+    await saveTemplateRepairSession({
+      contact: params.contact,
+      fields: normalizedFields,
+      rawMessage: params.rawMessage,
+      repairAwait,
+      priorSession: params.priorSession,
+    });
+    await sendReply(
+      params.contact,
+      repairAwait === "address" ?
+        buildCommunityAddressRepairMessage(normalizedFields.location) :
+        buildCommunityOrderFormatRepairMessage(normalizedFields.orderRaw),
+      repairAwait === "address" ? "template_address_repair" : "template_order_repair",
+    );
+    return;
+  }
+
+  await promptTemplateOrderConfirm({
+    contact: params.contact,
+    rawMessage: params.rawMessage,
+    fields: normalizedFields,
+    priorSession: params.priorSession,
+  });
+}
+
+async function promptTemplateOrderConfirm(params: {
+  contact: CommunityChannelContact;
+  rawMessage: string;
+  fields: CommunityOrderFields;
+  priorSession?: CommunityMessengerSession | null;
+}): Promise<void> {
+  const key = sessionKey(params.contact);
+  await saveCommunityMessengerSession({
+    psid: key,
+    sourceChannel: params.contact.sourceChannel,
+    fields: params.fields,
+    rawMessage: params.priorSession ?
+      `${params.priorSession.rawMessage}\n---\n${params.rawMessage}` :
+      params.rawMessage,
+    flow: "template",
+    wizardStep: "confirm",
+    awaitingConfirmation: "order",
+  });
+  await sendCommunityOrderConfirmPrompt(params.contact, params.fields);
+}
+
+async function handleCommunityOrderRepairFollowUp(params: {
+  contact: CommunityChannelContact;
+  trimmed: string;
+  metaMessageId?: string;
+  session: CommunityMessengerSession;
+  templateParse: ReturnType<typeof parseCommunityOrderTemplate>;
+}): Promise<boolean> {
+  const mergedFields = applyCommunityOrderDefaults(
+    mergeTemplateFollowUpFields({
+      session: params.session,
+      trimmed: params.trimmed,
+      templateParse: params.templateParse,
+    }),
+  );
+
+  if (params.session.repairAwait === "address") {
+    const hasAddress = Boolean(mergedFields.location?.trim());
+    if (!hasAddress) {
+      await sendReply(
+        params.contact,
+        buildCommunityAddressRepairMessage(params.session.fields.location),
+        "template_address_repair_repeat",
+      );
+      return true;
+    }
+  }
+
+  if (params.session.repairAwait === "order" && isCommunityOrderFormatInvalid(mergedFields)) {
+    await saveTemplateRepairSession({
+      contact: params.contact,
+      fields: mergedFields,
+      rawMessage: params.trimmed,
+      repairAwait: "order",
+      priorSession: params.session,
+    });
+    await sendReply(
+      params.contact,
+      buildCommunityOrderFormatRepairMessage(mergedFields.orderRaw ?? params.trimmed),
+      "template_order_repair_repeat",
+    );
+    return true;
+  }
+
+  await attemptTemplateOrderSubmission({
+    contact: params.contact,
+    rawMessage: params.trimmed,
+    metaMessageId: params.metaMessageId,
+    fields: mergedFields,
+    logContext: "template_repair_confirmed",
+    priorSession: params.session,
+  });
+  return true;
 }
 
 async function tryRetryPendingDispatchRequest(params: {
@@ -263,6 +560,30 @@ export async function handleCommunityInboundLocation(params: {
   longitude: number;
   metaMessageId?: string;
 }): Promise<void> {
+  if (await maybeRestartCommunitySessionAfterInactivity(params.contact)) {
+    return;
+  }
+
+  await touchCommunityMessengerInboundActivity(params.contact);
+
+  const serviceMode = await getCommunityMessengerServiceMode(params.contact);
+  if (serviceMode === "inquiry") {
+    const locationPin = await resolveMessengerLocationPin(
+      params.latitude,
+      params.longitude,
+    );
+    await handleCommunityInquiryInboundText({
+      contact: params.contact,
+      text: `[Location pin] ${locationPin.locationText}`,
+      metaMessageId: params.metaMessageId,
+    });
+    return;
+  }
+  if (!serviceMode) {
+    await promptCommunityServiceChoiceIfNeeded(params.contact);
+    return;
+  }
+
   const key = sessionKey(params.contact);
   const locationPin = await resolveMessengerLocationPin(
     params.latitude,
@@ -283,6 +604,16 @@ export async function handleCommunityInboundLocation(params: {
   }
 
   const existingSession = await getCommunityMessengerSession(key);
+  if (
+    await blockIfActiveCommunityOrder({
+      contact: params.contact,
+      session: existingSession,
+      allowNeedsAddressRetry: true,
+    })
+  ) {
+    return;
+  }
+
   if (existingSession?.wizardStep === "address") {
     const fields = mergeDefinedFields(existingSession.fields, {
       location: locationPin.locationText,
@@ -312,16 +643,18 @@ export async function handleCommunityInboundLocation(params: {
   );
 
   const validationErrors = validateCommunityOrderFields(mergedFields);
-  if (validationErrors.length === 0) {
-    await confirmPersistedOrder({
+  if (validationErrors.length === 0 || existingSession?.repairAwait) {
+    await attemptTemplateOrderSubmission({
       contact: params.contact,
       rawMessage: existingSession ?
         `${existingSession.rawMessage}\n---\n${followUpMessage}` :
         followUpMessage,
       metaMessageId: params.metaMessageId,
       fields: mergedFields,
-      parseSource: "template",
-      logContext: "location_pin_confirmed",
+      logContext: existingSession?.repairAwait ?
+        "location_pin_repair" :
+        "location_pin_confirmed",
+      priorSession: existingSession,
       geocodeHint: locationPin.geocode,
     });
     return;
@@ -334,6 +667,8 @@ export async function handleCommunityInboundLocation(params: {
     rawMessage: existingSession ?
       `${existingSession.rawMessage}\n---\n${followUpMessage}` :
       followUpMessage,
+    flow: "template",
+    missingFields: validationErrors,
   });
 
   logger.info("communityOrderIntake location_pin_partial", {
@@ -360,9 +695,38 @@ export async function handleCommunityInboundText(params: InboundTextParams): Pro
     return;
   }
 
+  if (await tryHandleCustomerDeliveryChatInbound({ contact, text: trimmed, metaMessageId })) {
+    return;
+  }
+
+  if (await maybeRestartCommunitySessionAfterInactivity(contact)) {
+    return;
+  }
+
+  await touchCommunityMessengerInboundActivity(contact);
+
+  const serviceMode = await getCommunityMessengerServiceMode(contact);
+  if (serviceMode === "inquiry") {
+    await handleCommunityInquiryInboundText({
+      contact,
+      text: trimmed,
+      metaMessageId,
+    });
+    return;
+  }
+
   if (isCasualMessengerGreeting(trimmed)) {
+    if (await blockIfActiveCommunityOrder({ contact })) {
+      return;
+    }
     await replyCommunityWelcome(contact);
     return;
+  }
+
+  if (!serviceMode) {
+    if (await promptCommunityServiceChoiceIfNeeded(contact)) {
+      return;
+    }
   }
 
   const templateParse = parseCommunityOrderTemplate(trimmed);
@@ -372,6 +736,28 @@ export async function handleCommunityInboundText(params: InboundTextParams): Pro
   }
 
   const existingSession = await getCommunityMessengerSession(key);
+
+  if (existingSession?.missingFields?.length) {
+    await handleCommunityMissingFieldsFollowUp({
+      contact,
+      trimmed,
+      metaMessageId,
+      session: existingSession,
+      templateParse,
+    });
+    return;
+  }
+
+  if (existingSession?.repairAwait) {
+    await handleCommunityOrderRepairFollowUp({
+      contact,
+      trimmed,
+      metaMessageId,
+      session: existingSession,
+      templateParse,
+    });
+    return;
+  }
 
   if (existingSession?.awaitingConfirmation === "order") {
     if (isOrderConfirmationAffirmation(existingSession, trimmed)) {
@@ -430,6 +816,29 @@ export async function handleCommunityInboundText(params: InboundTextParams): Pro
     }
   }
 
+  if (templateParse.looksLikeTemplate) {
+    if (await blockIfActiveCommunityOrder({ contact, session: existingSession })) {
+      return;
+    }
+
+    logger.info("communityOrderIntake template_parse", {
+      contactId: contact.contactId,
+      channel: contact.sourceChannel,
+      looksLikeTemplate: templateParse.looksLikeTemplate,
+      ok: templateParse.ok,
+      errors: templateParse.errors,
+    });
+
+    await attemptTemplateOrderSubmission({
+      contact,
+      rawMessage: trimmed,
+      metaMessageId,
+      fields: applyCommunityOrderDefaults(templateParse.fields),
+      logContext: "template_confirmed",
+    });
+    return;
+  }
+
   logger.info("communityOrderIntake template_parse", {
     contactId: contact.contactId,
     channel: contact.sourceChannel,
@@ -438,34 +847,11 @@ export async function handleCommunityInboundText(params: InboundTextParams): Pro
     errors: templateParse.errors,
   });
 
-  if (templateParse.looksLikeTemplate) {
-    if (!templateParse.ok) {
-      const repair = await buildCommunityTemplateRepairReply({
-        errors: templateParse.errors,
-        partialFields: templateParse.fields,
-        rawMessage: trimmed,
-      });
-      logger.info("communityOrderIntake template_repair", {
-        contactId: contact.contactId,
-        errors: templateParse.errors,
-        source: repair.source,
-      });
-      await sendReply(contact, repair.message, "template_repair");
-      return;
-    }
-
-    await confirmPersistedOrder({
-      contact,
-      rawMessage: trimmed,
-      metaMessageId,
-      fields: templateParse.fields,
-      parseSource: "template",
-      logContext: "template_confirmed",
-    });
+  const nlu = await parseCommunityFreeTextOrder(trimmed);
+  if (await blockIfActiveCommunityOrder({ contact, session: existingSession })) {
     return;
   }
 
-  const nlu = await parseCommunityFreeTextOrder(trimmed);
   const mergedFields = existingSession ?
     mergeDefinedFields(existingSession.fields, nlu.fields) :
     nlu.fields;

@@ -57,8 +57,8 @@ describe("getting-started-sync-service", () => {
     expect(detected.addInventory).toBe(true);
   });
 
-  it("detects addPaymentAccount when payment_info has a document", async () => {
-    for (let i = 0; i < 7; i += 1) {
+  it("detects addOnlinePayments when payment_info has a document", async () => {
+    for (let i = 0; i < 6; i += 1) {
       mockGet.mockResolvedValueOnce({ empty: true });
     }
     mockGet.mockResolvedValueOnce({ empty: false });
@@ -69,7 +69,7 @@ describe("getting-started-sync-service", () => {
     );
 
     const detected = await detectGettingStartedFromCollections("biz-1");
-    expect(detected.addPaymentAccount).toBe(true);
+    expect(detected.addOnlinePayments).toBe(true);
     expect(detected.addCustomer).toBe(false);
   });
 
@@ -88,10 +88,10 @@ describe("getting-started-sync-service", () => {
     mockBizGet.mockResolvedValue({
       exists: true,
       data: () => ({
-        gettingStarted: { addInventory: false, addPaymentAccount: false },
+        gettingStarted: { addInventory: false, addOnlinePayments: false },
       }),
     });
-    for (let i = 0; i < 7; i += 1) {
+    for (let i = 0; i < 6; i += 1) {
       mockGet.mockResolvedValueOnce({ empty: true });
     }
     mockGet.mockResolvedValueOnce({ empty: false });
@@ -103,10 +103,10 @@ describe("getting-started-sync-service", () => {
 
     const result = await syncGettingStartedOnBusiness("biz-1");
     expect(result.updated).toBe(true);
-    expect(result.patch.addPaymentAccount).toBe(true);
+    expect(result.patch.addOnlinePayments).toBe(true);
     expect(mockUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
-        "gettingStarted.addPaymentAccount": true,
+        "gettingStarted.addOnlinePayments": true,
         "updatedAt": "SERVER_TS",
       }),
     );

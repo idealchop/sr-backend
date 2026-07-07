@@ -7,16 +7,55 @@ import {
   validateCommunityOrderFields,
 } from "./community-dispatch-template-parser";
 import {
+  COMMUNITY_DELIVERY_CHAT_HINT,
+  buildCommunityPendingOrderResumeHint } from "./community-messenger-copy";
+import {
+  buildCommunityInquiryHandoffMessage,
+  buildCommunityOrderFormExampleMessage,
   buildCommunityOrderFormMessage,
+  buildCommunityServiceChoicePrompt,
+  buildCommunityServiceChoiceReminder,
+  buildCommunityWaterDeliveryIntroMessage,
   buildCommunityWelcomeMessage,
   META_POSTBACK_ORDER_CONFIRM_NO,
   META_POSTBACK_ORDER_CONFIRM_YES,
   META_POSTBACK_ORDER_FORM,
+  META_POSTBACK_DELIVERY_CHAT,
+  META_POSTBACK_SERVICE_INQUIRY,
+  META_POSTBACK_SERVICE_WATER_DELIVERY,
   META_POSTBACK_WIZARD_DELIVERY_NO,
   META_POSTBACK_WIZARD_DELIVERY_YES,
   META_POSTBACK_WIZARD_START,
 } from "./community-order-template";
-import { buildCommunityOrderConfirmSummary } from "./community-order-reply-service";
+import {
+  buildCommunityAddressRepairMessage,
+  buildCommunityClarificationMessage,
+  buildCommunityOrderConfirmSummary,
+  buildCommunityOrderEditPromptMessage,
+  buildCommunityOrderFormatRepairMessage,
+} from "./community-order-reply-service";
+import {
+  blockIfActiveCommunityOrder,
+  findActiveCommunityOrderForContact,
+} from "./community-active-order-guard-service";
+import { openDeliveryChatFromCustomerAction } from "./delivery-messenger-chat-intake-service";
+import {
+  clearCommunityPendingOrderIntent,
+  loadCommunityPendingOrderIntent,
+  saveCommunityPendingOrderIntent,
+  clearCommunityMessengerServiceMode,
+  getCommunityMessengerServiceMode,
+  hasCommunityMessengerContact,
+  isCommunityMessengerSessionExpired,
+  markCommunityMessengerContactGreeted,
+  setCommunityMessengerServiceMode,
+  touchCommunityMessengerInboundActivity,
+  type CommunityPendingOrderIntent,
+} from "./community-messenger-contact-registry";
+import {
+  ensureCommunityInquiryThreadOpen,
+  recordCommunityInquiryInboundMessage,
+} from "./community-messenger-inquiry-service";
 import {
   clearCommunityMessengerSession,
   getCommunityMessengerSession,
@@ -25,6 +64,81 @@ import {
   type CommunityMessengerSession,
   type CommunityMessengerWizardStep,
 } from "./community-messenger-session-service";
+
+/**
+ * Step-by-step wizard (WIZARD_START) is internal-only — not shown in the Water Delivery
+ * button flow. Form copy-paste is the primary order path for community Messenger.
+ */
+
+function sessionHasOrderProgress(session: CommunityMessengerSession | null): boolean {
+  if (!session) return false;
+  return Boolean(
+    session.missingFields?.length ||
+    session.repairAwait ||
+    session.awaitingConfirmation ||
+    session.fields?.name?.trim() ||
+    session.fields?.location?.trim() ||
+    session.fields?.orderRaw?.trim() ||
+    session.fields?.orderLines?.length,
+  );
+}
+
+function sessionToPendingIntent(session: CommunityMessengerSession): CommunityPendingOrderIntent {
+  return {
+    fields: session.fields,
+    ...(session.missingFields?.length ? { missingFields: session.missingFields } : {}),
+    ...(session.repairAwait ? { repairAwait: session.repairAwait } : {}),
+    ...(session.awaitingConfirmation === "order" ?
+      { awaitingConfirmation: "order" as const } :
+      {}),
+  };
+}
+
+async function restorePendingOrderSession(
+  contact: CommunityChannelContact,
+  intent: CommunityPendingOrderIntent,
+): Promise<void> {
+  const key = sessionKey(contact);
+  await saveCommunityMessengerSession({
+    psid: key,
+    sourceChannel: contact.sourceChannel,
+    fields: intent.fields,
+    rawMessage: "[restored pending order]",
+    flow: "template",
+    ...(intent.missingFields?.length ? { missingFields: intent.missingFields } : {}),
+    ...(intent.repairAwait ? { repairAwait: intent.repairAwait } : {}),
+    ...(intent.awaitingConfirmation ? { awaitingConfirmation: intent.awaitingConfirmation } : {}),
+    ...(intent.awaitingConfirmation ? { wizardStep: "confirm" as const } : {}),
+  });
+
+  if (intent.awaitingConfirmation === "order") {
+    await sendCommunityOrderConfirmPrompt(contact, intent.fields);
+    return;
+  }
+  if (intent.repairAwait === "address") {
+    await sendWizardMessage(
+      contact,
+      buildCommunityAddressRepairMessage(intent.fields.location),
+      "pending_restore_address",
+    );
+    return;
+  }
+  if (intent.repairAwait === "order") {
+    await sendWizardMessage(
+      contact,
+      buildCommunityOrderFormatRepairMessage(intent.fields.orderRaw),
+      "pending_restore_order",
+    );
+    return;
+  }
+  if (intent.missingFields?.length) {
+    await sendWizardMessage(
+      contact,
+      buildCommunityClarificationMessage(intent.missingFields, intent.fields),
+      "pending_restore_missing",
+    );
+  }
+}
 
 function sessionKey(contact: CommunityChannelContact): string {
   return contact.contactId;
@@ -133,29 +247,205 @@ export async function sendCommunityOrderConfirmPrompt(
   }
 }
 
-/** CP-28 — welcome with step-by-step vs order form choice. */
+/** CP-28 — greeting then service choice (new vs returning PSID). */
 export async function replyCommunityWelcomeWithChoice(
   contact: CommunityChannelContact,
 ): Promise<void> {
-  await sendWizardMessage(contact, buildCommunityWelcomeMessage(), "welcome");
+  const isReturningUser = await hasCommunityMessengerContact(contact);
+  await clearCommunityMessengerServiceMode(contact);
+  await sendWizardMessage(
+    contact,
+    buildCommunityWelcomeMessage({ isReturningUser }),
+    "welcome",
+  );
+  await markCommunityMessengerContactGreeted(contact);
+  await sendCommunityServiceChoice(contact);
+}
+
+export async function sendCommunityServiceChoice(
+  contact: CommunityChannelContact,
+): Promise<void> {
+  const activeOrder = await findActiveCommunityOrderForContact(contact);
+
+  if (activeOrder) {
+    const ref = activeOrder.trackReferenceId ?? activeOrder.referenceId;
+    const inDelivery = activeOrder.phase === "in_delivery";
+
+    if (inDelivery) {
+      await sendWizardMessage(
+        contact,
+        [
+          "May active order ka pa — in progress ang delivery mo.",
+          "",
+          `Reference: ${ref}`,
+          "",
+          COMMUNITY_DELIVERY_CHAT_HINT,
+        ].join("\n"),
+        "service_choice_active_order",
+      );
+      return;
+    }
+
+    const result = await sendCommunityChannelButtons({
+      contact,
+      text: [
+        "May active order ka pa — hinihintay pa ang station.",
+        "",
+        `Reference: ${ref}`,
+        "",
+        "Kung kailangan i-cancel: CANCEL - {reason}",
+        "",
+        "May tanong habang naghihintay? Pili Inquiry / Others.",
+      ].join("\n"),
+      buttons: [{ title: "Inquiry / Others", payload: META_POSTBACK_SERVICE_INQUIRY }],
+    });
+    if (!result.ok) {
+      await sendWizardMessage(
+        contact,
+        "May active order ka pa. Reply \"inquiry\" kung may tanong habang naghihintay.",
+        "service_choice_active_order",
+      );
+    }
+    return;
+  }
+
   const result = await sendCommunityChannelButtons({
     contact,
-    text: "How would you like to order?",
+    text: buildCommunityServiceChoicePrompt(),
     buttons: [
-      { title: "Step-by-step", payload: META_POSTBACK_WIZARD_START },
-      { title: "Order form", payload: META_POSTBACK_ORDER_FORM },
+      { title: "Water Delivery", payload: META_POSTBACK_SERVICE_WATER_DELIVERY },
+      { title: "Inquiry / Others", payload: META_POSTBACK_SERVICE_INQUIRY },
     ],
   });
   if (!result.ok) {
     await sendWizardMessage(
       contact,
-      `Reply "wizard" for step-by-step, or copy this form:\n\n${buildCommunityOrderFormMessage()}`,
-      "welcome_choice_fallback",
+      `${buildCommunityServiceChoiceReminder()}\n\nReply "delivery" for water orders or "inquiry" for other questions.`,
+      "service_choice_fallback",
     );
   }
 }
 
+/**
+ * After 24h idle, restart with greeting + service choice and clear wizard/service state.
+ * Returns true when the session was restarted (caller should stop handling this event).
+ */
+export async function maybeRestartCommunitySessionAfterInactivity(
+  contact: CommunityChannelContact,
+): Promise<boolean> {
+  if (!(await isCommunityMessengerSessionExpired(contact))) {
+    return false;
+  }
+
+  const key = sessionKey(contact);
+  const session = await getCommunityMessengerSession(key);
+  if (sessionHasOrderProgress(session)) {
+    await saveCommunityPendingOrderIntent(contact, sessionToPendingIntent(session!));
+  }
+  await clearCommunityMessengerSession(key);
+  await replyCommunityWelcomeWithChoice(contact);
+  if (sessionHasOrderProgress(session)) {
+    await sendWizardMessage(
+      contact,
+      buildCommunityPendingOrderResumeHint(),
+      "pending_order_resume",
+    );
+  }
+  await touchCommunityMessengerInboundActivity(contact);
+  return true;
+}
+
+/** Water delivery path — intro, blank form, then example + tips (or resume pending order). */
+export async function replyCommunityWaterDeliveryOrderChoice(
+  contact: CommunityChannelContact,
+): Promise<void> {
+  const pending = await loadCommunityPendingOrderIntent(contact);
+  if (pending) {
+    await clearCommunityPendingOrderIntent(contact);
+    await sendWizardMessage(
+      contact,
+      "Ituloy natin ang order mo from last time. 👋",
+      "pending_order_resume",
+    );
+    await restorePendingOrderSession(contact, pending);
+    return;
+  }
+
+  await sendWizardMessage(
+    contact,
+    buildCommunityWaterDeliveryIntroMessage(),
+    "water_delivery_intro",
+  );
+  await sendWizardMessage(
+    contact,
+    buildCommunityOrderFormMessage(),
+    "water_delivery_form",
+  );
+  await sendWizardMessage(
+    contact,
+    buildCommunityOrderFormExampleMessage(),
+    "water_delivery_example",
+  );
+}
+
+export async function activateCommunityInquiryMode(
+  contact: CommunityChannelContact,
+): Promise<void> {
+  const key = sessionKey(contact);
+  await clearCommunityMessengerSession(key);
+  await setCommunityMessengerServiceMode(contact, "inquiry");
+  await ensureCommunityInquiryThreadOpen(contact);
+  await sendWizardMessage(
+    contact,
+    buildCommunityInquiryHandoffMessage(),
+    "inquiry_handoff",
+  );
+}
+
+export async function activateCommunityWaterDeliveryMode(
+  contact: CommunityChannelContact,
+): Promise<void> {
+  const pending = await loadCommunityPendingOrderIntent(contact);
+  if (!pending) {
+    const blocked = await blockIfActiveCommunityOrder({ contact });
+    if (blocked) return;
+  }
+
+  const key = sessionKey(contact);
+  await clearCommunityMessengerSession(key);
+  await setCommunityMessengerServiceMode(contact, "water_delivery");
+  await replyCommunityWaterDeliveryOrderChoice(contact);
+}
+
+/** Prompt service buttons when customer has not chosen a path yet. */
+export async function promptCommunityServiceChoiceIfNeeded(
+  contact: CommunityChannelContact,
+): Promise<boolean> {
+  const mode = await getCommunityMessengerServiceMode(contact);
+  if (mode) return false;
+  await sendCommunityServiceChoice(contact);
+  return true;
+}
+
+/** Inquiry mode — store message only; no bot reply. */
+export async function handleCommunityInquiryInboundText(params: {
+  contact: CommunityChannelContact;
+  text: string;
+  metaMessageId?: string;
+}): Promise<void> {
+  await recordCommunityInquiryInboundMessage({
+    contact: params.contact,
+    text: params.text,
+    metaMessageId: params.metaMessageId,
+  });
+  await touchCommunityMessengerInboundActivity(params.contact);
+}
+
 export async function startCommunityOrderWizard(contact: CommunityChannelContact): Promise<void> {
+  if (await blockIfActiveCommunityOrder({ contact })) {
+    return;
+  }
+
   const key = sessionKey(contact);
   await clearCommunityMessengerSession(key);
   await saveCommunityMessengerSession({
@@ -270,14 +560,48 @@ export async function handleCommunityMessengerPostback(params: {
   const { contact, payload, metaMessageId } = params;
   const key = sessionKey(contact);
 
+  if (await maybeRestartCommunitySessionAfterInactivity(contact)) {
+    return true;
+  }
+
+  if (payload === META_POSTBACK_DELIVERY_CHAT) {
+    await openDeliveryChatFromCustomerAction({ contact, metaMessageId });
+    return true;
+  }
+
+  if (payload === META_POSTBACK_SERVICE_WATER_DELIVERY) {
+    await activateCommunityWaterDeliveryMode(contact);
+    return true;
+  }
+
+  if (payload === META_POSTBACK_SERVICE_INQUIRY) {
+    await activateCommunityInquiryMode(contact);
+    return true;
+  }
+
+  const serviceMode = await getCommunityMessengerServiceMode(contact);
+  if (serviceMode === "inquiry") {
+    return true;
+  }
+
+  if (serviceMode !== "water_delivery") {
+    await sendCommunityServiceChoice(contact);
+    return true;
+  }
+
   if (payload === META_POSTBACK_WIZARD_START) {
     await startCommunityOrderWizard(contact);
     return true;
   }
 
   if (payload === META_POSTBACK_ORDER_FORM) {
+    const session = await getCommunityMessengerSession(key);
+    if (await blockIfActiveCommunityOrder({ contact, session })) {
+      return true;
+    }
     await clearCommunityMessengerSession(key);
     await sendWizardMessage(contact, buildCommunityOrderFormMessage(), "order_form");
+    await sendWizardMessage(contact, buildCommunityOrderFormExampleMessage(), "order_form_example");
     return true;
   }
 
@@ -312,7 +636,7 @@ export async function handleCommunityMessengerPostback(params: {
     await clearCommunityMessengerSession(key);
     await sendWizardMessage(
       contact,
-      "No problem — you can send a new message with your order details, or tap Step-by-step to try again.",
+      buildCommunityOrderEditPromptMessage(),
       "confirm_declined",
     );
     return true;

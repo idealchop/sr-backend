@@ -39,6 +39,8 @@ function serializeParsed(fields: CommunityOrderFields): CommunityOrderFields {
     ...(fields.location ? { location: fields.location } : {}),
     ...(fields.email ? { email: fields.email } : {}),
     ...(fields.number ? { number: fields.number } : {}),
+    ...(fields.orderRaw ? { orderRaw: fields.orderRaw } : {}),
+    ...(fields.orderLines?.length ? { orderLines: fields.orderLines } : {}),
   };
 }
 

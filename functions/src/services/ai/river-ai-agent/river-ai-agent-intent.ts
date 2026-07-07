@@ -116,12 +116,16 @@ export function parseFastRiverAiAgentIntent(message: string): RiverAiAgentIntent
     };
   }
 
-  if (
-    /\b(unpaid|di\s+bayad|hindi\s+pa\s+bayad|outstanding)\b.*\b(transactions?|orders?|deliveries)\b/i.test(
-      text,
-    ) ||
-    /\b(transactions?|orders?|deliveries)\b.*\b(unpaid|di\s+bayad|outstanding)\b/i.test(text)
-  ) {
+  const unpaidOrderPattern = new RegExp(
+    "\\b(unpaid|di\\s+bayad|hindi\\s+pa\\s+bayad|outstanding)\\b.*" +
+      "\\b(transactions?|orders?|deliveries)\\b",
+    "i",
+  );
+  const orderUnpaidPattern = new RegExp(
+    "\\b(transactions?|orders?|deliveries)\\b.*\\b(unpaid|di\\s+bayad|outstanding)\\b",
+    "i",
+  );
+  if (unpaidOrderPattern.test(text) || orderUnpaidPattern.test(text)) {
     return { tool: "transaction.list", parameters: { unpaid: true }, confidence: 0.96 };
   }
 
@@ -237,7 +241,9 @@ export function parseFastWriteRiverAiAgentIntent(message: string): RiverAiAgentI
     };
   }
 
-  const stockMatch = text.match(/\badjust\s+(?:stock\s+)?(?:for\s+)?(.+?)\s+(?:by\s+)?([+-]?\d+)\b/i);
+  const stockMatch = text.match(
+    /\badjust\s+(?:stock\s+)?(?:for\s+)?(.+?)\s+(?:by\s+)?([+-]?\d+)\b/i,
+  );
   if (stockMatch?.[1] && stockMatch[2]) {
     return {
       tool: "inventory.adjust_stock",
@@ -246,7 +252,9 @@ export function parseFastWriteRiverAiAgentIntent(message: string): RiverAiAgentI
     };
   }
 
-  const deliveryMatch = text.match(/(?:add|create|schedule|book)\s+(?:a\s+)?delivery\s+(?:for|sa|to)\s+(.+)/i);
+  const deliveryMatch = text.match(
+    /(?:add|create|schedule|book)\s+(?:a\s+)?delivery\s+(?:for|sa|to)\s+(.+)/i,
+  );
   if (deliveryMatch?.[1]) {
     const rest = deliveryMatch[1].trim();
     const qtyMatch = rest.match(/(\d+)\s*(?:gallons?|gal|gals?)\b/i);
@@ -266,7 +274,9 @@ export function parseFastWriteRiverAiAgentIntent(message: string): RiverAiAgentI
     }
   }
 
-  const walkinMatch = text.match(/(?:add|record|create)\s+walk-?in(?:\s+(?:sale|transaction))?\s*(.*)$/i);
+  const walkinMatch = text.match(
+    /(?:add|record|create)\s+walk-?in(?:\s+(?:sale|transaction))?\s*(.*)$/i,
+  );
   if (walkinMatch) {
     const rest = (walkinMatch[1] || "").trim();
     const qtyMatch = rest.match(/(\d+)\s*(?:gallons?|gal|gals?)\b/i);
@@ -338,6 +348,9 @@ export async function parseRiverAiAgentIntent(input: {
 
   const system =
     "You route owner commands for a Philippine water refilling station app (SmartRefill). " +
+    "You embody seven roles: technician (equipment/PM), water expert (TDS/pH/hygiene), " +
+    "business analyst (snapshot numbers), encyclopedia (their station data), instructor (steps), " +
+    "staff assistant (draft writes), companion (growth ideas). " +
     "Pick exactly one tool id from the allowed list. Output STRICT JSON: " +
     "tool (string), parameters (object), confidence (0-1), clarifyingQuestion (optional, Taglish), replyHint (optional). " +
     "READ tools: customer.list, customer.get, transaction.list, transaction.get, inventory.list, catalog.list, rider.list, report.today_summary. " +
