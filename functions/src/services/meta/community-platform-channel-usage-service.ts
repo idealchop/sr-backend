@@ -19,6 +19,7 @@ type PlatformChannelUsageDoc = {
   periodKey: string;
   communityMessengerIntake: number;
   communityWhatsappIntake?: number;
+  communityViberIntake?: number;
   updatedAt?: unknown;
 };
 
@@ -33,8 +34,12 @@ export async function incrementCommunityWhatsappIntake(amount = 1): Promise<numb
   return incrementCommunityChannelIntake("community_whatsapp", amount);
 }
 
+export async function incrementCommunityViberIntake(amount = 1): Promise<number> {
+  return incrementCommunityChannelIntake("community_viber", amount);
+}
+
 export async function incrementCommunityChannelIntake(
-  channel: "community_messenger" | "community_whatsapp",
+  channel: "community_messenger" | "community_whatsapp" | "community_viber",
   amount = 1,
 ): Promise<number> {
   const delta = Math.max(1, Math.floor(amount));
@@ -43,7 +48,9 @@ export async function incrementCommunityChannelIntake(
   const field =
     channel === "community_whatsapp" ?
       "communityWhatsappIntake" :
-      "communityMessengerIntake";
+      channel === "community_viber" ?
+        "communityViberIntake" :
+        "communityMessengerIntake";
 
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);

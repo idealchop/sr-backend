@@ -14,7 +14,7 @@ export type CommunityMessengerWizardStep =
 
 export type CommunityMessengerSession = {
   psid: string;
-  sourceChannel?: "community_messenger" | "community_whatsapp";
+  sourceChannel?: "community_messenger" | "community_whatsapp" | "community_viber";
   fields: CommunityOrderFields;
   rawMessage: string;
   awaitingConfirmation?: "delivery" | "order";
@@ -81,7 +81,7 @@ export async function getCommunityMessengerSession(
 
 export async function saveCommunityMessengerSession(params: {
   psid: string;
-  sourceChannel?: "community_messenger" | "community_whatsapp";
+  sourceChannel?: "community_messenger" | "community_whatsapp" | "community_viber";
   fields: CommunityOrderFields;
   rawMessage: string;
   awaitingConfirmation?: "delivery" | "order";

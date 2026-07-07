@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { readCommunityCustomerContact } from "../../../../services/meta/community-channel-contact";
 
 describe("community channel contact", () => {
@@ -24,6 +24,19 @@ describe("community channel contact", () => {
     ).toEqual({
       sourceChannel: "community_whatsapp",
       contactId: "639171234567",
+    });
+  });
+
+  it("reads viber contact for CP-31", () => {
+    expect(
+      readCommunityCustomerContact({
+        sourceChannel: "community_viber",
+        viberUserId: "viber-user-abc",
+        channelContactId: "viber-user-abc",
+      }),
+    ).toEqual({
+      sourceChannel: "community_viber",
+      contactId: "viber-user-abc",
     });
   });
 });

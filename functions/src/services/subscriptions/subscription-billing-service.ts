@@ -79,7 +79,7 @@ export class SubscriptionBillingService {
   static async completeBillingLinkSetup(
     businessId: string,
     intentId: string,
-    provider: string = "mock",
+    provider = "mock",
   ): Promise<void> {
     const prefix = provider === "paymongo" ? "paymongo" : "mock";
     await billingDoc(businessId).set(

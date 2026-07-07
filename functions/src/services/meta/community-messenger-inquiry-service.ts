@@ -1,5 +1,6 @@
 import { db, FieldValue } from "../../config/firebase-admin";
 import type { CommunityChannelContact } from "./community-channel-contact";
+import { channelContactFields } from "./community-channel-contact";
 import { sendCommunityChannelText } from "./community-channel-outbound-service";
 import { parseCommunityOrderTemplate } from "./community-dispatch-template-parser";
 
@@ -12,6 +13,7 @@ export type CommunityInquiryThreadDoc = {
   channelContactId: string;
   metaPsid?: string;
   whatsappWaId?: string;
+  viberUserId?: string;
   status: "open" | "closed";
   unreadCount: number;
   /** True when latest inbound looks like a water order — for admin visibility. */
@@ -65,11 +67,7 @@ export async function ensureCommunityInquiryThreadOpen(
   const snap = await ref.get();
   if (!snap.exists) {
     await ref.set({
-      sourceChannel: contact.sourceChannel,
-      channelContactId: contact.contactId,
-      ...(contact.sourceChannel === "community_whatsapp" ?
-        { whatsappWaId: contact.contactId } :
-        { metaPsid: contact.contactId }),
+      ...channelContactFields(contact),
       status: "open",
       unreadCount: 0,
       createdAt: FieldValue.serverTimestamp(),

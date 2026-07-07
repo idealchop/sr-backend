@@ -235,6 +235,7 @@ export async function loadCommunityDeliveryReceiptContext(params: {
     sourceChannel?: CommunitySourceChannel;
     metaPsid?: string;
     whatsappWaId?: string;
+    viberUserId?: string;
     channelContactId?: string;
     parsed?: CommunityOrderFields;
     deliveryNotifiedAt?: unknown;
@@ -244,6 +245,7 @@ export async function loadCommunityDeliveryReceiptContext(params: {
     sourceChannel: request.sourceChannel ?? "community_messenger",
     metaPsid: request.metaPsid,
     whatsappWaId: request.whatsappWaId,
+    viberUserId: request.viberUserId,
     channelContactId: request.channelContactId,
   });
   if (!contact || request.deliveryNotifiedAt) return null;

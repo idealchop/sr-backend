@@ -31,11 +31,12 @@ export type CommunityDispatchParseSource = "template" | "ai";
 
 export type CommunityDispatchRequestDoc = {
   status: CommunityDispatchRequestStatus;
-  sourceChannel: "community_messenger" | "community_whatsapp";
-  /** Unified lookup key — PSID or WhatsApp wa_id. */
+  sourceChannel: "community_messenger" | "community_whatsapp" | "community_viber";
+  /** Unified lookup key — PSID, WhatsApp wa_id, or Viber user id. */
   channelContactId?: string;
   metaPsid?: string;
   whatsappWaId?: string;
+  viberUserId?: string;
   metaMessageId: string;
   rawMessage: string;
   parsed: import("./community-dispatch-template-parser").CommunityOrderFields;

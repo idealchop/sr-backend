@@ -40,6 +40,14 @@ export async function findPendingCommunityDispatchRequest(
       .get();
   }
 
+  if (snap.empty) {
+    snap = await db
+      .collection(COLLECTION)
+      .where("viberUserId", "==", contactId)
+      .limit(20)
+      .get();
+  }
+
   const candidates = snap.docs
     .map((doc) => ({
       id: doc.id,

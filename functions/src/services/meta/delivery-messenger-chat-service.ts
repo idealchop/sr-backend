@@ -2,6 +2,7 @@ import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
 import { sendMetaMessengerText } from "./meta-messenger-send-service";
 import type { CommunityChannelContact } from "./community-channel-contact";
+import { channelContactFields } from "./community-channel-contact";
 import { buildCommunityChannelContact } from "./community-channel-contact";
 import { sendCommunityChannelText, sendCommunityChannelButtons } from "./community-channel-outbound-service";
 import {
@@ -25,6 +26,7 @@ export type DeliveryMessengerChatThreadDoc = {
   channelContactId: string;
   metaPsid?: string;
   whatsappWaId?: string;
+  viberUserId?: string;
   businessId: string;
   stationName: string;
   dispatchRequestId: string;
@@ -85,11 +87,7 @@ async function ensureDeliveryChatThread(
   const snap = await ref.get();
   if (!snap.exists) {
     await ref.set({
-      sourceChannel: contact.sourceChannel,
-      channelContactId: contact.contactId,
-      ...(contact.sourceChannel === "community_messenger" ?
-        { metaPsid: contact.contactId } :
-        { whatsappWaId: contact.contactId }),
+      ...channelContactFields(contact),
       businessId: context.businessId,
       stationName: context.stationName,
       dispatchRequestId: context.requestId,
@@ -496,7 +494,8 @@ export async function resolveDeliveryChatByReference(
     const contactId =
       data.channelContactId?.trim() ||
       data.metaPsid?.trim() ||
-      data.whatsappWaId?.trim();
+      data.whatsappWaId?.trim() ||
+      data.viberUserId?.trim();
     if (!contactId) continue;
 
     const sourceChannel = data.sourceChannel ?? "community_messenger";

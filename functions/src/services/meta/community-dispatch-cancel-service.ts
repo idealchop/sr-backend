@@ -1,6 +1,7 @@
 import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
 import type { CommunityChannelContact } from "./community-channel-contact";
+import { communityContactLegacyIdField } from "./community-channel-contact";
 import { sendCommunityChannelText } from "./community-channel-outbound-service";
 import { closePendingOffersForRequest } from "./community-dispatch-offer-service";
 import type { CommunityDispatchRequestDoc } from "./community-dispatch-request-types";
@@ -64,7 +65,7 @@ async function findCancellableRequest(
     (await db
       .collection(REQUESTS_COLLECTION)
       .where(
-        contact.sourceChannel === "community_whatsapp" ? "whatsappWaId" : "metaPsid",
+        communityContactLegacyIdField(contact.sourceChannel),
         "==",
         contact.contactId,
       )

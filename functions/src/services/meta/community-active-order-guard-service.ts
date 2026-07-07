@@ -1,5 +1,6 @@
 import { db } from "../../config/firebase-admin";
 import type { CommunityChannelContact } from "./community-channel-contact";
+import { communityContactLegacyIdField } from "./community-channel-contact";
 import { sendCommunityChannelText } from "./community-channel-outbound-service";
 import type {
   CommunityDispatchRequestDoc,
@@ -64,7 +65,7 @@ async function queryDispatchRequestsForContact(
     snap = await db
       .collection(REQUESTS_COLLECTION)
       .where(
-        contact.sourceChannel === "community_whatsapp" ? "whatsappWaId" : "metaPsid",
+        communityContactLegacyIdField(contact.sourceChannel),
         "==",
         contact.contactId,
       )
