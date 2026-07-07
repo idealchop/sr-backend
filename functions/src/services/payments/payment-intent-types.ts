@@ -27,6 +27,7 @@ export interface PaymentIntentRecord {
   currency: "PHP";
   provider: PaymentProviderId;
   providerLinkId?: string;
+  providerReferenceNumber?: string;
   providerSubscriptionId?: string;
   providerCustomerId?: string;
   checkoutUrl: string;

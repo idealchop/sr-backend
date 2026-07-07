@@ -12,7 +12,22 @@ export type ProviderLinkRequest = {
 
 export type ProviderLinkResult = {
   providerLinkId: string;
+  providerReferenceNumber?: string;
   checkoutUrl: string;
+};
+
+export type ParsedPaymentWebhook = {
+  providerEventId: string;
+  providerLinkId?: string;
+  providerReferenceNumber?: string;
+  providerPaymentId?: string;
+  providerSubscriptionId?: string;
+  intentId?: string;
+  amount: number;
+  reference?: string;
+  paidAt?: string;
+  eventKind?: "payment" | "subscription_invoice";
+  paymentOrigin?: string;
 };
 
 export interface PaymentProviderAdapter {
@@ -22,14 +37,5 @@ export interface PaymentProviderAdapter {
     rawBody: Buffer | string,
     signatureHeader: string | undefined,
   ): boolean;
-  parseWebhookPayload(body: unknown): {
-    providerEventId: string;
-    providerLinkId?: string;
-    providerSubscriptionId?: string;
-    intentId?: string;
-    amount: number;
-    reference?: string;
-    paidAt?: string;
-    eventKind?: "payment" | "subscription_invoice";
-  } | null;
+  parseWebhookPayload(body: unknown): ParsedPaymentWebhook | null;
 }

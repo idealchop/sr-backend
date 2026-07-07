@@ -1,6 +1,9 @@
 import crypto from "crypto";
 import { logger } from "../observability/logging/logger";
-import type { PaymentProviderAdapter } from "./payment-provider-types";
+import type {
+  ParsedPaymentWebhook,
+  PaymentProviderAdapter,
+} from "./payment-provider-types";
 
 function paymongoSecretKey(): string | undefined {
   const key = process.env.PAYMONGO_SECRET_KEY?.trim();
@@ -58,10 +61,12 @@ export class PaymongoPaymentProvider implements PaymentProviderAdapter {
     };
     const providerLinkId = String(json.data?.id || "").trim();
     const checkoutUrl = String(json.data?.attributes?.checkout_url || "").trim();
+    const providerReferenceNumber =
+      String(json.data?.attributes?.reference_number || "").trim() || undefined;
     if (!providerLinkId || !checkoutUrl) {
       throw new Error("PAYMONGO_LINK_INVALID");
     }
-    return { providerLinkId, checkoutUrl };
+    return { providerLinkId, providerReferenceNumber, checkoutUrl };
   }
 
   verifyWebhookSignature(
@@ -83,34 +88,30 @@ export class PaymongoPaymentProvider implements PaymentProviderAdapter {
     const timestamp = parts.t;
     const testSig = parts.te;
     const liveSig = parts.li;
-    const signature = testSig || liveSig;
-    if (!timestamp || !signature) return false;
+    if (!timestamp) return false;
 
     const payload = `${timestamp}.${body}`;
     const expected = crypto
       .createHmac("sha256", secret)
       .update(payload)
       .digest("hex");
-    try {
-      return crypto.timingSafeEqual(
-        Buffer.from(expected),
-        Buffer.from(signature),
-      );
-    } catch {
-      return false;
-    }
+
+    const candidates = [liveSig, testSig].filter(Boolean);
+    if (!candidates.length) return false;
+
+    return candidates.some((signature) => {
+      try {
+        return crypto.timingSafeEqual(
+          Buffer.from(expected),
+          Buffer.from(signature),
+        );
+      } catch {
+        return false;
+      }
+    });
   }
 
-  parseWebhookPayload(body: unknown): {
-    providerEventId: string;
-    providerLinkId?: string;
-    providerSubscriptionId?: string;
-    intentId?: string;
-    amount: number;
-    reference?: string;
-    paidAt?: string;
-    eventKind?: "payment" | "subscription_invoice";
-  } | null {
+  parseWebhookPayload(body: unknown): ParsedPaymentWebhook | null {
     if (!body || typeof body !== "object") return null;
     const root = body as {
       data?: {
@@ -124,6 +125,9 @@ export class PaymongoPaymentProvider implements PaymentProviderAdapter {
               amount?: number;
               paid_at?: number;
               remarks?: string;
+              reference_number?: string;
+              external_reference_number?: string;
+              origin?: string;
               metadata?: Record<string, string>;
               resource_id?: string;
               status?: string;
@@ -138,9 +142,23 @@ export class PaymongoPaymentProvider implements PaymentProviderAdapter {
     if (!eventId || !eventType) return null;
 
     const inner = root.data?.attributes?.data;
+    const innerType = String(inner?.type || "").trim();
     const attrs = inner?.attributes;
     const amountCentavos = Number(attrs?.amount ?? 0);
     const amount = amountCentavos > 0 ? amountCentavos / 100 : 0;
+    const metadata = attrs?.metadata;
+    const origin = String(attrs?.origin || "").trim();
+    const providerReferenceNumber =
+      String(
+        attrs?.external_reference_number ||
+          attrs?.reference_number ||
+          metadata?.pm_reference_number ||
+          "",
+      ).trim().replace(/\s+/g, "") || undefined;
+    const providerPaymentId =
+      innerType === "payment" ?
+        String(inner?.id || "").trim() || undefined :
+        undefined;
 
     if (eventType === "subscription.invoice.paid") {
       const providerSubscriptionId =
@@ -157,26 +175,51 @@ export class PaymongoPaymentProvider implements PaymentProviderAdapter {
     }
 
     if (!eventType.includes("payment")) return null;
+    if (!amount) return null;
 
-    const intentId =
-      String(attrs?.metadata?.intentId || attrs?.remarks || "").trim() ||
-      undefined;
-    const providerLinkId = String(inner?.id || "").trim() || undefined;
     const paidAt =
       attrs?.paid_at ?
         new Date(attrs.paid_at * 1000).toISOString() :
         undefined;
 
-    if (!amount) return null;
+    if (innerType === "link") {
+      const intentId =
+        String(metadata?.intentId || attrs?.remarks || "").trim() ||
+        undefined;
+      const providerLinkId = String(inner?.id || "").trim() || undefined;
+      return {
+        providerEventId: eventId,
+        providerLinkId,
+        providerReferenceNumber,
+        providerPaymentId,
+        intentId,
+        amount,
+        reference: providerReferenceNumber || providerLinkId,
+        paidAt,
+        eventKind: "payment",
+        paymentOrigin: "links",
+      };
+    }
+
+    const intentId =
+      String(metadata?.intentId || attrs?.remarks || "").trim() ||
+      undefined;
+    const providerLinkId =
+      origin === "links" ?
+        undefined :
+        String(inner?.id || "").trim() || undefined;
 
     return {
       providerEventId: eventId,
       providerLinkId,
+      providerReferenceNumber,
+      providerPaymentId,
       intentId,
       amount,
-      reference: providerLinkId,
+      reference: providerReferenceNumber || providerLinkId,
       paidAt,
       eventKind: "payment",
+      paymentOrigin: origin || undefined,
     };
   }
 }

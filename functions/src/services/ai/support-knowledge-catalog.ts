@@ -130,7 +130,32 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
     content:
       "Starter has core features with limits. Grow adds team hub and live human support. " +
       "Scale/Enterprise add higher limits and advanced operations. " +
-      "Check Account → Subscription for your plan.",
+      "Check Account → Subscription for your plan, usage, auto-renew, and billing account status.",
+  },
+  {
+    id: "subscription-checkout",
+    topic: "Pay subscription with GCash or Maya",
+    content:
+      "From Pricing or Account → Subscription, open checkout and choose **Pay with GCash or Maya**. " +
+      "Your plan activates when payment is confirmed. Manual QR/bank transfer is still available under " +
+      "**Pay manually instead**.",
+  },
+  {
+    id: "subscription-auto-renew",
+    topic: "Auto-renew and link payment account",
+    content:
+      "Leave **Auto-renew my plan each billing cycle** checked to stay on your paid plan. " +
+      "Use **Link payment account** on Account → Subscription to save GCash, Maya, or card for automatic " +
+      "renewal charges when wallet billing is enabled. Without a linked wallet, you get a payment link " +
+      "reminder a few days before your period ends.",
+  },
+  {
+    id: "subscription-renew-addons",
+    topic: "Renew with add-ons",
+    content:
+      "When renewing, your current station add-ons are included by default in checkout — turn add-ons off " +
+      "or reduce quantities if you do not need them. If you already paid for the next billing period, " +
+      "another payment schedules the following period instead of duplicating the same month.",
   },
   {
     id: "data-privacy",

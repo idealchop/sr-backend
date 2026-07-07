@@ -6,6 +6,7 @@ import {
   pickEffectiveEntitling,
   pickPendingScheduled,
   pickPendingPaidUpgrade,
+  resolveRenewalDeferUntil,
   shouldDeferRenewalToPeriodEnd,
   paymentReadyForActivation,
   type SubscriptionDocRow,
@@ -132,6 +133,66 @@ describe("subscription-effective", () => {
         new Date("2026-05-26T00:00:00Z"),
       );
       expect(defer?.toISOString()).toBe(expires.toISOString());
+    });
+  });
+
+  describe("resolveRenewalDeferUntil", () => {
+    it("stacks a second renewal after an already-queued August period", () => {
+      const now = new Date("2026-07-15T00:00:00Z");
+      const current = row("active-scale", {
+        billingCycle: "monthly",
+        status: "active",
+        planCode: "scale",
+        paymentStatus: "verified",
+        dates: {
+          expiresAt: new Date("2026-08-07T00:00:00Z"),
+          gracePeriodExpiresAt: new Date("2026-08-14T00:00:00Z"),
+        },
+      });
+      const queuedAugust = row("renewal-aug", {
+        billingCycle: "monthly",
+        status: "scheduled",
+        planCode: "scale",
+        paymentStatus: "verified",
+        dates: {
+          activatesAt: new Date("2026-08-07T00:00:00Z"),
+          expiresAt: new Date("2026-09-07T00:00:00Z"),
+        },
+      });
+
+      const defer = resolveRenewalDeferUntil(
+        current,
+        [queuedAugust, current],
+        now,
+        "scale",
+        "monthly",
+      );
+
+      expect(defer?.toISOString()).toBe(new Date("2026-09-07T00:00:00Z").toISOString());
+    });
+
+    it("defers to current period end when no queued renewal exists", () => {
+      const now = new Date("2026-07-15T00:00:00Z");
+      const current = row("active-scale", {
+        billingCycle: "monthly",
+        status: "active",
+        planCode: "scale",
+        paymentStatus: "verified",
+        dates: {
+          expiresAt: new Date("2026-08-07T00:00:00Z"),
+          gracePeriodExpiresAt: new Date("2026-08-14T00:00:00Z"),
+        },
+      });
+
+      const defer = resolveRenewalDeferUntil(
+        current,
+        [current],
+        now,
+        "scale",
+        "monthly",
+      );
+
+      expect(defer?.toISOString()).toBe(new Date("2026-08-07T00:00:00Z").toISOString());
     });
   });
 

@@ -226,6 +226,18 @@ export class PaymongoRecurringService {
     };
   }
 
+  static async markBillingActive(businessId: string): Promise<void> {
+    const profile = await PaymongoRecurringService.getBillingProfile(businessId);
+    if (!profile?.subscriptionId) return;
+    await billingDoc(businessId).set(
+      {
+        status: "active",
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  }
+
   static async cancelSubscription(businessId: string): Promise<void> {
     const profile = await PaymongoRecurringService.getBillingProfile(businessId);
     const subscriptionId = String(profile?.subscriptionId || "").trim();

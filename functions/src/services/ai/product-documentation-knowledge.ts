@@ -99,6 +99,7 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 
 ### Plans & support channels
 - **Starter / Grow / Scale / Enterprise** — team hub and live human chat on higher tiers.
+- **Subscription billing (July 2026)** — Account → Subscription or Pricing checkout: pay with **GCash or Maya** online; optional **auto-renew** each cycle; **link payment account** to save wallet billing for automatic charges when enabled; manual bank transfer + proof still available. Renew checkout **includes current add-ons by default**; stacked renewals schedule the next period if you already paid ahead.
 - **Header River AI** (orb button): AI help for Smart Refill app + water station operations (plan chat caps).
 - **Profile → Chat support**: live Brevo helpdesk for billing and account issues (Grow+ when enabled)—
   separate from the header River AI button.
@@ -232,6 +233,19 @@ export const SUPPORT_PRODUCT_DOC_ENTRIES: Array<{
       "GCash/bank transfer ay **pending sync** hanggang kumpirmado ng server. " +
       "Riders sa My Area: pwedeng mag-mark delivered/collected offline with proof photo. " +
       "Hindi pa offline: sign-in, River AI, live dispatch map, portal orders.",
+  },
+  {
+    id: "doc-subscription-billing",
+    topic: "Paano mag-renew, mag-upgrade, o mag-link ng GCash/Maya sa plan?",
+    content:
+      "Account → **Subscription** (o Pricing → checkout): piliin ang plan, **Pay with GCash or Maya** para sa secure online payment. " +
+      "Iwanan naka-on ang **Auto-renew my plan each billing cycle** kung gusto mong magpatuloy pagkatapos ng period. " +
+      "**Link payment account** — i-save ang GCash, Maya, o card sa payment partner para automatic charge sa renewal kung supported. " +
+      "Kung walang naka-link na wallet, makakatanggap ka ng in-app reminder na may payment link bago matapos ang period. " +
+      "Sa renew, kasama na ang **add-ons** ng current plan — pwedeng i-off o bawasan sa checkout. " +
+      "Kung nabayaran mo na ang susunod na buwan, ang bagong renew ay **sunod na period** (hindi duplicate month). " +
+      "Manual transfer: i-expand ang **Pay manually instead** at mag-upload ng proof. " +
+      "Online checkout ay **subscription lang** — hindi para sa portal order payments o ledger collections.",
   },
   {
     id: "doc-river-ai-vs-live-support",

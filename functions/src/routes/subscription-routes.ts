@@ -16,6 +16,10 @@ import {
   pauseTrialSubscription,
 } from "../handlers/subscription-handler";
 import { postSubscriptionPaymentIntent } from "../handlers/payments/payment-intent-handler";
+import {
+  getSubscriptionBilling,
+  postSubscriptionBillingLink,
+} from "../handlers/subscription-billing-handler";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
 
 const router = express.Router(); // eslint-disable-line new-cap
@@ -41,6 +45,16 @@ router.post(
   "/:businessId/payment-intent",
   validateFirebaseIdToken,
   postSubscriptionPaymentIntent,
+);
+router.get(
+  "/:businessId/billing",
+  validateFirebaseIdToken,
+  getSubscriptionBilling,
+);
+router.post(
+  "/:businessId/billing/link",
+  validateFirebaseIdToken,
+  postSubscriptionBillingLink,
 );
 router.get(
   "/:businessId/status",

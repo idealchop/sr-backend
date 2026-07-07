@@ -40,12 +40,15 @@ import {
   fetchRecentSubscriptionRows,
   getActivatesAt,
   isStarterPlan,
+  latestQueuedRenewalPeriodEnd,
   parseSubscriptionTimestamp,
   paymentReadyForActivation,
   pickEffectiveEntitling,
   pickPendingPaidUpgrade,
   pickPendingScheduled,
   promoteDueScheduledSubscriptions,
+  resolveRenewalDeferUntil,
+  scheduledRowPeriodEnd,
   shouldDeferRenewalToPeriodEnd,
   supersedeOtherEntitlingRows,
 } from "./subscription-effective";
@@ -511,11 +514,29 @@ export class SubscriptionService {
     const cycle: "monthly" | "yearly" =
       String(rawCycle || "").toLowerCase() === "yearly" ? "yearly" : "monthly";
 
-    const deferUntil = shouldDeferRenewalToPeriodEnd(
-      action,
-      currentEffective,
-      now,
-    );
+    const deferUntil =
+      action === "RENEW" ?
+        resolveRenewalDeferUntil(
+          currentEffective,
+          rows,
+          now,
+          String(targetPlanCode || "").trim(),
+          cycle,
+        ) :
+        shouldDeferRenewalToPeriodEnd(
+          action,
+          currentEffective,
+          now,
+        );
+
+    const queuedRenewalEnd = action === "RENEW" ?
+      latestQueuedRenewalPeriodEnd(
+        rows,
+        now,
+        String(targetPlanCode || "").trim(),
+        cycle,
+      ) :
+      null;
 
     const paymentPending =
       String(paymentDetails.paymentStatus || "").toLowerCase() ===
@@ -575,9 +596,18 @@ export class SubscriptionService {
           `Your upgrade to ${planData.name} is scheduled for ` +
             `${formatPhilippineDate(deferUntil)} when your current period ends.`;
       } else {
-        notifyMessage =
+        const stacksAfterQueued =
+          !!queuedRenewalEnd &&
+          !!deferUntil &&
+          deferUntil.getTime() === queuedRenewalEnd.getTime() &&
+          (!currentEffective ||
+            queuedRenewalEnd.getTime() >
+              computeDatesView(currentEffective.data, now).expiresAt.getTime());
+        notifyMessage = stacksAfterQueued ?
           `Your ${planData.name} renewal is confirmed. ` +
-          `It will start on ${formatPhilippineDate(deferUntil)} when your current period ends.`;
+            `It will start on ${formatPhilippineDate(deferUntil)} after your queued renewal period.` :
+          `Your ${planData.name} renewal is confirmed. ` +
+            `It will start on ${formatPhilippineDate(deferUntil)} when your current period ends.`;
       }
     } else if (deferPeriodDates) {
       status = "pending";
@@ -882,6 +912,12 @@ export class SubscriptionService {
         planCode: String(pendingScheduled.data.planCode || ""),
         planName: String(pendingScheduled.data.planName || ""),
         activatesAt: getActivatesAt(pendingScheduled.data)?.toISOString(),
+        periodEndsAt: scheduledRowPeriodEnd(
+          pendingScheduled.data,
+          String(pendingScheduled.data.billingCycle || "").toLowerCase() === "yearly" ?
+            "yearly" :
+            "monthly",
+        )?.toISOString(),
         paymentStatus: pendingScheduled.data.paymentStatus,
       } :
       undefined;

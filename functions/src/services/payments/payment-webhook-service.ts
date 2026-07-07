@@ -1,11 +1,17 @@
-import { db } from "../../config/firebase-admin";
+import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
 import { SubscriptionService } from "../subscriptions/subscription-service";
+import { reEnableAutoRenewOnCurrentPlan, syncAutoRenewAfterSubscriptionPayment } from "../subscriptions/subscription-auto-renew-sync";
+import { SubscriptionBillingService } from "../subscriptions/subscription-billing-service";
 import { PaymentIntentService } from "./payment-intent-service";
 import type {
+  PaymentIntentRecord,
   PaymentProviderId,
   SubscriptionPaymentAction,
 } from "./payment-intent-types";
+import { getPaymongoLinkByReference, getPaymongoPaymentReference } from "./paymongo-api-client";
+import type { ParsedPaymentWebhook } from "./payment-provider-types";
+import { PaymongoRecurringService } from "./paymongo-recurring-service";
 import { getPaymentProviderById } from "./resolve-payment-provider";
 
 export type ProcessPaymentWebhookInput = {
@@ -39,7 +45,13 @@ export class PaymentWebhookService {
     }
 
     const metadata = extractMetadata(input.parsedBody);
-    let businessId = metadata.businessId;
+    const resolved = await resolveSubscriptionPaymentIntent(
+      input.provider,
+      parsed,
+      metadata.businessId,
+    );
+    let businessId = resolved.businessId;
+    let intent = resolved.intent;
 
     if (!businessId && parsed.providerSubscriptionId) {
       businessId = await resolveBusinessByPaymongoSubscription(
@@ -47,13 +59,17 @@ export class PaymentWebhookService {
       );
     }
 
+    if (!businessId && intent) {
+      businessId = intent.businessId;
+    }
+
     if (!businessId) {
       return { ok: false, error: "MISSING_BUSINESS" };
     }
 
-    let intent = parsed.intentId ?
-      await PaymentIntentService.getIntent(businessId, parsed.intentId) :
-      null;
+    if (!intent && parsed.intentId) {
+      intent = await PaymentIntentService.getIntent(businessId, parsed.intentId);
+    }
 
     if (!intent && parsed.providerLinkId) {
       intent = await PaymentIntentService.findByProviderLinkId(
@@ -69,10 +85,41 @@ export class PaymentWebhookService {
       );
     }
 
+    if (!intent && parsed.providerSubscriptionId && businessId) {
+      if (parsed.eventKind === "subscription_invoice") {
+        await PaymongoRecurringService.markBillingActive(businessId);
+        const billingSnap = await db
+          .collection("businesses")
+          .doc(businessId)
+          .collection("paymongo_billing")
+          .doc("default")
+          .get();
+        const linkPurpose = String(billingSnap.data()?.linkPurpose || "");
+        if (linkPurpose === "billing_setup") {
+          await billingSnap.ref.update({
+            linkPurpose: FieldValue.delete(),
+            status: "active",
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+        logger.info("subscription billing linked via invoice webhook", {
+          businessId,
+          providerSubscriptionId: parsed.providerSubscriptionId,
+        });
+        await reEnableAutoRenewOnCurrentPlan(businessId);
+        return {
+          ok: true,
+          status: "billing_linked",
+        };
+      }
+    }
+
     if (!intent) {
       logger.warn("payment webhook unmatched intent", {
         businessId,
         providerEventId: parsed.providerEventId,
+        providerReferenceNumber: parsed.providerReferenceNumber,
+        paymentOrigin: parsed.paymentOrigin,
       });
       return { ok: false, error: "INTENT_NOT_FOUND", status: "unmatched" };
     }
@@ -138,6 +185,33 @@ export class PaymentWebhookService {
         intent.checkoutPayload :
         {};
 
+    const isBillingLinkOnly =
+      String(checkoutPayload.purpose || "") === "billing_link";
+
+    if (isBillingLinkOnly) {
+      await SubscriptionBillingService.completeBillingLinkSetup(
+        businessId,
+        intent.id,
+        input.provider,
+      );
+      await reEnableAutoRenewOnCurrentPlan(businessId);
+      await PaymentIntentService.patchIntent(businessId, intent.id, {
+        status: "paid",
+        paidAmount: received,
+        providerEventIds: [...priorEvents, parsed.providerEventId],
+        reconcileNote: "Billing account linked",
+      });
+      logger.info("subscription billing linked via payment intent", {
+        businessId,
+        intentId: intent.id,
+      });
+      return {
+        ok: true,
+        intentId: intent.id,
+        status: "billing_linked",
+      };
+    }
+
     const subscriptionAction: SubscriptionPaymentAction = isRecurringRenewal ?
       "RENEW" :
       intent.subscriptionAction;
@@ -159,6 +233,11 @@ export class PaymentWebhookService {
         intent.targetPlanCode,
         subscriptionAction,
         paymentDetails,
+      );
+      await syncAutoRenewAfterSubscriptionPayment(
+        businessId,
+        intent,
+        checkoutPayload,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : "SUBSCRIPTION_FAILED";
@@ -219,6 +298,72 @@ export class PaymentWebhookService {
       status: isRecurringRenewal ? "renewed" : "paid",
     };
   }
+}
+
+async function resolveSubscriptionPaymentIntent(
+  provider: PaymentProviderId,
+  parsed: ParsedPaymentWebhook,
+  metadataBusinessId?: string,
+): Promise<{ businessId?: string; intent: PaymentIntentRecord | null }> {
+  let businessId = metadataBusinessId;
+  let intent: PaymentIntentRecord | null = null;
+  let referenceNumber = parsed.providerReferenceNumber;
+
+  if (!intent && parsed.providerLinkId) {
+    intent = await PaymentIntentService.findByProviderLinkIdGlobal(
+      parsed.providerLinkId,
+    );
+    if (intent) businessId = intent.businessId;
+  }
+
+  if (!intent && parsed.intentId && businessId) {
+    intent = await PaymentIntentService.getIntent(businessId, parsed.intentId);
+  }
+
+  if (!intent && referenceNumber) {
+    intent = await PaymentIntentService.findByProviderReferenceNumber(
+      referenceNumber,
+    );
+    if (intent) businessId = intent.businessId;
+  }
+
+  if (!intent && provider === "paymongo") {
+    if (!referenceNumber && parsed.providerPaymentId) {
+      try {
+        referenceNumber = await getPaymongoPaymentReference(
+          parsed.providerPaymentId,
+        );
+      } catch (err) {
+        logger.warn("PayMongo payment lookup failed", {
+          paymentId: parsed.providerPaymentId,
+          err: err instanceof Error ? err.message : err,
+        });
+      }
+    }
+
+    if (referenceNumber) {
+      try {
+        const link = await getPaymongoLinkByReference(referenceNumber);
+        if (link?.businessId) businessId = link.businessId;
+        if (link?.intentId && businessId) {
+          intent = await PaymentIntentService.getIntent(businessId, link.intentId);
+        }
+        if (!intent && link?.linkId) {
+          intent = await PaymentIntentService.findByProviderLinkIdGlobal(
+            link.linkId,
+          );
+          if (intent) businessId = intent.businessId;
+        }
+      } catch (err) {
+        logger.warn("PayMongo link lookup by reference failed", {
+          reference: referenceNumber,
+          err: err instanceof Error ? err.message : err,
+        });
+      }
+    }
+  }
+
+  return { businessId, intent };
 }
 
 async function resolveBusinessByPaymongoSubscription(

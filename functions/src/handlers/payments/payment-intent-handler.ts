@@ -136,11 +136,16 @@ export const paymentProviderWebhook = (provider: PaymentProviderId) => {
     if (!result.ok && result.error === "INVALID_SIGNATURE") {
       return res.status(403).json({ error: result.error });
     }
-    if (!result.ok && result.error === "INTENT_NOT_FOUND") {
-      return res.status(202).json({ data: result });
+    if (!result.ok && result.error === "INVALID_PAYLOAD") {
+      return res.status(400).json({ error: result.error });
     }
     if (!result.ok) {
-      return res.status(400).json({ error: result.error || "WEBHOOK_FAILED" });
+      return res.status(200).json({
+        data: {
+          ...result,
+          acknowledged: true,
+        },
+      });
     }
     return res.json({ data: result });
   };
@@ -162,12 +167,27 @@ export const getMockPaymentCheckout = async (req: Request, res: Response) => {
       token,
     );
 
+    const linkPurpose =
+      intent.checkoutPayload &&
+      typeof intent.checkoutPayload === "object" &&
+      String(intent.checkoutPayload.purpose || "") === "billing_link";
+    const pageTitle = linkPurpose ?
+      "SmartRefill link billing account" :
+      "SmartRefill subscription test payment";
+    const pageHeading = linkPurpose ?
+      "Link billing account (test)" :
+      "Test subscription checkout";
+    const pageNote = linkPurpose ?
+      "Emulator/dev only — simulates linking GCash/Maya for auto-renew." :
+      "Emulator/dev only — simulates a successful provider webhook.";
+    const submitLabel = linkPurpose ? "Simulate link account" : "Simulate payment";
+
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SmartRefill subscription test payment</title>
+  <title>${pageTitle}</title>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 420px; margin: 2rem auto; padding: 0 1rem; }
     button { width: 100%; padding: 0.85rem; font-size: 1rem; border: 0; border-radius: 0.75rem;
@@ -178,13 +198,13 @@ export const getMockPaymentCheckout = async (req: Request, res: Response) => {
 </head>
 <body>
   <div class="card">
-    <h1>Test subscription checkout</h1>
+    <h1>${pageHeading}</h1>
     <p>Plan: <strong>${intent.targetPlanCode}</strong> (${intent.subscriptionAction})</p>
     <p>Amount: <strong>₱${intent.amount.toFixed(2)}</strong></p>
-    <p>Emulator/dev only — simulates a successful provider webhook.</p>
+    <p>${pageNote}</p>
     <form method="POST" action="">
       <input type="hidden" name="confirm" value="1" />
-      <button type="submit">Simulate payment</button>
+      <button type="submit">${submitLabel}</button>
     </form>
   </div>
 </body>
@@ -222,7 +242,7 @@ export const getMockPaymentCheckout = async (req: Request, res: Response) => {
 
     return res.type("html").send(
       `<!DOCTYPE html><html><body style="font-family:system-ui;max-width:420px;margin:2rem auto">
-      <h1>Subscription payment recorded</h1>
+      <h1>${linkPurpose ? "Billing account linked" : "Subscription payment recorded"}</h1>
       <p>Status: <strong>${result.status}</strong>. Close this tab and refresh your plan page.</p>
       </body></html>`,
     );

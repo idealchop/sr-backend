@@ -270,6 +270,92 @@ export function calculatePeriodDates(
 }
 
 /**
+ * End of the paid period covered by a scheduled/approved subscription row.
+ */
+export function scheduledRowPeriodEnd(
+  data: Record<string, unknown>,
+  fallbackCycle: "monthly" | "yearly",
+): Date | null {
+  const activatesAt = getActivatesAt(data);
+  if (!activatesAt) return null;
+
+  const dates = (data.dates || {}) as Record<string, unknown>;
+  const explicitExpires = dates.expiresAt ?
+    parseSubscriptionTimestamp(dates.expiresAt) :
+    null;
+  if (explicitExpires && explicitExpires.getTime() > activatesAt.getTime()) {
+    return explicitExpires;
+  }
+
+  const cycle = String(data.billingCycle || fallbackCycle).toLowerCase();
+  const billingCycle: "monthly" | "yearly" =
+    cycle === "yearly" ? "yearly" : "monthly";
+  return calculatePeriodDates(activatesAt, billingCycle).expiresAt;
+}
+
+/**
+ * Latest period end among queued paid renewals for the same plan.
+ */
+export function latestQueuedRenewalPeriodEnd(
+  rows: SubscriptionDocRow[],
+  now: Date,
+  planCode: string,
+  fallbackCycle: "monthly" | "yearly",
+): Date | null {
+  const target = String(planCode || "").trim().toLowerCase();
+  if (!target) return null;
+
+  let latest: Date | null = null;
+  for (const row of rows) {
+    const st = String(row.data.status || "");
+    if (st !== "scheduled" && st !== "approved") continue;
+    if (String(row.data.planCode || "").toLowerCase() !== target) continue;
+    if (!paymentReadyForActivation(row.data)) continue;
+
+    const periodEnd = scheduledRowPeriodEnd(row.data, fallbackCycle);
+    if (!periodEnd || periodEnd <= now) continue;
+
+    if (!latest || periodEnd > latest) {
+      latest = periodEnd;
+    }
+  }
+  return latest;
+}
+
+/**
+ * When to activate a new RENEW row — stacks after any queued renewal period.
+ */
+export function resolveRenewalDeferUntil(
+  current: SubscriptionDocRow | null,
+  allRows: SubscriptionDocRow[],
+  now: Date,
+  targetPlanCode: string,
+  renewalBillingCycle: "monthly" | "yearly",
+): Date | null {
+  const candidates: Date[] = [];
+
+  const currentDefer = shouldDeferRenewalToPeriodEnd("RENEW", current, now);
+  if (currentDefer && currentDefer > now) {
+    candidates.push(currentDefer);
+  }
+
+  const queuedEnd = latestQueuedRenewalPeriodEnd(
+    allRows,
+    now,
+    targetPlanCode,
+    renewalBillingCycle,
+  );
+  if (queuedEnd && queuedEnd > now) {
+    candidates.push(queuedEnd);
+  }
+
+  if (candidates.length === 0) return null;
+  return candidates.reduce((latest, candidate) =>
+    candidate > latest ? candidate : latest,
+  );
+}
+
+/**
  * Defer the next subscription row until the current paid period ends.
  * - RENEW / DOWNGRADE: always defer while current paid period is active.
  * - UPGRADE: defer paid → paid (e.g. Grow → Scale); Starter → paid starts immediately.

@@ -61,6 +61,9 @@ function toRecord(
     currency: "PHP",
     provider: data.provider === "paymongo" ? "paymongo" : "mock",
     providerLinkId: data.providerLinkId ? String(data.providerLinkId) : undefined,
+    providerReferenceNumber: data.providerReferenceNumber ?
+      String(data.providerReferenceNumber) :
+      undefined,
     providerSubscriptionId: data.providerSubscriptionId ?
       String(data.providerSubscriptionId) :
       undefined,
@@ -95,6 +98,40 @@ export class PaymentIntentService {
     const snap = await intentsCol(businessId).doc(intentId).get();
     if (!snap.exists) return null;
     return toRecord(businessId, snap.id, snap.data() || {});
+  }
+
+  static async findByProviderReferenceNumber(
+    referenceNumber: string,
+  ): Promise<PaymentIntentRecord | null> {
+    const ref = referenceNumber.trim();
+    if (!ref) return null;
+    const snap = await db
+      .collectionGroup("payment_intents")
+      .where("providerReferenceNumber", "==", ref)
+      .limit(1)
+      .get();
+    if (snap.empty) return null;
+    const doc = snap.docs[0];
+    const businessId = doc.ref.parent.parent?.id;
+    if (!businessId) return null;
+    return toRecord(businessId, doc.id, doc.data());
+  }
+
+  static async findByProviderLinkIdGlobal(
+    providerLinkId: string,
+  ): Promise<PaymentIntentRecord | null> {
+    const linkId = providerLinkId.trim();
+    if (!linkId) return null;
+    const snap = await db
+      .collectionGroup("payment_intents")
+      .where("providerLinkId", "==", linkId)
+      .limit(1)
+      .get();
+    if (snap.empty) return null;
+    const doc = snap.docs[0];
+    const businessId = doc.ref.parent.parent?.id;
+    if (!businessId) return null;
+    return toRecord(businessId, doc.id, doc.data());
   }
 
   static async findByProviderLinkId(
@@ -156,6 +193,7 @@ export class PaymentIntentService {
     let billingMode: SubscriptionBillingMode = "one_time";
     let checkoutUrl = "";
     let providerLinkId: string | undefined;
+    let providerReferenceNumber: string | undefined;
     let providerSubscriptionId: string | undefined;
     let providerCustomerId: string | undefined;
 
@@ -216,6 +254,7 @@ export class PaymentIntentService {
       });
       checkoutUrl = link.checkoutUrl;
       providerLinkId = link.providerLinkId;
+      providerReferenceNumber = link.providerReferenceNumber;
       if (autoRenew) {
         billingMode = "recurring_link";
       }
@@ -231,6 +270,7 @@ export class PaymentIntentService {
       currency: "PHP",
       provider: provider.id,
       providerLinkId,
+      providerReferenceNumber,
       providerSubscriptionId,
       providerCustomerId,
       checkoutUrl,
