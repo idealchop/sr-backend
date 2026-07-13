@@ -20,6 +20,7 @@ import plantOpsRoutes from "./routes/plant-ops-routes";
 import fileRoutes from "./routes/file-routes";
 import publicRoutes from "./routes/public-routes";
 import platformRoutes from "./routes/platform-routes";
+import eventsTrainingRoutes from "./routes/events-training-routes";
 
 // Swagger API Documentation
 import swaggerUi from "swagger-ui-express";
@@ -70,6 +71,7 @@ app.use("/plant", plantOpsRoutes);
 app.use("/files", fileRoutes);
 app.use("/public", publicRoutes);
 app.use("/platform", platformRoutes);
+app.use("/events-training", eventsTrainingRoutes);
 
 // Secured Interactive Swagger UI
 app.use("/docs", validateDocsAdminToken, swaggerUi.serve, swaggerUi.setup(openApiSpec));

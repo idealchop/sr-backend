@@ -84,3 +84,13 @@ export function parseWhatsNewSyncBody(body: unknown): WhatsNewReleaseInput[] {
     .map(parseWhatsNewReleaseInput)
     .filter((release): release is WhatsNewReleaseInput => release != null);
 }
+
+/** Optional Firestore doc ids to delete when syncing (e.g. superseded Jul 8–12 drafts). */
+export function parseWhatsNewPruneIds(body: unknown): string[] {
+  if (!body || typeof body !== "object") return [];
+  const raw = (body as { pruneIds?: unknown }).pruneIds;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+    .map((id) => id.trim());
+}

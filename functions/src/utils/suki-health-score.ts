@@ -125,7 +125,7 @@ function customerHasOpenPipeline(customerId: string, transactions: Transaction[]
   return false;
 }
 
-function computeSukiHealthScore(
+export function computeSukiHealthScore(
   customer: Customer,
   customerTxs: Transaction[],
   allTransactions: Transaction[],

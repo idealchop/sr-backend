@@ -67,7 +67,7 @@ if [[ ! -d node_modules/firebase-admin ]]; then
   npm install
 fi
 
-npx -y firebase-tools emulators:exec \
+npx -y firebase-tools@15 emulators:exec \
   --project "${PROJECT_ID}" \
   --only "functions,firestore,auth,storage" \
   "node seed-emulator.js && cd functions && npm run test:bdd"
@@ -104,14 +104,14 @@ fi
 trap restore_functions_env EXIT
 
 echo -e "${BLUE}🔥 Deploying Cloud Functions (v3-api codebase: API, schedulers, triggers)...${NC}"
-npx -y firebase-tools deploy --project "${PROJECT_ID}" \
+npx -y firebase-tools@15 deploy --project "${PROJECT_ID}" \
   --only functions:v3-api,firestore:rules,firestore:indexes
 
 if [[ "${DEPLOY_STORAGE_RULES:-0}" == "1" ]]; then
   echo -e "${BLUE}🔥 Deploying production Storage rules...${NC}"
   cd "${FRONTEND_DIR}"
   set +e
-  npx -y firebase-tools deploy --project "${PROJECT_ID}" --only storage
+  npx -y firebase-tools@15 deploy --project "${PROJECT_ID}" --only storage
   STORAGE_DEPLOY_EXIT=$?
   set -e
   cd "${ROOT_DIR}"

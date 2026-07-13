@@ -48,6 +48,14 @@ ${SUPPORT_WATER_STATION_CONTEXT}
 - Sign in with your business account. Complete staff onboarding if you were invited as team staff.
 - Owners manage subscription, billing, team invites, and full settings under Account.
 
+### Video tutorials (follow-along)
+- **Tutorial videos** panel: sidebar (desktop) or floating Tutorial button (mobile).
+- Catalog lists published how-to videos from Smart Refill (Sales Portal training videos).
+- Press Play to follow along — a small coach player stays on screen while you work
+  (add delivery, edit sukis, switch pages).
+- New published tutorials notify owners in the activity feed; verified emails get a Watch link.
+- Deep link: /dashboard?tutorial={videoId} opens that video.
+
 ### Customers
 - Customers page: add customers, import bulk, view profiles, balances, and delivery history.
 - Customer QR portal lets customers place orders, track deliveries, and request collections.
@@ -94,7 +102,19 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
     topic: "How do I create a delivery?",
     content:
       "Go to Transactions → Add Delivery. Pick a customer, water types/quantities, " +
-      "delivery date, payment method, and optional rider. Save to create a pending delivery job.",
+      "delivery date, payment method, and optional rider. Save to create a pending delivery job. " +
+      "If a matching **video tutorial** exists (see live catalog), recommend opening Tutorial videos " +
+      "or /dashboard?tutorial={id} so they can follow along while recording.",
+  },
+  {
+    id: "video-tutorials",
+    topic: "Saan ang video tutorials / paano manood ng how-to?",
+    content:
+      "Open **Tutorial videos** mula sa left sidebar (desktop) o floating Tutorial button (mobile). " +
+      "Pumili ng lesson, tap Play — mananatili ang maliit na coach player habang nagtatrabaho ka sa app. " +
+      "Kapag may bagong tutorial, may activity-feed notification; verified email owners may Watch link. " +
+      "Direct link: /dashboard?tutorial={videoId}. " +
+      "River AI Buddy should cite published tutorial **titles** from the live catalog when relevant.",
   },
   {
     id: "add-collection",

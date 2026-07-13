@@ -63,8 +63,13 @@ export const markAsRead = async (req: Request, res: Response) => {
   const { notificationId } = req.params;
   const { notificationIds, businessId } = req.body;
 
-  const idsToUpdate: string[] =
-    notificationIds || (notificationId ? [notificationId] : []);
+  const idsToUpdate: string[] = Array.from(
+    new Set(
+      (notificationIds || (notificationId ? [notificationId] : []))
+        .map((id: unknown) => String(id || "").trim())
+        .filter(Boolean),
+    ),
+  );
 
   if (idsToUpdate.length === 0 || !businessId) {
     res
@@ -73,32 +78,40 @@ export const markAsRead = async (req: Request, res: Response) => {
     return;
   }
 
-  try {
-    const batch = db.batch();
-    let updatedCount = 0;
+  // Firestore `in` supports at most 30 values — clear-all can send up to the list limit (50).
+  const FIRESTORE_IN_LIMIT = 30;
 
-    const snapshot = await db
+  try {
+    let updatedCount = 0;
+    const notificationsRef = db
       .collection("businesses")
       .doc(businessId)
-      .collection("notifications")
-      .where("userId", "==", user.uid)
-      .where("__name__", "in", idsToUpdate)
-      .get();
+      .collection("notifications");
 
-    if (snapshot.empty) {
+    for (let i = 0; i < idsToUpdate.length; i += FIRESTORE_IN_LIMIT) {
+      const chunk = idsToUpdate.slice(i, i + FIRESTORE_IN_LIMIT);
+      const snapshot = await notificationsRef
+        .where("userId", "==", user.uid)
+        .where("__name__", "in", chunk)
+        .get();
+
+      if (snapshot.empty) continue;
+
+      const batch = db.batch();
+      snapshot.docs.forEach((doc) => {
+        batch.update(doc.ref, {
+          status: "read",
+          readAt: FieldValue.serverTimestamp(),
+        });
+        updatedCount++;
+      });
+      await batch.commit();
+    }
+
+    if (updatedCount === 0) {
       res.status(404).json({ error: "No matching notifications found" });
       return;
     }
-
-    snapshot.docs.forEach((doc: any) => {
-      batch.update(doc.ref, {
-        status: "read",
-        readAt: FieldValue.serverTimestamp(),
-      });
-      updatedCount++;
-    });
-
-    await batch.commit();
 
     res.json({ success: true, count: updatedCount });
   } catch (error) {
@@ -107,7 +120,10 @@ export const markAsRead = async (req: Request, res: Response) => {
       ids: idsToUpdate,
       userId: user.uid,
     });
-    res.status(500).json({ error: "Internal Server Error" });
+    res.status(500).json({
+      error: "Internal Server Error",
+      message: error instanceof Error ? error.message : undefined,
+    });
   }
 };
 

@@ -101,6 +101,9 @@ export interface Customer {
   /** Denormalized: latest fulfilled delivery/collection/walk-in/direct sale. */
   lastFulfilledAt?: any;
   lastFulfilledType?: "delivery" | "collection" | "walkin" | "direct_sale";
+  /** Denormalized 0–100 suki health (API write-path + nightly backfill). */
+  healthScore?: number;
+  healthScoreUpdatedAt?: any;
   /** ISO timestamp when owner logged a payment reminder call (BL-39). */
   lastRemindedAt?: any;
   /** ISO timestamp — hide suki from dormant win-back until this date (BL-12). */

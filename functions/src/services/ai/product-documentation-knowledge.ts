@@ -23,6 +23,13 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 - **Plan & notifications**: subscription status and the notification bell use API reads on a schedule.
 - **Exports & statements**: bulk print/export use live workspace data instead of large list API calls.
 
+### Video tutorials (follow-along)
+- Owners open **Tutorial videos** from the sidebar (desktop) or floating Tutorial button (mobile).
+- Published how-to videos come from Smart Refill training content; Play keeps a coach player
+  on screen while working. Deep link: /dashboard?tutorial={videoId}.
+- New publishes notify owners in the activity feed; verified emails get a Watch link.
+- **River AI Buddy** should recommend matching published tutorial titles from the live catalog.
+
 ### Sign-in, verification & onboarding
 - Sign in with email/password or Google.
 - **Google on mobile** uses a full-browser redirect (not a popup) for reliability.
@@ -246,6 +253,16 @@ export const SUPPORT_PRODUCT_DOC_ENTRIES: Array<{
       "Kung nabayaran mo na ang susunod na buwan, ang bagong renew ay **sunod na period** (hindi duplicate month). " +
       "Manual transfer: i-expand ang **Pay manually instead** at mag-upload ng proof. " +
       "Online checkout ay **subscription lang** — hindi para sa portal order payments o ledger collections.",
+  },
+  {
+    id: "doc-video-tutorials",
+    topic: "Paano manood ng video tutorial sa app?",
+    content:
+      "Buksan ang **Tutorial videos** sa left sidebar o floating Tutorial button. " +
+      "Pumili ng lesson at Play — follow-along player mananatili habang nagtatrabaho. " +
+      "Direct: /dashboard?tutorial={videoId}. " +
+      "Kapag may bagong tutorial, may activity-feed alert; verified email owners may Watch link. " +
+      "River AI Buddy can cite live published tutorial titles when helping with how-to questions.",
   },
   {
     id: "doc-river-ai-vs-live-support",

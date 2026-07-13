@@ -3,14 +3,16 @@ import { logger } from "firebase-functions";
 import { db } from "../config/firebase-admin";
 import { CustomerLastFulfilledService } from
   "../services/customers/customer-last-fulfilled-service";
+import { CustomerHealthScoreService } from
+  "../services/customers/customer-health-score-service";
 import { TransactionService } from "../services/transactions/transaction-service";
 
 const BUSINESSES_PER_RUN = 25;
 const TX_LIMIT_PER_BUSINESS = 2000;
 
 /**
- * Nightly safety net: patches `customers.lastFulfilledAt` from ledger history when missing
- * or older than the latest fulfilled transaction.
+ * Nightly safety net: patches `customers.lastFulfilledAt` and `customers.healthScore`
+ * from ledger history when missing.
  */
 export const backfillCustomerLastFulfilled = onSchedule(
   {
@@ -28,6 +30,7 @@ export const backfillCustomerLastFulfilled = onSchedule(
       .get();
 
     let totalPatched = 0;
+    let healthPatched = 0;
     let businessesProcessed = 0;
 
     for (const businessDoc of businessSnap.docs) {
@@ -42,7 +45,13 @@ export const backfillCustomerLastFulfilled = onSchedule(
           transactions,
           { onlyMissing: true },
         );
+        const health = await CustomerHealthScoreService.backfillBusiness(
+          businessId,
+          transactions,
+          { onlyMissing: true },
+        );
         totalPatched += result.patched;
+        healthPatched += health.patched;
         businessesProcessed += 1;
       } catch (error) {
         logger.error("backfillCustomerLastFulfilled business failed", {
@@ -55,6 +64,7 @@ export const backfillCustomerLastFulfilled = onSchedule(
     logger.info("backfillCustomerLastFulfilled complete", {
       businessesProcessed,
       totalPatched,
+      healthPatched,
     });
   },
 );

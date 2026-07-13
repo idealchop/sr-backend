@@ -13,6 +13,7 @@ import {
 } from "../inventory/inventory-service";
 import { resolveStockInventoryLineId, transactionSkipsSalesInventoryStock } from "./transaction-line-inventory";
 import { CustomerLastFulfilledService } from "../customers/customer-last-fulfilled-service";
+import { CustomerHealthScoreService } from "../customers/customer-health-score-service";
 import { CustomerService } from "../customers/customer-service";
 import {
   customerUsesWrContainerRotation,
@@ -711,6 +712,10 @@ export class TransactionService {
         scheduledAt: newTransaction.scheduledAt,
         createdAt: newTransaction.createdAt,
       });
+      CustomerHealthScoreService.scheduleRecompute(
+        businessId,
+        newTransaction.customerId,
+      );
 
       const createdTx = { id: docRef.id, ...newTransaction };
       void notifyTransactionCreated(businessId, createdTx, userId).catch((err) => {
@@ -1384,6 +1389,7 @@ export class TransactionService {
           ...refreshed.data(),
         } as Transaction;
         await CustomerLastFulfilledService.touchFromTransaction(businessId, merged);
+        CustomerHealthScoreService.scheduleRecompute(businessId, merged.customerId);
         void notifyTransactionUpdated(
           businessId,
           transactionId,

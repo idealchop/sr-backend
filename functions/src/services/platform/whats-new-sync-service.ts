@@ -9,9 +9,10 @@ const BATCH_LIMIT = 450;
 
 export async function syncWhatsNewReleases(
   releases: WhatsNewReleaseInput[],
-): Promise<{ written: number; appId: string }> {
-  if (releases.length === 0) {
-    return { written: 0, appId: WHATS_NEW_APP_DOC_ID };
+  pruneIds: readonly string[] = [],
+): Promise<{ written: number; pruned: number; appId: string }> {
+  if (releases.length === 0 && pruneIds.length === 0) {
+    return { written: 0, pruned: 0, appId: WHATS_NEW_APP_DOC_ID };
   }
 
   const sorted = [...releases].sort((a, b) =>
@@ -19,6 +20,7 @@ export async function syncWhatsNewReleases(
   );
 
   let written = 0;
+  let pruned = 0;
   for (let offset = 0; offset < sorted.length; offset += BATCH_LIMIT) {
     const chunk = sorted.slice(offset, offset + BATCH_LIMIT);
     const batch = db.batch();
@@ -49,6 +51,23 @@ export async function syncWhatsNewReleases(
     await batch.commit();
   }
 
+  if (pruneIds.length > 0) {
+    const batch = db.batch();
+    for (const pruneId of pruneIds) {
+      const id = String(pruneId || "").trim();
+      if (!id) continue;
+      batch.delete(
+        db
+          .collection("apps")
+          .doc(WHATS_NEW_APP_DOC_ID)
+          .collection(WHATS_NEW_SUBCOLLECTION)
+          .doc(id),
+      );
+      pruned += 1;
+    }
+    await batch.commit();
+  }
+
   await db.collection("apps").doc(WHATS_NEW_APP_DOC_ID).set(
     {
       appSlug: WHATS_NEW_APP_DOC_ID,
@@ -57,5 +76,5 @@ export async function syncWhatsNewReleases(
     { merge: true },
   );
 
-  return { written, appId: WHATS_NEW_APP_DOC_ID };
+  return { written, pruned, appId: WHATS_NEW_APP_DOC_ID };
 }

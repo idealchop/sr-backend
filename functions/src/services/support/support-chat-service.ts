@@ -9,6 +9,11 @@ import {
   type SupportKnowledgeEntry,
 } from "../ai/support-knowledge-catalog";
 import {
+  formatTutorialVideosCatalogBlock,
+  listPublishedSmartrefillTutorials,
+  tutorialVideosToKnowledgeEntries,
+} from "../ai/support-tutorial-videos-knowledge";
+import {
   buildAttachmentNote,
   buildFinalUserParts,
   buildSupportGeminiContents,
@@ -459,10 +464,14 @@ async function generateAiTurn(input: {
   );
   if (prerequisiteTurn) return prerequisiteTurn;
 
-  const knowledge = buildSupportKnowledgeContext(
-    input.storedKnowledge,
-    input.userText,
-  );
+  const tutorials = await listPublishedSmartrefillTutorials();
+  const knowledge = [
+    buildSupportKnowledgeContext(
+      [...input.storedKnowledge, ...tutorialVideosToKnowledgeEntries(tutorials)],
+      input.userText,
+    ),
+    formatTutorialVideosCatalogBlock(tutorials),
+  ].join("\n\n");
   const sessionMemory = trimSessionSummary(input.sessionSummary);
   const attachments = input.currentAttachments || [];
   const attachmentNote = buildAttachmentNote(attachments);

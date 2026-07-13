@@ -2,7 +2,7 @@
  * Canonical sources River AI knowledge must stay aligned with.
  * Updated by `npm run audit:river-ai-knowledge` and the river-ai-knowledge-curator agent.
  */
-export const RIVER_AI_KNOWLEDGE_MANIFEST_VERSION = "2026-07-07";
+export const RIVER_AI_KNOWLEDGE_MANIFEST_VERSION = "2026-07-14";
 
 export type RiverAiKnowledgeSource = {
   id: string;
@@ -63,6 +63,16 @@ export const RIVER_AI_KNOWLEDGE_SOURCES: RiverAiKnowledgeSource[] = [
     path: "backend/functions/src/services/ai/support-water-science-knowledge.ts",
     purpose: "Water expert answers",
     codeHooks: ["backend/functions/src/services/ai/support-knowledge-catalog.ts"],
+  },
+  {
+    id: "tutorial-videos-knowledge",
+    path: "backend/functions/src/services/ai/support-tutorial-videos-knowledge.ts",
+    purpose: "Live published tutorial video catalog for how-to recommendations",
+    codeHooks: [
+      "backend/functions/src/services/support/support-chat-service.ts",
+      "backend/functions/src/services/ai/support-knowledge-catalog.ts",
+      "backend/functions/src/services/ai/product-documentation-knowledge.ts",
+    ],
   },
   {
     id: "river-ai-agent-tools",

@@ -90,15 +90,16 @@ Google OAuth runs in the **frontend only** (Firebase Auth). The API receives the
 ### Customer last fulfilled & dormant signals
 
 - **Unit:** `unit/services/customers/customer-last-fulfilled-service.unit.test.ts` — `resolveFulfilledActivity`, `touchFromTransaction`, `backfillBusiness`
+- **Unit:** `unit/services/customers/customer-health-score-service.unit.test.ts` — denormalized `healthScore` recompute
 - **Unit:** `unit/utils/dormant-customers.unit.test.ts` — `buildDormantCustomerRows`, `buildDormantSignalsSnapshot` (AI `retention_pulse` snapshot)
-- **Job:** `jobs/backfill-customer-last-fulfilled.ts` — nightly `backfillCustomerLastFulfilled` patches missing `customers.lastFulfilledAt`
+- **Job:** `jobs/backfill-customer-last-fulfilled.ts` — nightly `backfillCustomerLastFulfilled` patches missing `customers.lastFulfilledAt` and `customers.healthScore`
 - **Job:** `jobs/dormant-digest-notification.ts` — hourly `dormantDigestNotification` sends BL-01 dormant digest FCM at owner `dormantPushHour`
 - **Job:** `jobs/morning-owner-intelligence.ts` — hourly `morningOwnerIntelligence` runs BL-07 auto `morning_brief` + BL-16 weekly Brevo email
 - **Job:** `jobs/proactive-insight-push-notification.ts` — hourly `proactiveInsightPushNotification` sends NT-01–NT-04 pushes (payment, maintenance, variance, reorder) at owner send hour
 - **Unit:** `unit/services/notifications/dormant-digest-service.unit.test.ts` — digest copy + send window
 - **Unit:** `unit/utils/payment-reminder-queue.unit.test.ts`, `unit/utils/inventory-reorder-alert.unit.test.ts` — proactive push queue builders
 - **Unit:** `unit/utils/notification-preferences.unit.test.ts` — sanitize `uiConfig` alert keys including plant/reorder toggles
-- **Writes:** `transaction-service.ts` calls `CustomerLastFulfilledService.touchFromTransaction` on fulfill transitions
+- **Writes:** `transaction-service.ts` calls `CustomerLastFulfilledService.touchFromTransaction` and `CustomerHealthScoreService.scheduleRecompute` on create/update
 - **Docs:** `frontend/docs/firestore_schema.md`, `frontend/docs/dormant-customer-test-summary.md`, `frontend/docs/backend-documentation.md`
 
 ### Business analytics HTTP routes

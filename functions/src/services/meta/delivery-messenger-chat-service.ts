@@ -2,8 +2,7 @@ import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
 import { sendMetaMessengerText } from "./meta-messenger-send-service";
 import type { CommunityChannelContact } from "./community-channel-contact";
-import { channelContactFields } from "./community-channel-contact";
-import { buildCommunityChannelContact } from "./community-channel-contact";
+import { channelContactFields, buildCommunityChannelContact } from "./community-channel-contact";
 import { sendCommunityChannelText, sendCommunityChannelButtons } from "./community-channel-outbound-service";
 import {
   COMMUNITY_DELIVERY_CHAT_HINT,

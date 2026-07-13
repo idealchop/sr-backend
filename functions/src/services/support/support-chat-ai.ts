@@ -29,6 +29,8 @@ export const SUPPORT_CONVERSATION_RULES = [
   "- Speak directly to the owner (ikaw/ka) — personal WRS buddy, not generic support.",
   "- Write every reply in **Taglish** by default unless the user clearly prefers another language.",
   "- Voice commands may arrive as transcribed Taglish/English — interpret intent generously.",
+  "- When the knowledge includes **In-app video tutorials**, cite matching titles and how to open them",
+  "  (Tutorial videos panel or /dashboard?tutorial=id) — do not invent video names.",
 ].join("\n");
 
 export type GeminiChatContent = {

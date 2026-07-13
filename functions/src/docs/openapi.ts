@@ -83,6 +83,11 @@ export const openApiSpec = {
       description: "In-app notification feed",
     },
     {
+      name: "EventsTraining",
+      description:
+        "Sales Portal ops: tutorial/webinar publish → owner notify fan-out",
+    },
+    {
       name: "Subscriptions",
       description: "Plans, billing status, and add-ons",
     },
@@ -177,6 +182,18 @@ export const openApiSpec = {
             type: "string",
             format: "date-time",
             description: "Legacy mirror of lastFulfilledAt for older clients.",
+          },
+          healthScore: {
+            type: "number",
+            minimum: 0,
+            maximum: 100,
+            description:
+              "Denormalized 0–100 suki health score (API write-path + nightly backfill).",
+          },
+          healthScoreUpdatedAt: {
+            type: "string",
+            format: "date-time",
+            description: "When healthScore was last recomputed.",
           },
         },
       },
@@ -870,6 +887,86 @@ export const openApiSpec = {
         ],
         "responses": {
           200: { description: "Notification list." },
+        },
+      },
+    },
+    "/events-training/ops/notify-tutorial-published": {
+      post: {
+        tags: ["EventsTraining"],
+        summary: "Notify owners — tutorial published",
+        description:
+          "Sales Portal ops. Activity feed for all station owners; Brevo email only when Firebase Auth emailVerified is true. Idempotent via training_video_publish_notices.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["videoId", "name"],
+                properties: {
+                  videoId: { type: "string" },
+                  name: { type: "string" },
+                  appId: { type: "string", default: "smartrefill" },
+                  appPages: {
+                    type: "array",
+                    items: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: "Fan-out result (ownersNotified, emailsSent, alreadyNotified)." },
+          401: { description: "Missing/invalid token." },
+          403: { description: "Not Sales Portal admin/manager." },
+        },
+      },
+    },
+    "/events-training/ops/tutorial-publish-notice/{videoId}": {
+      get: {
+        tags: ["EventsTraining"],
+        summary: "Get tutorial publish notice",
+        description: "Idempotency notice doc status for a training video id.",
+        parameters: [
+          {
+            name: "videoId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          200: { description: "Notice document or not found." },
+        },
+      },
+    },
+    "/events-training/ops/notify-webinar-published": {
+      post: {
+        tags: ["EventsTraining"],
+        summary: "Notify owners — webinar published",
+        description:
+          "Sales Portal ops. Activity-feed fan-out; idempotent via webinar_publish_notices.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["eventId", "name"],
+                properties: {
+                  eventId: { type: "string" },
+                  name: { type: "string" },
+                  appId: { type: "string", default: "smartrefill" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: "Fan-out result." },
+          401: { description: "Missing/invalid token." },
+          403: { description: "Not Sales Portal admin/manager." },
         },
       },
     },

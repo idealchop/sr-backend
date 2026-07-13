@@ -1,7 +1,10 @@
 import { Request, Response } from "express";
 import { db } from "../config/firebase-admin";
 import { syncWhatsNewReleases } from "../services/platform/whats-new-sync-service";
-import { parseWhatsNewSyncBody } from "../services/platform/whats-new-types";
+import {
+  parseWhatsNewPruneIds,
+  parseWhatsNewSyncBody,
+} from "../services/platform/whats-new-types";
 
 async function isUserSuperAdmin(uid: string): Promise<boolean> {
   const snap = await db.collection("users").doc(uid).get();
@@ -30,13 +33,14 @@ export async function postWhatsNewSync(req: Request, res: Response): Promise<voi
   }
 
   const releases = parseWhatsNewSyncBody(req.body);
+  const pruneIds = parseWhatsNewPruneIds(req.body);
   if (releases.length === 0) {
     res.status(400).json({ error: "No valid releases in body.releases" });
     return;
   }
 
   try {
-    const result = await syncWhatsNewReleases(releases);
+    const result = await syncWhatsNewReleases(releases, pruneIds);
     res.status(200).json(result);
   } catch (error) {
     console.error("postWhatsNewSync failed", error);

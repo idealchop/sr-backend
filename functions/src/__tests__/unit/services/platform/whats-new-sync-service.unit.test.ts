@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const batchSet = vi.fn();
+const batchDelete = vi.fn();
 const batchCommit = vi.fn().mockResolvedValue(undefined);
 const appDocSet = vi.fn().mockResolvedValue(undefined);
 
@@ -8,6 +9,7 @@ vi.mock("../../../../config/firebase-admin", () => ({
   db: {
     batch: () => ({
       set: batchSet,
+      delete: batchDelete,
       commit: batchCommit,
     }),
     collection: (name: string) => ({
@@ -27,11 +29,15 @@ vi.mock("../../../../config/firebase-admin", () => ({
 }));
 
 import { syncWhatsNewReleases } from "../../../../services/platform/whats-new-sync-service";
-import { parseWhatsNewSyncBody } from "../../../../services/platform/whats-new-types";
+import {
+  parseWhatsNewPruneIds,
+  parseWhatsNewSyncBody,
+} from "../../../../services/platform/whats-new-types";
 
 describe("whats-new sync", () => {
   beforeEach(() => {
     batchSet.mockClear();
+    batchDelete.mockClear();
     batchCommit.mockClear();
     appDocSet.mockClear();
   });
@@ -160,9 +166,39 @@ describe("whats-new sync", () => {
     ]);
 
     expect(result.written).toBe(1);
+    expect(result.pruned).toBe(0);
     expect(result.appId).toBe("smartrefill");
     expect(batchSet).toHaveBeenCalledTimes(1);
     expect(batchCommit).toHaveBeenCalledTimes(1);
     expect(appDocSet).toHaveBeenCalledTimes(1);
+  });
+
+  it("parses pruneIds and deletes superseded releases", async () => {
+    expect(parseWhatsNewPruneIds({ pruneIds: ["2026-07-08", "2026-07-10"] })).toEqual([
+      "2026-07-08",
+      "2026-07-10",
+    ]);
+
+    const result = await syncWhatsNewReleases(
+      [
+        {
+          id: "2026-07-14",
+          publishedAt: "2026-07-14",
+          title: "Tutorials",
+          summary: "Follow-along tutorials.",
+          items: [
+            {
+              kind: "feature",
+              title: "Follow-along tutorial videos",
+              description: "Coach player while you work.",
+            },
+          ],
+        },
+      ],
+      ["2026-07-08", "2026-07-10"],
+    );
+
+    expect(result).toEqual({ written: 1, pruned: 2, appId: "smartrefill" });
+    expect(batchDelete).toHaveBeenCalledTimes(2);
   });
 });

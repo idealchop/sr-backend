@@ -200,6 +200,12 @@ service cloud.firestore {
           && request.resource.data.items is list;
         allow delete: if isSuperAdmin();
       }
+
+      // Sales Portal CMS — in-app video tutorials (category: tutorial). Writes via Sales Portal Admin SDK.
+      match /training_videos/{videoId} {
+        allow read: if isSignedIn();
+        allow write: if false;
+      }
     }
 
     match /subscription_plans/{planId} {
