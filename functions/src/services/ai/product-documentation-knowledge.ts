@@ -44,7 +44,7 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
   "Access credential not needed") — name, optional photo/phone, role — for directory and dispatch
   assignment only. These riders do **not** get My Area or live GPS.
 - If you are sent back to onboarding after you already finished: try sign out and sign in;
-  confirm you are on the correct station/workspace; use **Talk to human agent** if it persists
+  confirm you are on the correct station/workspace; use **Profile → Chat support** if it persists
   (account may show complete but station profile may still need a step).
 
 ### Transaction ledger (Transactions page)
@@ -106,11 +106,10 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 
 ### Plans & support channels
 - **Starter / Grow / Scale / Enterprise** — team hub and live human chat on higher tiers.
-- **Subscription billing (July 2026)** — Account → Subscription or Pricing checkout: pay with **GCash or Maya** online; optional **auto-renew** each cycle; **link payment account** to save wallet billing for automatic charges when enabled; manual bank transfer + proof still available. Renew checkout **includes current add-ons by default**; stacked renewals schedule the next period if you already paid ahead.
-- **Header River AI** (orb button): AI help for Smart Refill app + water station operations (plan chat caps).
+- **Subscription billing (July 2026)** — Account → Subscription or Pricing checkout: pay with **GCash or Maya** online; **Allow auto-renew** (default on) links the payment account during that pay so the next cycle can charge automatically; without vaulting, we send a payment link before the period ends. Manual bank transfer + proof still available. Renew checkout **includes current add-ons by default**; stacked renewals schedule the next period if you already paid ahead.
+- **Header River AI** (orb on desktop/tablet; mobile bottom-nav Buddy orb): AI-only Buddy for Smart Refill app + water station operations (plan chat caps). Common greetings, FAQs, and how-tos may answer without calling Gemini; live sales numbers and screenshots still use Gemini.
 - **Profile → Chat support**: live Brevo helpdesk for billing and account issues (Grow+ when enabled)—
-  separate from the header River AI button.
-- **Talk to human agent** inside River AI chat: escalates the same dialog to Brevo when on Grow+.
+  completely separate from River AI Buddy (no handoff from Buddy into Brevo).
 - **Analytic Hub / owner AI tools**: separate aiTools quota—not the same as River AI support chat.
 `;
 
@@ -246,9 +245,8 @@ export const SUPPORT_PRODUCT_DOC_ENTRIES: Array<{
     topic: "Paano mag-renew, mag-upgrade, o mag-link ng GCash/Maya sa plan?",
     content:
       "Account → **Subscription** (o Pricing → checkout): piliin ang plan, **Pay with GCash or Maya** para sa secure online payment. " +
-      "Iwanan naka-on ang **Auto-renew my plan each billing cycle** kung gusto mong magpatuloy pagkatapos ng period. " +
-      "**Link payment account** — i-save ang GCash, Maya, o card sa payment partner para automatic charge sa renewal kung supported. " +
-      "Kung walang naka-link na wallet, makakatanggap ka ng in-app reminder na may payment link bago matapos ang period. " +
+      "Iwanan naka-check ang **Allow auto-renew** (default) — kapag nagbayad ka, na-li-link ang payment account para automatic charge sa next cycle kung supported. " +
+      "Kung hindi available ang wallet linking, makakatanggap ka ng in-app reminder na may payment link bago matapos ang period. " +
       "Sa renew, kasama na ang **add-ons** ng current plan — pwedeng i-off o bawasan sa checkout. " +
       "Kung nabayaran mo na ang susunod na buwan, ang bagong renew ay **sunod na period** (hindi duplicate month). " +
       "Manual transfer: i-expand ang **Pay manually instead** at mag-upload ng proof. " +
@@ -268,9 +266,9 @@ export const SUPPORT_PRODUCT_DOC_ENTRIES: Array<{
     id: "doc-river-ai-vs-live-support",
     topic: "River AI vs Chat support — saan pumunta?",
     content:
-      "Header **River AI** (orb): tanong tungkol sa app at operasyon ng station—AI ang sumasagot. " +
+      "Header **River AI** (orb): tanong tungkol sa app at operasyon ng station—AI-only Buddy. " +
       "Profile menu → **Chat support**: live helpdesk para sa billing, account, at escalated issues. " +
-      "Sa loob ng River AI, pwede ring **Talk to human agent** kung Grow+ plan. " +
+      "Walang handoff mula Buddy papuntang Chat support — hiwalay na entry ang dalawa. " +
       "Hiwalay ang Analytic Hub AI tools sa River AI support chat quota.",
   },
 ];

@@ -51,6 +51,8 @@ export function assertNoSyncConflict(
 export function stripSyncConflictFields<T extends Record<string, unknown>>(
   updates: T,
 ): Partial<Transaction> {
-  const { baseUpdatedAt: _b, forceApply: _f, ...rest } = updates;
+  const rest = { ...updates } as Record<string, unknown>;
+  delete rest.baseUpdatedAt;
+  delete rest.forceApply;
   return rest as Partial<Transaction>;
 }

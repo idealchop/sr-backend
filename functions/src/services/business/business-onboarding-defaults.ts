@@ -10,10 +10,13 @@ export const DEFAULT_QUICK_TOUR_PAGE = {
   operations: false,
   profilepopover: false,
   transactions: false,
+  /** Post-onboarding video tutorials tour (play any video to finish). */
+  tutorials: false,
 } as const;
 
 export const DEFAULT_GETTING_STARTED = {
   verifyEmail: false,
+  playVideoTutorials: false,
   addCustomer: false,
   addDelivery: false,
   addInventory: false,
@@ -21,6 +24,7 @@ export const DEFAULT_GETTING_STARTED = {
   addExpense: false,
   shareStationLink: false,
   addOnlinePayments: false,
+  visitResourcesWebinars: false,
   chatSupport: false,
   useAi: false,
 } as const;

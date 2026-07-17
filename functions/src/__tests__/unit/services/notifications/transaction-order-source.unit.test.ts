@@ -31,12 +31,20 @@ describe("transaction-order-source", () => {
     expect(transactionOrderSourceLabel("manual")).toBe("Manual");
   });
 
-  it("detects order QR delivery transactions", () => {
+  it("detects order QR delivery transactions from portal notes", () => {
     expect(
       resolveTransactionOrderSource(
         tx({ type: "delivery", deliveryStatus: "placed", notes: "Portal order" }),
       ),
     ).toBe("qr_order");
+  });
+
+  it("treats staff Add Order placed delivery as manual, not QR", () => {
+    expect(
+      resolveTransactionOrderSource(
+        tx({ type: "delivery", deliveryStatus: "placed", notes: "" }),
+      ),
+    ).toBe("manual");
   });
 
   it("detects walk-in QR transactions", () => {

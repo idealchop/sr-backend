@@ -6,8 +6,10 @@ import type { GeminiContentPart } from "../ai/gemini-multimodal";
 import {
   buildSupportKnowledgeContext,
   SUPPORT_AI_PERSONA,
+  SUPPORT_FAQ_ENTRIES,
   type SupportKnowledgeEntry,
 } from "../ai/support-knowledge-catalog";
+import { SUPPORT_PRODUCT_DOC_ENTRIES } from "../ai/product-documentation-knowledge";
 import {
   formatTutorialVideosCatalogBlock,
   listPublishedSmartrefillTutorials,
@@ -21,6 +23,7 @@ import {
   SUPPORT_CONVERSATION_RULES,
   trimSessionSummary,
 } from "./support-chat-ai";
+import { tryResolveSupportPreflow } from "./support-chat-preflow";
 import {
   countAttachmentKinds,
   fetchAttachmentForGemini,
@@ -33,7 +36,7 @@ import {
 import {
   applySupportTurnHeuristics,
   DISSATISFIED_PATTERNS,
-  HUMAN_ESCALATION_PATTERNS,
+  HUMAN_SUPPORT_POINTER_PATTERNS,
   SATISFIED_PATTERNS,
 } from "./support-chat-turn-heuristics";
 import type {
@@ -221,7 +224,7 @@ async function loadStoredKnowledge(
   return snap.docs.map((d) => {
     const data = d.data();
     return {
-      id: d.id,
+      id: `learned-${d.id}`,
       topic: String(data.question || "Learned answer").slice(0, 120),
       content: `Q: ${data.question}\nA: ${data.answer}`,
     };
@@ -423,17 +426,17 @@ function ruleBasedReply(
     });
   }
 
-  if (HUMAN_ESCALATION_PATTERNS.test(userText)) {
+  if (HUMAN_SUPPORT_POINTER_PATTERNS.test(userText)) {
     return finishRuleTurn({
       sectionLabel: "SAGOT",
       summary:
-        "Pasensya — kailangan pa ng mas detalyedong tulong. I-describe ang exact screen o error, " +
-        "o mag-**New topic** para fresh start. Kung billing o account issue, check **Account → Subscription**.",
-      badges: [{ label: "Need more detail", tone: "warning" }],
+        "Para sa live helpdesk, buksan ang **Profile → Chat support** (hiwalay sa Buddy). " +
+        "Dito tuloy ang app/station help — i-describe ang screen o error, o mag-**New topic**.",
+      badges: [{ label: "Separate helpdesk", tone: "info" }],
     }, {
       askSatisfaction: false,
       suggestHuman: false,
-      detectedHumanRequest: true,
+      detectedHumanRequest: false,
     });
   }
 
@@ -462,18 +465,37 @@ async function generateAiTurn(input: {
     input.userText,
     workspaceCtx,
   );
-  if (prerequisiteTurn) return prerequisiteTurn;
+  if (prerequisiteTurn) {
+    return { ...prerequisiteTurn, resolutionSource: "workspace" };
+  }
 
   const tutorials = await listPublishedSmartrefillTutorials();
+  const tutorialEntries = tutorialVideosToKnowledgeEntries(tutorials);
+  const attachments = input.currentAttachments || [];
+  const hasAttachments = attachments.length > 0;
+
+  // Tier 1: deterministic / high-confidence FAQ short-circuit (skip Gemini).
+  const preflow = tryResolveSupportPreflow({
+    userText: input.userText,
+    history: input.history,
+    knowledgeEntries: [
+      ...SUPPORT_FAQ_ENTRIES,
+      ...SUPPORT_PRODUCT_DOC_ENTRIES,
+      ...input.storedKnowledge,
+      ...tutorialEntries,
+    ],
+    hasAttachments,
+  });
+  if (preflow) return preflow.turn;
+
   const knowledge = [
     buildSupportKnowledgeContext(
-      [...input.storedKnowledge, ...tutorialVideosToKnowledgeEntries(tutorials)],
+      [...input.storedKnowledge, ...tutorialEntries],
       input.userText,
     ),
     formatTutorialVideosCatalogBlock(tutorials),
   ].join("\n\n");
   const sessionMemory = trimSessionSummary(input.sessionSummary);
-  const attachments = input.currentAttachments || [];
   const attachmentNote = buildAttachmentNote(attachments);
 
   const fallback = ruleBasedReply(input.userText, input.history, workspaceCtx);
@@ -494,12 +516,12 @@ async function generateAiTurn(input: {
     "  },",
     "  \"sessionSummary\": \"string — brief memory for next turn: topic, names, " +
     "steps tried, what's still unresolved (max ~120 words)\",",
-    "  \"askSatisfaction\": boolean — true after answering unless escalating,",
-    "  \"suggestHuman\": boolean — true if user needs human or you cannot resolve,",
+    "  \"askSatisfaction\": boolean — true after answering,",
+    "  \"suggestHuman\": boolean — always false (Buddy never hands off to live chat),",
     "  \"suggestResolve\": boolean — true if conversation seems complete,",
     "  \"detectedSatisfied\": boolean — user expressed thanks/satisfaction,",
     "  \"detectedDissatisfied\": boolean — user said answer was not helpful,",
-    "  \"detectedHumanRequest\": boolean — user asked for a person/agent,",
+    "  \"detectedHumanRequest\": boolean — always false,",
     "  \"topicOutOfScope\": boolean — true only for clearly unrelated topics (coding homework, politics, medical diagnosis)",
     "}",
   ].join("\n");
@@ -551,15 +573,15 @@ async function generateAiTurn(input: {
   });
 
   const parsed = normalizeSupportAiTurn(rawTurn, fallback);
-  const hasAttachments = (input.currentAttachments?.length || 0) > 0;
 
   const structured =
     parsed.structured ||
     plainTextToStructuredFallback(parsed.reply || fallback.reply);
   const withStructured: SupportAiTurnResult = {
-    ...applySupportTurnHeuristics(parsed, input.userText, hasAttachments),
+    ...applySupportTurnHeuristics(parsed, input.userText),
     structured,
     reply: parsed.reply || structuredReplyToPlainText(structured),
+    resolutionSource: "gemini",
   };
 
   return withStructured;
@@ -619,6 +641,7 @@ export class SupportChatService {
     for (const doc of existing.docs) {
       const status = doc.data().status as string;
       if (status === "ai_active" || status === "escalated") {
+        // Legacy `escalated` sessions are archived; Buddy never hands off to Brevo.
         await this.archiveSessionWithLearnings(
           businessId,
           doc.id,
@@ -642,11 +665,20 @@ export class SupportChatService {
     const col = sessionsCol(businessId);
     const existing = await col.where("userId", "==", userId).limit(12).get();
 
+    // Archive legacy Brevo-handoff sessions; Buddy is AI-only going forward.
+    for (const doc of existing.docs) {
+      if ((doc.data().status as string) === "escalated") {
+        await this.archiveSessionWithLearnings(
+          businessId,
+          doc.id,
+          userId,
+          "user_resolved",
+        );
+      }
+    }
+
     const activeDoc = existing.docs
-      .filter((d) => {
-        const s = d.data().status as string;
-        return s === "ai_active" || s === "escalated";
-      })
+      .filter((d) => (d.data().status as string) === "ai_active")
       .sort((a, b) => {
         const ta = a.data().updatedAt;
         const tb = b.data().updatedAt;
@@ -661,16 +693,12 @@ export class SupportChatService {
 
     if (activeDoc) {
       const docData = activeDoc.data();
-      const status = docData.status as string;
       const updated =
         coerceToDate(docData.updatedAt) ?? coerceToDate(docData.createdAt);
       const todayKey = manilaDateKey();
       const sessionDayKey = updated ? manilaDateKey(updated) : todayKey;
 
-      if (
-        sessionDayKey < todayKey &&
-        (status === "ai_active" || status === "escalated")
-      ) {
+      if (sessionDayKey < todayKey) {
         await this.archiveSessionWithLearnings(
           businessId,
           activeDoc.id,
@@ -760,7 +788,8 @@ export class SupportChatService {
     if (sessionData.userId !== userId) throw new Error("FORBIDDEN");
     if (sessionData.status === "resolved") throw new Error("SESSION_RESOLVED");
     if (sessionData.status === "escalated") {
-      throw new Error("SESSION_ESCALATED");
+      // Legacy handoff status — Buddy no longer uses Brevo escalate.
+      throw new Error("SESSION_RESOLVED");
     }
 
     if (!trimmed && !sanitized.length) throw new Error("EMPTY_MESSAGE");
@@ -825,6 +854,7 @@ export class SupportChatService {
         askSatisfaction: turn.askSatisfaction,
         suggestHuman: turn.suggestHuman,
         suggestResolve: turn.suggestResolve,
+        resolutionSource: turn.resolutionSource || "gemini",
         ...(turn.structured ? { structuredReply: turn.structured } : {}),
       },
     });
@@ -890,7 +920,7 @@ export class SupportChatService {
 
     const systemText = input.satisfied ?
       "Glad that helped! When you're ready, you can mark this conversation as resolved." :
-      "Thanks for the feedback. I can try again, or you can talk to a human agent for more help.";
+      "Thanks for the feedback. I can try again here, or open **Profile → Chat support** for the live helpdesk.";
 
     await sessionRef.collection(MESSAGES).add({
       role: "system",
@@ -909,39 +939,6 @@ export class SupportChatService {
       session: serializeSession(sessionId, businessId, updated.data()!),
       storedKnowledgeId,
     };
-  }
-
-  static async escalateToHuman(
-    businessId: string,
-    sessionId: string,
-    userId: string,
-  ): Promise<SupportChatSession> {
-    const sub = await SubscriptionService.getSubscriptionStatus(businessId);
-    if (!sub?.supportAccess?.chatEnabled) {
-      throw new Error("LIVE_CHAT_NOT_AVAILABLE");
-    }
-
-    const sessionRef = sessionsCol(businessId).doc(sessionId);
-    const sessionSnap = await sessionRef.get();
-    if (!sessionSnap.exists) throw new Error("SESSION_NOT_FOUND");
-    if (sessionSnap.data()?.userId !== userId) throw new Error("FORBIDDEN");
-
-    await sessionRef.collection(MESSAGES).add({
-      role: "system",
-      text: "Connecting you with a human support agent. Live chat will open below.",
-      createdAt: FieldValue.serverTimestamp(),
-    });
-
-    await sessionRef.update({
-      status: "escalated",
-      escalatedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-      awaitingSatisfaction: false,
-    });
-
-    const updated = await sessionRef.get();
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    return serializeSession(sessionId, businessId, updated.data()!);
   }
 
   /**

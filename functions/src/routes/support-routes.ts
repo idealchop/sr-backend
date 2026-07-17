@@ -3,7 +3,6 @@ import { validateFirebaseIdToken } from "../middleware/auth-middleware";
 import { validateBusinessAccess } from "../middleware/business-middleware"; import {
   getSupportSession,
   getSupportSessionById,
-  postSupportEscalate,
   postSupportFeedback,
   postSupportMessage,
   postSupportNewSession,
@@ -41,13 +40,6 @@ router.post(
   validateFirebaseIdToken,
   validateBusinessAccess,
   postSupportSatisfaction,
-);
-
-router.post(
-  "/session/escalate",
-  validateFirebaseIdToken,
-  validateBusinessAccess,
-  postSupportEscalate,
 );
 
 router.post(

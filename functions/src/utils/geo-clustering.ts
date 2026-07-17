@@ -86,8 +86,9 @@ function clusterByMaxSpan<T>(
     merged = false;
     outer: for (let i = 0; i < clusters.length; i++) {
       for (let j = i + 1; j < clusters.length; j++) {
-        const left = clusters[i]!;
-        const right = clusters[j]!;
+        const left = clusters[i];
+        const right = clusters[j];
+        if (!left || !right) continue;
         if (completeLinkageDistanceKm(left, right, getPoint) <= maxSpanKm) {
           clusters[i] = [...left, ...right];
           clusters.splice(j, 1);
@@ -125,7 +126,7 @@ export function buildNearbyRouteGroups<T>(
   const groups: NearbyRouteGroup<T>[] = [];
   const solos: T[] = [];
 
-  rawClusters.forEach((members, index) => {
+  rawClusters.forEach((members) => {
     const spanM = Math.max(0, Math.round(maxPairwiseSpanKm(members, getPoint) * 1000));
     if (members.length >= minGroupSize) {
       groups.push({

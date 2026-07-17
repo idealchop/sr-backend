@@ -2,8 +2,6 @@ import { storage } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
 import { resolveMetaPageAccessToken } from "../meta/meta-messenger-send-service";
 
-const GRAPH_API_VERSION = "v21.0";
-
 /** Download image bytes from a Messenger attachment URL. */
 export async function downloadMessengerImageAttachment(
   attachmentUrl: string,

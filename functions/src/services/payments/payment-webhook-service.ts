@@ -102,14 +102,66 @@ export class PaymentWebhookService {
             updatedAt: FieldValue.serverTimestamp(),
           });
         }
-        logger.info("subscription billing linked via invoice webhook", {
+
+        // Orphan invoice (no payment_intent) — still renew entitlement from charged amount.
+        try {
+          const {
+            fetchRecentSubscriptionRows,
+            pickEffectiveEntitling,
+          } = await import("../subscriptions/subscription-effective");
+          const rows = await fetchRecentSubscriptionRows(businessId);
+          const effective = pickEffectiveEntitling(rows, new Date());
+          if (effective) {
+            const planCode = String(effective.data.planCode || "").toLowerCase();
+            const bizSnap = await db.collection("businesses").doc(businessId).get();
+            const payerUid = String(
+              effective.data.createdByUid ||
+                effective.data.userId ||
+                bizSnap.data()?.ownerId ||
+                bizSnap.data()?.ownerUid ||
+                "",
+            ).trim();
+            if (planCode && payerUid) {
+              const cycleRaw = String(effective.data.billingCycle || "monthly")
+                .toLowerCase();
+              const billingCycle =
+                cycleRaw === "yearly" ? "yearly" as const :
+                  cycleRaw === "trial" ? "trial" as const :
+                    "monthly" as const;
+              await SubscriptionService.transitionSubscription(
+                businessId,
+                payerUid,
+                planCode,
+                "RENEW",
+                {
+                  billingCycle,
+                  paymentMethod: "gcash",
+                  paymentReference:
+                    parsed.reference ||
+                    parsed.providerSubscriptionId ||
+                    parsed.providerEventId,
+                  paymentStatus: "verified",
+                  price: Math.max(0, Number(parsed.amount || 0)),
+                },
+              );
+            }
+          }
+        } catch (err) {
+          logger.error("orphan subscription invoice renew failed", {
+            businessId,
+            providerSubscriptionId: parsed.providerSubscriptionId,
+            err: err instanceof Error ? err.message : err,
+          });
+        }
+
+        logger.info("subscription invoice webhook applied without intent", {
           businessId,
           providerSubscriptionId: parsed.providerSubscriptionId,
         });
         await reEnableAutoRenewOnCurrentPlan(businessId);
         return {
           ok: true,
-          status: "billing_linked",
+          status: linkPurpose === "billing_setup" ? "billing_linked" : "renewed",
         };
       }
     }
@@ -122,6 +174,269 @@ export class PaymentWebhookService {
         paymentOrigin: parsed.paymentOrigin,
       });
       return { ok: false, error: "INTENT_NOT_FOUND", status: "unmatched" };
+    }
+
+    if (intent.source === "resource_video") {
+      const priorEvents = intent.providerEventIds || [];
+      if (priorEvents.includes(parsed.providerEventId)) {
+        return {
+          ok: true,
+          duplicate: true,
+          intentId: intent.id,
+          status: intent.status,
+        };
+      }
+
+      if (intent.status === "paid") {
+        await PaymentIntentService.patchIntent(businessId, intent.id, {
+          providerEventIds: [...priorEvents, parsed.providerEventId],
+        });
+        return {
+          ok: true,
+          duplicate: true,
+          intentId: intent.id,
+          status: intent.status,
+        };
+      }
+
+      const received = Math.max(0, Number(parsed.amount || 0));
+      const requested = Math.max(0, Number(intent.amount || 0));
+      if (received + 0.0001 < requested) {
+        await PaymentIntentService.patchIntent(businessId, intent.id, {
+          status: "unmatched",
+          paidAmount: received,
+          providerEventIds: [...priorEvents, parsed.providerEventId],
+          reconcileNote:
+            `Received ₱${received.toFixed(2)}; expected ₱${requested.toFixed(2)}`,
+        });
+        return {
+          ok: false,
+          error: "AMOUNT_MISMATCH",
+          intentId: intent.id,
+          status: "unmatched",
+        };
+      }
+
+      const videoId = String(
+        intent.checkoutPayload?.videoId ||
+          (intent.checkoutPayload as { videoId?: string } | undefined)?.videoId ||
+          "",
+      ).trim();
+      if (!videoId) {
+        await PaymentIntentService.patchIntent(businessId, intent.id, {
+          status: "unmatched",
+          providerEventIds: [...priorEvents, parsed.providerEventId],
+          reconcileNote: "Missing videoId on resource_video intent",
+        });
+        return {
+          ok: false,
+          error: "MISSING_VIDEO",
+          intentId: intent.id,
+          status: "unmatched",
+        };
+      }
+
+      const { grantVideoUnlock } = await import(
+        "../events-training/member-video-unlock-service"
+      );
+      await grantVideoUnlock({
+        businessId,
+        videoId,
+        userId: intent.userId,
+        intentId: intent.id,
+        amount: requested,
+        provider: intent.provider,
+      });
+      await PaymentIntentService.patchIntent(businessId, intent.id, {
+        status: "paid",
+        paidAmount: received,
+        providerEventIds: [...priorEvents, parsed.providerEventId],
+        reconcileNote: `Unlocked training video ${videoId}`,
+      });
+      logger.info("resource_video unlock paid", {
+        businessId,
+        intentId: intent.id,
+        videoId,
+      });
+      return {
+        ok: true,
+        intentId: intent.id,
+        status: "paid",
+      };
+    }
+
+    if (intent.source === "resource_webinar") {
+      const priorEvents = intent.providerEventIds || [];
+      if (priorEvents.includes(parsed.providerEventId)) {
+        return {
+          ok: true,
+          duplicate: true,
+          intentId: intent.id,
+          status: intent.status,
+        };
+      }
+
+      if (intent.status === "paid") {
+        await PaymentIntentService.patchIntent(businessId, intent.id, {
+          providerEventIds: [...priorEvents, parsed.providerEventId],
+        });
+        return {
+          ok: true,
+          duplicate: true,
+          intentId: intent.id,
+          status: intent.status,
+        };
+      }
+
+      const received = Math.max(0, Number(parsed.amount || 0));
+      const requested = Math.max(0, Number(intent.amount || 0));
+      if (received + 0.0001 < requested) {
+        await PaymentIntentService.patchIntent(businessId, intent.id, {
+          status: "unmatched",
+          paidAmount: received,
+          providerEventIds: [...priorEvents, parsed.providerEventId],
+          reconcileNote:
+            `Received ₱${received.toFixed(2)}; expected ₱${requested.toFixed(2)}`,
+        });
+        return {
+          ok: false,
+          error: "AMOUNT_MISMATCH",
+          intentId: intent.id,
+          status: "unmatched",
+        };
+      }
+
+      const eventId = String(
+        intent.checkoutPayload?.eventId || "",
+      ).trim();
+      if (!eventId) {
+        await PaymentIntentService.patchIntent(businessId, intent.id, {
+          status: "unmatched",
+          providerEventIds: [...priorEvents, parsed.providerEventId],
+          reconcileNote: "Missing eventId on resource_webinar intent",
+        });
+        return {
+          ok: false,
+          error: "MISSING_EVENT",
+          intentId: intent.id,
+          status: "unmatched",
+        };
+      }
+
+      const { grantWebinarUnlock } = await import(
+        "../events-training/member-webinar-unlock-service"
+      );
+      await grantWebinarUnlock({
+        businessId,
+        eventId,
+        userId: intent.userId,
+        intentId: intent.id,
+        amount: requested,
+        provider: intent.provider,
+      });
+      await PaymentIntentService.patchIntent(businessId, intent.id, {
+        status: "paid",
+        paidAmount: received,
+        providerEventIds: [...priorEvents, parsed.providerEventId],
+        reconcileNote: `Unlocked webinar event ${eventId}`,
+      });
+      logger.info("resource_webinar unlock paid", {
+        businessId,
+        intentId: intent.id,
+        eventId,
+      });
+      return {
+        ok: true,
+        intentId: intent.id,
+        status: "paid",
+      };
+    }
+
+    if (intent.source === "resource_blog") {
+      const priorEvents = intent.providerEventIds || [];
+      if (priorEvents.includes(parsed.providerEventId)) {
+        return {
+          ok: true,
+          duplicate: true,
+          intentId: intent.id,
+          status: intent.status,
+        };
+      }
+
+      if (intent.status === "paid") {
+        await PaymentIntentService.patchIntent(businessId, intent.id, {
+          providerEventIds: [...priorEvents, parsed.providerEventId],
+        });
+        return {
+          ok: true,
+          duplicate: true,
+          intentId: intent.id,
+          status: intent.status,
+        };
+      }
+
+      const received = Math.max(0, Number(parsed.amount || 0));
+      const requested = Math.max(0, Number(intent.amount || 0));
+      if (received + 0.0001 < requested) {
+        await PaymentIntentService.patchIntent(businessId, intent.id, {
+          status: "unmatched",
+          paidAmount: received,
+          providerEventIds: [...priorEvents, parsed.providerEventId],
+          reconcileNote:
+            `Received ₱${received.toFixed(2)}; expected ₱${requested.toFixed(2)}`,
+        });
+        return {
+          ok: false,
+          error: "AMOUNT_MISMATCH",
+          intentId: intent.id,
+          status: "unmatched",
+        };
+      }
+
+      const articleId = String(
+        intent.checkoutPayload?.articleId || "",
+      ).trim();
+      if (!articleId) {
+        await PaymentIntentService.patchIntent(businessId, intent.id, {
+          status: "unmatched",
+          providerEventIds: [...priorEvents, parsed.providerEventId],
+          reconcileNote: "Missing articleId on resource_blog intent",
+        });
+        return {
+          ok: false,
+          error: "MISSING_ARTICLE",
+          intentId: intent.id,
+          status: "unmatched",
+        };
+      }
+
+      const { grantBlogUnlock } = await import(
+        "../events-training/member-blog-unlock-service"
+      );
+      await grantBlogUnlock({
+        businessId,
+        articleId,
+        userId: intent.userId,
+        intentId: intent.id,
+        amount: requested,
+        provider: intent.provider,
+      });
+      await PaymentIntentService.patchIntent(businessId, intent.id, {
+        status: "paid",
+        paidAmount: received,
+        providerEventIds: [...priorEvents, parsed.providerEventId],
+        reconcileNote: `Unlocked blog article ${articleId}`,
+      });
+      logger.info("resource_blog unlock paid", {
+        businessId,
+        intentId: intent.id,
+        articleId,
+      });
+      return {
+        ok: true,
+        intentId: intent.id,
+        status: "paid",
+      };
     }
 
     if (intent.source !== "subscription") {
@@ -189,17 +504,64 @@ export class PaymentWebhookService {
       String(checkoutPayload.purpose || "") === "billing_link";
 
     if (isBillingLinkOnly) {
+      const paymentDetails = {
+        ...checkoutPayload,
+        billingCycle: intent.billingCycle,
+        paymentMethod: "gcash" as const,
+        paymentReference:
+          parsed.reference || intent.providerLinkId || parsed.providerEventId,
+        paymentStatus: "verified" as const,
+        price: requested,
+      };
+
+      try {
+        await SubscriptionService.transitionSubscription(
+          businessId,
+          intent.userId,
+          intent.targetPlanCode,
+          "RENEW",
+          paymentDetails,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "SUBSCRIPTION_FAILED";
+        logger.error("billing_link renew apply failed", {
+          businessId,
+          intentId: intent.id,
+          error: msg,
+        });
+        await PaymentIntentService.patchIntent(businessId, intent.id, {
+          status: "unmatched",
+          paidAmount: received,
+          providerEventIds: [...priorEvents, parsed.providerEventId],
+          reconcileNote: `Billing link renew failed: ${msg}`,
+        });
+        return {
+          ok: false,
+          error: msg,
+          intentId: intent.id,
+          status: "unmatched",
+        };
+      }
+
       await SubscriptionBillingService.completeBillingLinkSetup(
         businessId,
         intent.id,
         input.provider,
+        {
+          customerId: intent.providerCustomerId,
+          subscriptionId: intent.providerSubscriptionId,
+        },
       );
-      await reEnableAutoRenewOnCurrentPlan(businessId);
+      await syncAutoRenewAfterSubscriptionPayment(
+        businessId,
+        intent,
+        checkoutPayload,
+      );
       await PaymentIntentService.patchIntent(businessId, intent.id, {
         status: "paid",
         paidAmount: received,
         providerEventIds: [...priorEvents, parsed.providerEventId],
-        reconcileNote: "Billing account linked",
+        reconcileNote: "Billing account linked + plan renewed",
       });
       logger.info("subscription billing linked via payment intent", {
         businessId,

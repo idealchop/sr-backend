@@ -2,8 +2,12 @@ import crypto from "crypto";
 import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
 import type {
+  CreateResourceBlogUnlockIntentInput,
+  CreateResourceVideoUnlockIntentInput,
+  CreateResourceWebinarUnlockIntentInput,
   CreateSubscriptionPaymentIntentInput,
   PaymentIntentRecord,
+  PaymentIntentSource,
   SubscriptionBillingMode,
   SubscriptionPaymentAction,
 } from "./payment-intent-types";
@@ -41,6 +45,13 @@ function wantsAutoRenew(payload: Record<string, unknown> | undefined): boolean {
   if (!payload) return false;
   if (payload.autoRenew === true) return true;
   return payload.cancelAtPeriodEnd === false;
+}
+
+function parseIntentSource(value: unknown): PaymentIntentSource {
+  if (value === "resource_video") return "resource_video";
+  if (value === "resource_webinar") return "resource_webinar";
+  if (value === "resource_blog") return "resource_blog";
+  return "subscription";
 }
 
 function toRecord(
@@ -83,7 +94,7 @@ function toRecord(
         (data.checkoutPayload as Record<string, unknown>) :
         undefined,
     subscriptionId: data.subscriptionId ? String(data.subscriptionId) : undefined,
-    source: "subscription",
+    source: parseIntentSource(data.source),
     createdAt: serializeTimestamp(data.createdAt),
     updatedAt: serializeTimestamp(data.updatedAt),
     expiresAt: serializeTimestamp(data.expiresAt),
@@ -205,9 +216,13 @@ export class PaymentIntentService {
 
     if (useRecurring) {
       try {
+        const ownerEmail = input.ownerEmail;
+        if (!ownerEmail) {
+          throw new Error("ownerEmail is required for recurring checkout");
+        }
         const recurring = await PaymongoRecurringService.createSubscriptionCheckout({
           businessId,
-          ownerEmail: input.ownerEmail!,
+          ownerEmail,
           ownerName: input.ownerName,
           targetPlanCode: planCode,
           billingCycle,
@@ -291,6 +306,246 @@ export class PaymentIntentService {
       targetPlanCode: planCode,
       subscriptionAction,
       billingMode,
+      amount,
+      provider: provider.id,
+    });
+
+    const saved = await intentsCol(businessId).doc(intentId).get();
+    return toRecord(businessId, intentId, saved.data() || doc);
+  }
+
+  /**
+   * One-time PayMongo/mock link to unlock a premium training video for a workspace.
+   */
+  static async createResourceVideoUnlockIntent(
+    input: CreateResourceVideoUnlockIntentInput,
+  ): Promise<PaymentIntentRecord> {
+    const businessId = String(input.businessId || "").trim();
+    const userId = String(input.userId || "").trim();
+    const videoId = String(input.videoId || "").trim();
+    const amount = Math.max(0, Number(input.amount || 0));
+    if (!businessId || !userId || !videoId) {
+      throw new Error("UNLOCK_INPUT_REQUIRED");
+    }
+    if (!amount || amount <= 0) {
+      throw new Error("NO_AMOUNT_DUE");
+    }
+
+    const intentId = `pi_${crypto.randomBytes(12).toString("hex")}`;
+    const checkoutToken = crypto.randomBytes(18).toString("hex");
+    const provider = resolvePaymentProvider();
+    const expiresAt = new Date(Date.now() + INTENT_TTL_HOURS * 60 * 60 * 1000);
+    const videoName = String(input.videoName || "Premium webinar").slice(0, 80);
+
+    const link = await provider.createPaymentLink({
+      businessId,
+      intentId,
+      amount,
+      description: `SmartRefill premium recording — ${videoName} (₱${amount.toFixed(2)})`,
+      metadata: {
+        businessId,
+        intentId,
+        userId,
+        videoId,
+        source: "resource_video",
+      },
+      apiBaseUrl: input.apiBaseUrl,
+      checkoutToken,
+    });
+
+    const checkoutPayload = {
+      videoId,
+      videoName,
+      purpose: "resource_video_unlock",
+    };
+
+    const doc = {
+      userId,
+      targetPlanCode: "",
+      subscriptionAction: "UPGRADE",
+      billingCycle: "monthly",
+      billingMode: "one_time",
+      amount,
+      currency: "PHP",
+      provider: provider.id,
+      providerLinkId: link.providerLinkId,
+      providerReferenceNumber: link.providerReferenceNumber,
+      checkoutUrl: link.checkoutUrl,
+      checkoutToken,
+      status: "pending",
+      source: "resource_video",
+      checkoutPayload,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      expiresAt,
+    };
+
+    await intentsCol(businessId).doc(intentId).set(doc);
+
+    logger.info("resource_video payment_intent created", {
+      businessId,
+      intentId,
+      videoId,
+      amount,
+      provider: provider.id,
+    });
+
+    const saved = await intentsCol(businessId).doc(intentId).get();
+    return toRecord(businessId, intentId, saved.data() || doc);
+  }
+
+  /**
+   * One-time PayMongo/mock link to unlock a premium live webinar for a workspace.
+   */
+  static async createResourceWebinarUnlockIntent(
+    input: CreateResourceWebinarUnlockIntentInput,
+  ): Promise<PaymentIntentRecord> {
+    const businessId = String(input.businessId || "").trim();
+    const userId = String(input.userId || "").trim();
+    const eventId = String(input.eventId || "").trim();
+    const amount = Math.max(0, Number(input.amount || 0));
+    if (!businessId || !userId || !eventId) {
+      throw new Error("UNLOCK_INPUT_REQUIRED");
+    }
+    if (!amount || amount <= 0) {
+      throw new Error("NO_AMOUNT_DUE");
+    }
+
+    const intentId = `pi_${crypto.randomBytes(12).toString("hex")}`;
+    const checkoutToken = crypto.randomBytes(18).toString("hex");
+    const provider = resolvePaymentProvider();
+    const expiresAt = new Date(Date.now() + INTENT_TTL_HOURS * 60 * 60 * 1000);
+    const eventName = String(input.eventName || "Premium webinar").slice(0, 80);
+
+    const link = await provider.createPaymentLink({
+      businessId,
+      intentId,
+      amount,
+      description: `SmartRefill premium webinar — ${eventName} (₱${amount.toFixed(2)})`,
+      metadata: {
+        businessId,
+        intentId,
+        userId,
+        eventId,
+        source: "resource_webinar",
+      },
+      apiBaseUrl: input.apiBaseUrl,
+      checkoutToken,
+    });
+
+    const checkoutPayload = {
+      eventId,
+      eventName,
+      purpose: "resource_webinar_unlock",
+    };
+
+    const doc = {
+      userId,
+      targetPlanCode: "",
+      subscriptionAction: "UPGRADE",
+      billingCycle: "monthly",
+      billingMode: "one_time",
+      amount,
+      currency: "PHP",
+      provider: provider.id,
+      providerLinkId: link.providerLinkId,
+      providerReferenceNumber: link.providerReferenceNumber,
+      checkoutUrl: link.checkoutUrl,
+      checkoutToken,
+      status: "pending",
+      source: "resource_webinar",
+      checkoutPayload,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      expiresAt,
+    };
+
+    await intentsCol(businessId).doc(intentId).set(doc);
+
+    logger.info("resource_webinar payment_intent created", {
+      businessId,
+      intentId,
+      eventId,
+      amount,
+      provider: provider.id,
+    });
+
+    const saved = await intentsCol(businessId).doc(intentId).get();
+    return toRecord(businessId, intentId, saved.data() || doc);
+  }
+
+  static async createResourceBlogUnlockIntent(
+    input: CreateResourceBlogUnlockIntentInput,
+  ): Promise<PaymentIntentRecord> {
+    const businessId = String(input.businessId || "").trim();
+    const userId = String(input.userId || "").trim();
+    const articleId = String(input.articleId || "").trim();
+    const amount = Math.max(0, Number(input.amount || 0));
+    if (!businessId || !userId || !articleId) {
+      throw new Error("UNLOCK_INPUT_REQUIRED");
+    }
+    if (!amount || amount <= 0) {
+      throw new Error("NO_AMOUNT_DUE");
+    }
+
+    const intentId = `pi_${crypto.randomBytes(12).toString("hex")}`;
+    const checkoutToken = crypto.randomBytes(18).toString("hex");
+    const provider = resolvePaymentProvider();
+    const expiresAt = new Date(Date.now() + INTENT_TTL_HOURS * 60 * 60 * 1000);
+    const articleTitle = String(input.articleTitle || "Premium article").slice(
+      0,
+      80,
+    );
+
+    const link = await provider.createPaymentLink({
+      businessId,
+      intentId,
+      amount,
+      description: `SmartRefill premium article — ${articleTitle} (₱${amount.toFixed(2)})`,
+      metadata: {
+        businessId,
+        intentId,
+        userId,
+        articleId,
+        source: "resource_blog",
+      },
+      apiBaseUrl: input.apiBaseUrl,
+      checkoutToken,
+    });
+
+    const checkoutPayload = {
+      articleId,
+      articleTitle,
+      purpose: "resource_blog_unlock",
+    };
+
+    const doc = {
+      userId,
+      targetPlanCode: "",
+      subscriptionAction: "UPGRADE",
+      billingCycle: "monthly",
+      billingMode: "one_time",
+      amount,
+      currency: "PHP",
+      provider: provider.id,
+      providerLinkId: link.providerLinkId,
+      providerReferenceNumber: link.providerReferenceNumber,
+      checkoutUrl: link.checkoutUrl,
+      checkoutToken,
+      status: "pending",
+      source: "resource_blog",
+      checkoutPayload,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      expiresAt,
+    };
+
+    await intentsCol(businessId).doc(intentId).set(doc);
+
+    logger.info("resource_blog payment_intent created", {
+      businessId,
+      intentId,
+      articleId,
       amount,
       provider: provider.id,
     });

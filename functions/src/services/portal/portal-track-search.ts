@@ -290,6 +290,11 @@ function rowKey(row: PortalTrackSearchRow): string {
   return `${row.source}:${row.referenceId}`;
 }
 
+/** Max customer docs scanned for fuzzy contact match (name/company/phone variants). */
+const CUSTOMER_SCAN_LIMIT = 200;
+/** Stop scanning once we have this many matched customer ids. */
+const CUSTOMER_MATCH_CAP = 40;
+
 /**
  * Public track-order lookup: match by any of name, email, company, or phone;
  * return open transactions and pending portal raw_submissions.
@@ -309,20 +314,51 @@ export async function searchPortalTrackOrders(
     throw new Error("QUERY_TOO_SHORT");
   }
 
-  const customersSnap = await db
+  const customersCol = db
     .collection("businesses")
     .doc(businessId)
-    .collection("customers")
-    .limit(500)
-    .get();
+    .collection("customers");
 
   const matchedCustomerIds = new Set<string>();
   if (scopedCustomerId) {
     matchedCustomerIds.add(scopedCustomerId);
   }
-  for (const doc of customersSnap.docs) {
-    if (contactMatchesFilters(doc.data(), filters)) {
+
+  // Prefer equality queries when email is provided (avoids full customer scan).
+  const emailTerm = (filters.email || "").trim();
+  if (emailTerm.length >= 2 && matchedCustomerIds.size < CUSTOMER_MATCH_CAP) {
+    const emailSnap = await customersCol
+      .where("email", "==", emailTerm)
+      .limit(30)
+      .get();
+    for (const doc of emailSnap.docs) {
       matchedCustomerIds.add(doc.id);
+    }
+  }
+
+  // Name prefix when present (indexed single-field range).
+  const nameTerm = (filters.name || "").trim();
+  if (nameTerm.length >= 2 && matchedCustomerIds.size < CUSTOMER_MATCH_CAP) {
+    const nameSnap = await customersCol
+      .where("name", ">=", nameTerm)
+      .where("name", "<=", nameTerm + "\uf8ff")
+      .limit(30)
+      .get();
+    for (const doc of nameSnap.docs) {
+      if (contactMatchesFilters(doc.data(), filters)) {
+        matchedCustomerIds.add(doc.id);
+      }
+    }
+  }
+
+  // Fuzzy / remaining filters: bounded scan (not full tenant).
+  if (matchedCustomerIds.size < CUSTOMER_MATCH_CAP) {
+    const customersSnap = await customersCol.limit(CUSTOMER_SCAN_LIMIT).get();
+    for (const doc of customersSnap.docs) {
+      if (contactMatchesFilters(doc.data(), filters)) {
+        matchedCustomerIds.add(doc.id);
+        if (matchedCustomerIds.size >= CUSTOMER_MATCH_CAP) break;
+      }
     }
   }
 
@@ -372,11 +408,11 @@ export async function searchPortalTrackOrders(
     if (results.size >= limit) break;
   }
 
-  const nameTerm = (filters.name || filters.q || "").trim();
-  if (results.size < limit && nameTerm.length >= 2) {
+  const txNameTerm = (filters.name || filters.q || "").trim();
+  if (results.size < limit && txNameTerm.length >= 2) {
     const nameSnap = await txCol
-      .where("customerName", ">=", nameTerm)
-      .where("customerName", "<=", nameTerm + "\uf8ff")
+      .where("customerName", ">=", txNameTerm)
+      .where("customerName", "<=", txNameTerm + "\uf8ff")
       .limit(Math.min(limit * 8, 80))
       .get();
     for (const doc of nameSnap.docs) {

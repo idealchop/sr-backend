@@ -6,7 +6,7 @@ export function isScalePlanCode(planCode: string | undefined): boolean {
   return code.includes("scale") || code.includes("enterprise");
 }
 
-/** SC-* platform features: Scale / Enterprise (including 7-day Scale trial). */
+/** SC-* platform features: Scale / Enterprise (including 15-day Scale trial). */
 export function resolveScalePlatformAccess(sub: {
   planCode?: string;
   status?: string;

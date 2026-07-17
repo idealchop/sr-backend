@@ -1,5 +1,6 @@
 import { FieldValue } from "../../config/firebase-admin";
 import type { Transaction } from "../transactions/transaction-service";
+import { derivePaymentFields } from "../transactions/payment-status";
 
 export type PaymentReconcileResult = {
   updates: Record<string, unknown>;
@@ -47,17 +48,7 @@ export function buildPaymentReconcileUpdates(
     0;
   const overpayAmount = roundMoney(Math.max(0, incremental - appliedAmount));
   const newPaid = roundMoney(prevPaid + appliedAmount);
-  const balanceDue = Math.max(0, roundMoney(declaredTotal - newPaid));
-
-  let paymentStatus: Transaction["paymentStatus"] =
-    current.paymentStatus || "unpaid";
-  if (declaredTotal > 0) {
-    if (balanceDue <= 0.0001) paymentStatus = "paid";
-    else if (newPaid > 0) paymentStatus = "partial";
-    else paymentStatus = "unpaid";
-  } else if (newPaid > 0) {
-    paymentStatus = "paid";
-  }
+  const { balanceDue, paymentStatus } = derivePaymentFields(declaredTotal, newPaid);
 
   const method = options.method || "digital_wallet";
   const payNotes = [

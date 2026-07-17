@@ -1,3 +1,9 @@
+/**
+ * Cash / rider-received payment helpers for ledger create paths.
+ * Keep semantics in sync with frontend
+ * `features/transactions/lib/rider-cash-payment.ts`
+ * (`isCashStoredPaymentMethod` / `staffPaymentConfirmedByRider`).
+ */
 export function isCashPaymentMethod(method: string | undefined): boolean {
   return String(method ?? "cash").trim().toLowerCase() === "cash";
 }

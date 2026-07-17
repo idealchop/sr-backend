@@ -127,6 +127,7 @@ vi.mock("../../middleware/auth-middleware", () => ({
 vi.mock("../../services/observability/logging/logger", () => ({
   logger: {
     info: vi.fn(),
+    warn: vi.fn(),
     error: vi.fn(),
   },
   logAuditEvent: vi.fn().mockResolvedValue({}),

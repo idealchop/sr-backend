@@ -36,7 +36,7 @@ vi.mock("../../config/firebase-admin", () => ({
 }));
 
 vi.mock("../../services/observability/logging/logger", () => ({
-  logger: { info: vi.fn(), error: vi.fn() },
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
   logAuditEvent: vi.fn().mockResolvedValue({}),
 }));
 

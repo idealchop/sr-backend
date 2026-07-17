@@ -1,4 +1,5 @@
 import { db, FieldValue } from "../../config/firebase-admin";
+import { formatPhilippineDateTime } from "../../utils/philippine-datetime";
 import { logger } from "../observability/logging/logger";
 import { NotificationService } from "../notifications/notification-service";
 
@@ -96,9 +97,13 @@ export async function notifyOwnersWebinarPublished(
     }
 
     let ownersNotified = 0;
-    const startsHint =
+    const startsLabel =
       typeof input.startsAt === "string" && input.startsAt.trim() ?
-        ` Starts ${input.startsAt.trim()}.` :
+        formatPhilippineDateTime(input.startsAt.trim()) :
+        "";
+    const startsHint =
+      startsLabel && startsLabel !== "—" ?
+        ` Starts ${startsLabel} (Asia/Manila).` :
         "";
     const title = "New webinar";
     const message = `${name} is now open for registration.${startsHint}`;

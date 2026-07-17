@@ -1,10 +1,14 @@
 import type { SupportAiTurnResult } from "./support-chat-types";
 
-export const HUMAN_ESCALATION_PATTERNS = new RegExp(
+/** User asked for a person — Buddy only points to separate Profile → Chat support. */
+export const HUMAN_SUPPORT_POINTER_PATTERNS = new RegExp(
   "\\b(human|agent|person|real support|live support|helpdesk|talk to someone|speak to|" +
   "representative|tawag|tao|tulong ng tao)\\b",
   "i",
 );
+
+/** @deprecated Use HUMAN_SUPPORT_POINTER_PATTERNS — Buddy no longer escalates to Brevo. */
+export const HUMAN_ESCALATION_PATTERNS = HUMAN_SUPPORT_POINTER_PATTERNS;
 
 export const SATISFIED_PATTERNS = new RegExp(
   "\\b(yes|yep|thanks|thank you|salamat|solved|resolved|got it|clear|okay|ok|" +
@@ -23,27 +27,21 @@ export const RESOLVE_PATTERNS =
   /\b(close|resolved|done|fixed|all set|mark resolved|issue closed)\b/i;
 
 /**
- * Rule-based overrides after Gemini JSON. Auto-escalation to Brevo should only happen
- * when the user explicitly asks for a human — not when they send screenshots or use "hindi/no"
- * in normal sentences.
+ * Rule-based overrides after Gemini JSON. Buddy never escalates into Brevo;
+ * live helpdesk stays on Profile → Chat support.
  * @param {SupportAiTurnResult} parsed Parsed Gemini turn.
  * @param {string} userText Latest user message text.
- * @param {boolean} hasAttachments Whether the turn includes image/video attachments.
  * @return {SupportAiTurnResult} Turn with heuristic flags applied.
  */
 export function applySupportTurnHeuristics(
   parsed: SupportAiTurnResult,
   userText: string,
-  hasAttachments: boolean,
 ): SupportAiTurnResult {
-  const out: SupportAiTurnResult = { ...parsed };
-
-  if (HUMAN_ESCALATION_PATTERNS.test(userText)) {
-    out.detectedHumanRequest = true;
-    out.suggestHuman = true;
-    out.askSatisfaction = false;
-    return out;
-  }
+  const out: SupportAiTurnResult = {
+    ...parsed,
+    suggestHuman: false,
+    detectedHumanRequest: false,
+  };
 
   if (
     SATISFIED_PATTERNS.test(userText) &&
@@ -58,11 +56,6 @@ export function applySupportTurnHeuristics(
 
   if (RESOLVE_PATTERNS.test(userText)) {
     out.suggestResolve = true;
-  }
-
-  if (hasAttachments && !out.detectedHumanRequest) {
-    out.suggestHuman = false;
-    out.detectedHumanRequest = false;
   }
 
   return out;

@@ -970,6 +970,39 @@ export const openApiSpec = {
         },
       },
     },
+    "/events-training/ops/notify-resources-video-published": {
+      post: {
+        tags: ["EventsTraining"],
+        summary: "Notify owners — WRS Story / webinar recording published",
+        description:
+          "Sales Portal ops. Activity-feed fan-out + verified-email Brevo mail; idempotent via training_video_publish_notices.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["videoId", "name"],
+                properties: {
+                  videoId: { type: "string" },
+                  name: { type: "string" },
+                  category: {
+                    type: "string",
+                    enum: ["wrs_stories", "webinar"],
+                    default: "wrs_stories",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: "Fan-out result." },
+          401: { description: "Missing/invalid token." },
+          403: { description: "Not Sales Portal admin/manager." },
+        },
+      },
+    },
     "/subscriptions/{businessId}/status": {
       get: {
         "tags": ["Subscriptions"],
@@ -1164,6 +1197,80 @@ export const openApiSpec = {
             },
           },
           403: { description: "Not the assigned rider or workspace admin." },
+        },
+      },
+    },
+    "/business/{businessId}/analytics/dashboard-snapshot": {
+      get: {
+        tags: ["Analytics"],
+        summary: "Dashboard KPI stock snapshot",
+        description:
+          "Reads `analytics_snapshots/dashboard_kpis` (unpaid, dormant, cohorts, period presets). " +
+          "Pass `refresh=1` to force an incremental rematerialize before read.",
+        parameters: [
+          { $ref: "#/components/parameters/businessId" },
+          {
+            name: "refresh",
+            in: "query",
+            schema: { type: "string", enum: ["1"] },
+            required: false,
+          },
+        ],
+        responses: {
+          200: { description: "Snapshot payload." },
+          404: { description: "Business not found or snapshot unavailable." },
+        },
+      },
+    },
+    "/business/{businessId}/analytics/daily-sum": {
+      get: {
+        tags: ["Analytics"],
+        summary: "Sum analytics_daily range",
+        description:
+          "Sums payment-date daily rollups for `from`/`to` (yyyy-MM-dd Asia/Manila). " +
+          "Falls back to a ledger scan when daily docs are sparse.",
+        parameters: [
+          { $ref: "#/components/parameters/businessId" },
+          {
+            name: "from",
+            in: "query",
+            required: true,
+            schema: { type: "string", example: "2026-06-01" },
+          },
+          {
+            name: "to",
+            in: "query",
+            required: true,
+            schema: { type: "string", example: "2026-06-30" },
+          },
+        ],
+        responses: {
+          200: { description: "Range aggregate." },
+          400: { description: "Invalid from/to." },
+        },
+      },
+    },
+    "/business/{businessId}/analytics/materialize": {
+      post: {
+        tags: ["Analytics"],
+        summary: "Rebuild analytics materialization",
+        description: "Owner/admin force rebuild of stock snapshot + daily rollups.",
+        parameters: [{ $ref: "#/components/parameters/businessId" }],
+        requestBody: {
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  mode: { type: "string", enum: ["incremental", "full"] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: "Rebuild result + snapshot." },
+          403: { description: "Not owner/admin." },
         },
       },
     },

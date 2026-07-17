@@ -1,43 +1,97 @@
 import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
 import { NotificationService } from "../notifications/notification-service";
+import { RiderService } from "../riders/rider-service";
 import { isActiveStaffMemberForLimit } from "./workspace-member-access";
+import { TEAM_DIRECTORY_RECORDS } from "./staff-seat-usage";
+
+export type TeamDeactivationResult = {
+  members: number;
+  recordOnlyRiders: number;
+  directoryRecords: number;
+};
 
 /**
- * Sets all non-owner workspace members inactive when a plan downgrade takes effect.
+ * Sets all non-owner workspace members inactive, plus record-only riders and
+ * directory personnel. Used when a plan downgrade takes effect (including
+ * Scale trial → Starter).
  * @param {string} businessId Business id.
- * @return {Promise<number>} Count of members deactivated.
+ * @return {Promise<TeamDeactivationResult>} Counts deactivated per bucket.
  */
 export async function deactivateAllNonOwnerWorkspaceMembers(
   businessId: string,
-): Promise<number> {
+): Promise<TeamDeactivationResult> {
+  const empty: TeamDeactivationResult = {
+    members: 0,
+    recordOnlyRiders: 0,
+    directoryRecords: 0,
+  };
+
   const businessRef = db.collection("businesses").doc(businessId);
   const businessSnap = await businessRef.get();
-  if (!businessSnap.exists) return 0;
+  if (!businessSnap.exists) return empty;
 
   const ownerId = String(businessSnap.data()?.ownerId || "");
-  const membersSnap = await businessRef.collection("members").get();
+  const [membersSnap, riders, directorySnap] = await Promise.all([
+    businessRef.collection("members").get(),
+    RiderService.getRidersByBusiness(businessId),
+    businessRef.collection(TEAM_DIRECTORY_RECORDS).get(),
+  ]);
 
-  const batch = db.batch();
-  let count = 0;
+  const memberBatch = db.batch();
+  let members = 0;
   for (const doc of membersSnap.docs) {
     const data = doc.data();
     if (!isActiveStaffMemberForLimit(doc.id, data, ownerId)) continue;
-    batch.update(doc.ref, {
+    memberBatch.update(doc.ref, {
       isActive: false,
       deactivatedAt: FieldValue.serverTimestamp(),
       deactivatedReason: "plan_downgrade",
       updatedAt: FieldValue.serverTimestamp(),
     });
-    count++;
+    members++;
+  }
+  if (members > 0) {
+    await memberBatch.commit();
   }
 
-  if (count === 0) return 0;
+  let recordOnlyRiders = 0;
+  for (const rider of riders) {
+    const userId = String(rider.userId || "").trim();
+    if (userId) continue;
+    if (rider.status === "inactive") continue;
+    if (!rider.id) continue;
+    await RiderService.updateRider(businessId, rider.id, {
+      status: "inactive",
+    });
+    recordOnlyRiders++;
+  }
 
-  await batch.commit();
-  logger.info("Deactivated workspace members after plan downgrade", {
+  const directoryBatch = db.batch();
+  let directoryRecords = 0;
+  for (const doc of directorySnap.docs) {
+    const data = doc.data();
+    if (data.status === "inactive") continue;
+    directoryBatch.update(doc.ref, {
+      status: "inactive",
+      deactivatedAt: FieldValue.serverTimestamp(),
+      deactivatedReason: "plan_downgrade",
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    directoryRecords++;
+  }
+  if (directoryRecords > 0) {
+    await directoryBatch.commit();
+  }
+
+  const total = members + recordOnlyRiders + directoryRecords;
+  if (total === 0) return empty;
+
+  logger.info("Deactivated workspace team after plan downgrade", {
     businessId,
-    count,
+    members,
+    recordOnlyRiders,
+    directoryRecords,
   });
 
   if (ownerId) {
@@ -46,11 +100,12 @@ export async function deactivateAllNonOwnerWorkspaceMembers(
       businessId,
       title: "Team access paused after plan change",
       message:
-        `${count} workspace member${count === 1 ? "" : "s"} ${count === 1 ? "was" : "were"} ` +
-        "set to inactive. Reactivate seats from Team Hub when ready.",
+        `${total} team seat${total === 1 ? "" : "s"} ${total === 1 ? "was" : "were"} ` +
+        "set to inactive (including directory-only records). " +
+        "Reactivate seats from Team Hub when you upgrade.",
       type: "warning",
     });
   }
 
-  return count;
+  return { members, recordOnlyRiders, directoryRecords };
 }

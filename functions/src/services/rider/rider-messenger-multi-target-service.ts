@@ -81,7 +81,11 @@ export function formatMultiTargetLabel(tokens: string[]): string {
     const sorted = [...nums].sort((a, b) => a - b);
     const isConsecutive =
       sorted.length === nums.length &&
-      sorted.every((value, idx) => idx === 0 || value === sorted[idx - 1]! + 1);
+      sorted.every((value, idx) => {
+        if (idx === 0) return true;
+        const prev = sorted[idx - 1];
+        return prev != null && value === prev + 1;
+      });
     if (isConsecutive) {
       return `#${sorted[0]}–#${sorted[sorted.length - 1]}`;
     }

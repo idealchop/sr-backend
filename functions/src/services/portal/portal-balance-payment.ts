@@ -8,6 +8,7 @@ import {
   TransactionService,
   type Transaction,
 } from "../transactions/transaction-service";
+import { derivePaymentFields } from "../transactions/payment-status";
 import {
   normalizePortalStarRating,
   ratingPatchFromPortalPayload,
@@ -107,17 +108,7 @@ export function buildPortalBalancePaymentUpdates(
   const declaredTotal = Number(current.totalAmount ?? 0);
   const prevPaid = Number(current.amountPaid ?? 0);
   const newPaid = Math.min(declaredTotal, prevPaid + incremental);
-  const balanceDue = Math.max(0, declaredTotal - newPaid);
-
-  let paymentStatus: Transaction["paymentStatus"] =
-    current.paymentStatus || "unpaid";
-  if (declaredTotal > 0) {
-    if (balanceDue <= 0) paymentStatus = "paid";
-    else if (newPaid > 0) paymentStatus = "partial";
-    else paymentStatus = "unpaid";
-  } else if (newPaid > 0) {
-    paymentStatus = "paid";
-  }
+  const { balanceDue, paymentStatus } = derivePaymentFields(declaredTotal, newPaid);
 
   const paymentProof = pay?.proofUrl;
   const completionNote =

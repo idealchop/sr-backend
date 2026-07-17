@@ -56,7 +56,8 @@ export function resolveTransactionOrderSource(
   }
 
   if (tx.type === "delivery") {
-    if (tx.deliveryStatus === "placed" || notes.includes("portal order")) {
+    // Do not use deliveryStatus === "placed" — staff Add Order also uses placed for today.
+    if (notes.includes("portal order")) {
       return "qr_order";
     }
     return "manual";

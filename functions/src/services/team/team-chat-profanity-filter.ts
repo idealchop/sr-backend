@@ -69,18 +69,39 @@ export function maskTeamChatProfanityLocal(text: string): string {
   return masked;
 }
 
-export async function maskTeamChatProfanity(text: string): Promise<string> {
+/** Alias — same local word list (English + Filipino). */
+export const maskProfanityLocal = maskTeamChatProfanityLocal;
+
+type MaskSurface = "team-chat" | "video-engagement";
+
+const SURFACE_SYSTEM: Record<MaskSurface, string> = {
+  "team-chat":
+    "You moderate workplace team chat messages in English and Filipino (Tagalog). " +
+    "Return JSON only: {\"text\":\"...\"}. Replace profanity, slurs, vulgar insults, " +
+    "and obscene Tagalog/English with asterisks the same length as each masked word. " +
+    "Preserve emojis, punctuation, spacing, and non-profane words. Do not add commentary.",
+  "video-engagement":
+    "You moderate public webinar/video comments, questions, and staff answers in English " +
+    "and Filipino (Tagalog). Return JSON only: {\"text\":\"...\"}. Replace profanity, " +
+    "slurs, sexual vulgarity, hate speech, and foul Tagalog/English insults with asterisks " +
+    "the same length as each masked word. Preserve meaning where possible, emojis, " +
+    "punctuation, and non-profane wording. Do not add commentary.",
+};
+
+/**
+ * Local mask first, then Gemini obfuscation when available (falls back to local).
+ */
+export async function maskWorkplaceProfanity(
+  text: string,
+  surface: MaskSurface = "team-chat",
+): Promise<string> {
   const trimmed = text.trim();
   if (!trimmed) return text;
 
   const localMasked = maskTeamChatProfanityLocal(trimmed);
   const ai = await geminiGenerateJson<{ text?: string }>({
-    system:
-      "You moderate workplace team chat messages in English and Filipino (Tagalog). " +
-      "Return JSON only: {\"text\":\"...\"}. Replace profanity, slurs, vulgar insults, " +
-      "and obscene Tagalog/English with asterisks the same length as each masked word. " +
-      "Preserve emojis, punctuation, spacing, and non-profane words. Do not add commentary.",
-    user: `Mask all profanity in this message:\n${trimmed}`,
+    system: SURFACE_SYSTEM[surface],
+    user: `Mask all profanity and foul language in this text:\n${trimmed}`,
     fallback: { text: localMasked },
     temperature: 0,
     maxOutputTokens: 512,
@@ -88,5 +109,15 @@ export async function maskTeamChatProfanity(text: string): Promise<string> {
 
   const aiText = typeof ai.text === "string" ? ai.text.trim() : "";
   if (!aiText) return localMasked;
+  // Re-run local pass in case the model missed a known term.
   return maskTeamChatProfanityLocal(aiText);
+}
+
+export async function maskTeamChatProfanity(text: string): Promise<string> {
+  return maskWorkplaceProfanity(text, "team-chat");
+}
+
+/** Webinar / WRS Story comments, questions, and ops answers. */
+export async function maskVideoEngagementProfanity(text: string): Promise<string> {
+  return maskWorkplaceProfanity(text, "video-engagement");
 }

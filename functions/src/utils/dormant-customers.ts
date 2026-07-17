@@ -1,6 +1,10 @@
 import type { Customer } from "../services/customers/customer-service";
 import type { Transaction } from "../services/transactions/transaction-service";
 import { isWalkInCustomerName } from "../services/ai/ledger-scan-customer-match";
+import {
+  isTransactionFulfilledForReceivable,
+  isUnpaidReceivableTransaction,
+} from "./unpaid-receivable";
 
 export const DEFAULT_DORMANT_THRESHOLD_DAYS = 15;
 
@@ -53,17 +57,7 @@ function parseTxDate(raw: unknown): Date | null {
 }
 
 function isFulfilled(tx: Transaction): boolean {
-  if (tx.type === "walkin" || tx.type === "direct_sale") return true;
-  if (tx.type === "collection") {
-    const ds = tx.deliveryStatus;
-    if (!ds) return true;
-    return ["delivered", "completed", "collected"].includes(ds);
-  }
-  if (tx.type === "delivery") {
-    const ds = tx.deliveryStatus || "";
-    return ["delivered", "completed", "collected"].includes(ds);
-  }
-  return false;
+  return isTransactionFulfilledForReceivable(tx);
 }
 
 function fulfilledType(tx: Transaction): DormantLastOrderType | null {
@@ -146,14 +140,11 @@ export function buildDormantCustomerRows(
 
   const unpaidByCustomer = new Map<string, number>();
   for (const tx of transactions) {
-    if (!tx.customerId || !isFulfilled(tx)) continue;
-    const unpaid = tx.paymentStatus === "unpaid" || tx.paymentStatus === "partial";
-    if (unpaid && (Number(tx.balanceDue) || 0) > 0) {
-      unpaidByCustomer.set(
-        tx.customerId,
-        (unpaidByCustomer.get(tx.customerId) || 0) + (Number(tx.balanceDue) || 0),
-      );
-    }
+    if (!tx.customerId || !isUnpaidReceivableTransaction(tx)) continue;
+    unpaidByCustomer.set(
+      tx.customerId,
+      (unpaidByCustomer.get(tx.customerId) || 0) + (Number(tx.balanceDue) || 0),
+    );
   }
 
   const rows: DormantCustomerRow[] = [];

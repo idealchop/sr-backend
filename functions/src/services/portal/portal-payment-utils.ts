@@ -1,10 +1,9 @@
+import { isCashPaymentMethod } from "../transactions/rider-cash-payment";
 import type { RawSubmissionPayload } from "./raw-submission-types";
 
+/** @deprecated Prefer {@link isCashPaymentMethod} — kept for portal call sites. */
 export function isPortalCashPaymentMethod(method: string | undefined): boolean {
-  const m = String(method ?? "cash")
-    .trim()
-    .toLowerCase();
-  return m === "cash";
+  return isCashPaymentMethod(method);
 }
 
 /**
@@ -16,7 +15,7 @@ export function portalPaymentConfirmedByRider(
   pay: RawSubmissionPayload["payment"] | undefined,
 ): boolean {
   if (!pay) return false;
-  if (!isPortalCashPaymentMethod(pay.method)) {
+  if (!isCashPaymentMethod(pay.method)) {
     return pay.confirmedByRider === true;
   }
   return pay.confirmedByRider !== false;

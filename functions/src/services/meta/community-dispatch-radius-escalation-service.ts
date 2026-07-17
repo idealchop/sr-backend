@@ -163,10 +163,29 @@ export async function runCommunityDispatchSearchAtRadius(params: {
       });
     }
 
+    const loaded = await loadRequest(params.requestId);
+    if (!loaded) {
+      await db.collection(REQUESTS_COLLECTION).doc(params.requestId).set(
+        {
+          status: "no_stations",
+          routingNotes:
+            decision.routingNotes ??
+            `No eligible stations within ${params.radiusKm} km.`,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+      return {
+        requestId: params.requestId,
+        status: "no_stations",
+        referenceId: params.referenceId,
+        replyMessage: "Finalized — no nearby stations.",
+      };
+    }
     return finalizeCommunityDispatchRequest({
       requestId: params.requestId,
       request: {
-        ...(await loadRequest(params.requestId))!,
+        ...loaded,
         stationsFoundEver,
       },
       referenceId: params.referenceId,

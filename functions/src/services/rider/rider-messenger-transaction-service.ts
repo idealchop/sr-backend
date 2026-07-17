@@ -2,9 +2,9 @@ import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
 import {
   TransactionService,
-  type CollectionItem,
   type Transaction,
 } from "../transactions/transaction-service";
+import { derivePaymentFields } from "../transactions/payment-status";
 import {
   mapDeliveryStatusToEvent,
   maybeSendCustomerTxnNotification,
@@ -103,33 +103,14 @@ export function buildRiderMessengerCompleteUpdates(params: {
     };
     const amountPaid = Math.max(0, (params.transaction.amountPaid || 0) + cashAmount);
     const totalAmount = Math.max(0, params.transaction.totalAmount || 0);
-    const balanceDue = Math.max(0, totalAmount - amountPaid);
-    updates.amountPaid = amountPaid;
-    updates.balanceDue = balanceDue;
-    updates.paymentStatus =
-      balanceDue <= 0 ? "paid" : amountPaid > 0 ? "partial" : "unpaid";
+    const derived = derivePaymentFields(totalAmount, amountPaid);
+    updates.amountPaid = derived.amountPaid;
+    updates.balanceDue = derived.balanceDue;
+    updates.paymentStatus = derived.paymentStatus;
     updates.payments = [...(params.transaction.payments || []), payment];
   }
 
   return updates;
-}
-
-export function applyReportQtyToCollectionItem(
-  item: CollectionItem,
-  qtyCollected: number,
-): CollectionItem {
-  const qty = Math.max(0, Math.floor(qtyCollected));
-  const expected = Math.max(0, item.qtyExpected || 0);
-  const deficitQty = Math.max(0, expected - qty);
-  return {
-    ...item,
-    qtyCollected: qty,
-    qtyOk: qty,
-    qtyDamaged: 0,
-    qtyMissing: deficitQty,
-    deficitQty,
-    status: deficitQty > 0 ? "missing" : "ok",
-  };
 }
 
 export async function patchRiderMessengerTransaction(params: {
@@ -162,6 +143,7 @@ export async function patchRiderMessengerTransaction(params: {
     params.transactionId,
     params.updates,
     actorId,
+    before.riderName?.trim() || undefined,
   );
 
   if (!applied) return;

@@ -3,6 +3,8 @@ import { logger } from "firebase-functions";
 import { db } from "../config/firebase-admin";
 import { CustomerService } from "../services/customers/customer-service";
 import { TransactionService } from "../services/transactions/transaction-service";
+import { AnalyticsMaterializerService } from
+  "../services/analytics/analytics-materializer-service";
 import { buildDormantCustomerRows } from "../utils/dormant-customers";
 import {
   computeCohortStats,
@@ -159,6 +161,107 @@ export const getRevenueTrendAnalytics = async (req: Request, res: Response) => {
     res.json({ data: trend });
   } catch (error) {
     logger.error(`Error fetching revenue trend for ${businessId}:`, error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Serving-layer stock KPIs (unpaid / dormant / cohorts / period presets). */
+export const getDashboardAnalyticsSnapshot = async (req: Request, res: Response) => {
+  const { businessId } = req.params;
+  const user = (req as any).user;
+  const refresh = String(req.query.refresh || "") === "1";
+
+  try {
+    const { hasAccess } = await checkBusinessAccess(user.uid, businessId);
+    if (!hasAccess) {
+      res.status(404).json({ error: "Business not found or access denied" });
+      return;
+    }
+
+    if (refresh) {
+      await AnalyticsMaterializerService.materialize(businessId, {
+        mode: "incremental",
+        reason: "api_refresh",
+      });
+    }
+
+    let snapshot = await AnalyticsMaterializerService.getDashboardSnapshot(businessId);
+    if (!snapshot) {
+      await AnalyticsMaterializerService.materialize(businessId, {
+        mode: "incremental",
+        reason: "api_miss",
+      });
+      snapshot = await AnalyticsMaterializerService.getDashboardSnapshot(businessId);
+    }
+
+    if (!snapshot) {
+      res.status(404).json({ error: "Analytics snapshot unavailable" });
+      return;
+    }
+
+    res.json({ data: snapshot });
+  } catch (error) {
+    logger.error(`Error fetching dashboard snapshot for ${businessId}:`, error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+/** Sum of analytics_daily docs for a Manila calendar range (period cards / health). */
+export const getAnalyticsDailySum = async (req: Request, res: Response) => {
+  const { businessId } = req.params;
+  const user = (req as any).user;
+  const from = String(req.query.from || "");
+  const to = String(req.query.to || "");
+
+  try {
+    const { hasAccess } = await checkBusinessAccess(user.uid, businessId);
+    if (!hasAccess) {
+      res.status(404).json({ error: "Business not found or access denied" });
+      return;
+    }
+
+    if (!DATE_KEY_RE.test(from) || !DATE_KEY_RE.test(to)) {
+      res.status(400).json({
+        error: "Query params from and to are required as yyyy-MM-dd (Asia/Manila)",
+      });
+      return;
+    }
+
+    const sum = await AnalyticsMaterializerService.sumDailyRange(businessId, from, to);
+    res.json({ data: sum });
+  } catch (error) {
+    logger.error(`Error summing analytics daily for ${businessId}:`, error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+/** Owner/admin force rebuild of stock + nearby daily rollups. */
+export const postAnalyticsMaterialize = async (req: Request, res: Response) => {
+  const { businessId } = req.params;
+  const user = (req as any).user;
+  const mode = String(req.body?.mode || "incremental") === "full" ? "full" : "incremental";
+
+  try {
+    const { hasAccess, role } = await checkBusinessAccess(user.uid, businessId);
+    if (!hasAccess) {
+      res.status(404).json({ error: "Business not found or access denied" });
+      return;
+    }
+    if (role !== "owner" && role !== "admin") {
+      res.status(403).json({ error: "Only owners and admins can rebuild analytics" });
+      return;
+    }
+
+    const result = await AnalyticsMaterializerService.materialize(businessId, {
+      mode,
+      reason: "api_post",
+    });
+    const snapshot = await AnalyticsMaterializerService.getDashboardSnapshot(businessId);
+    res.json({ data: { ...result, snapshot } });
+  } catch (error) {
+    logger.error(`Error materializing analytics for ${businessId}:`, error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };

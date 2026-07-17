@@ -25,7 +25,8 @@ export async function syncCommunityDispatchEnrollment(businessId: string): Promi
   const snap = await ref.get();
   if (!snap.exists) return;
 
-  const data = snap.data()!;
+  const data = snap.data();
+  if (!data) return;
   const planEligible = await isBusinessEligibleForCommunityMessenger(businessId);
   const hasMapPin = readMapPin(data);
   const community = (data.communityDispatch ?? {}) as BusinessCommunityDispatch;

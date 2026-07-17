@@ -35,8 +35,10 @@ describe("container-custody-agreement", () => {
       enabled: true,
     });
     expect(settings?.source).toBe("default");
+    expect(settings).toBeTruthy();
+    if (!settings) return;
     expect(
-      resolveContainerCustodyDocumentUrl("biz-1", settings!, "https://api.test"),
+      resolveContainerCustodyDocumentUrl("biz-1", settings, "https://api.test"),
     ).toBe("https://api.test/public/portal/container-custody-agreement?b=biz-1");
   });
 

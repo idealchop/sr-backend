@@ -1,5 +1,6 @@
 import { coerceToDate, manilaDateKey } from "./philippine-datetime";
 import type { Transaction } from "../services/transactions/transaction-service";
+import { isActivePayment } from "../services/transactions/payment-status";
 
 const NON_REVENUE_TYPES = new Set<Transaction["type"]>(["expense", "collection"]);
 const ONLINE_METHODS = new Set(["digital_wallet", "bank_transfer", "other"]);
@@ -62,6 +63,7 @@ function sumCollectedBetweenDayKeys(
 
     if (payments.length > 0) {
       for (const payment of payments) {
+        if (!isActivePayment(payment)) continue;
         const amount = Number(payment.amount) || 0;
         if (amount <= 0) continue;
         const dayKey = paymentDayKey(payment.date);

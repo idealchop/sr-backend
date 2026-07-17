@@ -22,11 +22,14 @@ vi.mock("../../../../config/firebase-admin", () => ({
         doc: vi.fn(() => ({
           collection: vi.fn((sub: string) => {
             if (sub === "customers") {
-              return {
+              const customersChain = {
+                where: vi.fn(() => customersChain),
                 limit: vi.fn(() => ({
                   get: mockCustomersGet,
                 })),
+                get: mockCustomersGet,
               };
+              return customersChain;
             }
             if (sub === "transactions") {
               const chain = {

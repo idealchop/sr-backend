@@ -1,6 +1,8 @@
 import type { DormantCustomerRow } from "../utils/dormant-customers";
 import type { Customer } from "../services/customers/customer-service";
 import type { Transaction } from "../services/transactions/transaction-service";
+import { isActivePayment } from "../services/transactions/payment-status";
+import { isTransactionFulfilledForReceivable, isUnpaidReceivableTransaction } from "./unpaid-receivable";
 
 export type DebtAgingBucketId = "current" | "days_31_60" | "days_61_90" | "over_90";
 
@@ -75,20 +77,6 @@ function parseTxDate(raw: unknown): Date | null {
   return null;
 }
 
-function isFulfilled(tx: Transaction): boolean {
-  if (tx.type === "walkin" || tx.type === "direct_sale") return true;
-  if (tx.type === "collection") {
-    const ds = tx.deliveryStatus;
-    if (!ds) return true;
-    return ["delivered", "completed", "collected"].includes(ds);
-  }
-  if (tx.type === "delivery") {
-    const ds = tx.deliveryStatus || "";
-    return ["delivered", "completed", "collected"].includes(ds);
-  }
-  return false;
-}
-
 function bucketForDays(days: number): DebtAgingBucketId {
   if (days <= 30) return "current";
   if (days <= 60) return "days_31_60";
@@ -119,8 +107,7 @@ export function computeDebtAgingBreakdown(
 
   for (const tx of transactions) {
     if (!tx.customerId) continue;
-    const unpaid = tx.paymentStatus === "unpaid" || tx.paymentStatus === "partial";
-    if (!isFulfilled(tx) || !unpaid || (Number(tx.balanceDue) || 0) <= 0) continue;
+    if (!isUnpaidReceivableTransaction(tx)) continue;
 
     const cur = byCustomer.get(tx.customerId) || {
       amount: 0,
@@ -202,13 +189,7 @@ export type CohortStatsResponse = {
 
 function isFulfilledOrder(tx: Transaction): boolean {
   if (tx.type === "expense" || tx.type === "collection") return false;
-  if (tx.type === "walkin" || tx.type === "direct_sale") return true;
-  if (tx.type === "delivery") {
-    const s = tx.deliveryStatus;
-    if (!s) return false;
-    return ["delivered", "completed", "collected"].includes(s);
-  }
-  return false;
+  return isTransactionFulfilledForReceivable(tx);
 }
 
 function orderDate(tx: Transaction): Date {
@@ -287,6 +268,7 @@ function forEachRevenuePaymentInRange(
     const payments = tx.payments || [];
     if (payments.length > 0) {
       for (const payment of payments) {
+        if (!isActivePayment(payment)) continue;
         const amount = Number(payment.amount) || 0;
         if (amount <= 0) continue;
         const paidOn = parseTxDate(payment.date);

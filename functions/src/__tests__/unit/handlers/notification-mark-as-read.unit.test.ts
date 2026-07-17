@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockGet, mockBatch, mockCommit, mockUpdate, mockWhere } = vi.hoisted(() => {
+const { mockGet, mockBatch, mockCommit, mockWhere } = vi.hoisted(() => {
   const commit = vi.fn().mockResolvedValue(undefined);
   const update = vi.fn();
   const batch = vi.fn(() => ({ update, commit }));
@@ -10,7 +10,6 @@ const { mockGet, mockBatch, mockCommit, mockUpdate, mockWhere } = vi.hoisted(() 
     mockGet: get,
     mockBatch: batch,
     mockCommit: commit,
-    mockUpdate: update,
     mockWhere: where,
   };
 });

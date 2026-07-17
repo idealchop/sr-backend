@@ -85,4 +85,36 @@ describe("buildWorkspaceRevenueMetrics", () => {
     expect(metrics.expensesTodayPhp).toBe(100);
     expect(metrics.netTodayPhp).toBe(400);
   });
+
+  it("excludes voided payment rows from collected revenue", () => {
+    const metrics = buildWorkspaceRevenueMetrics(
+      [
+        tx({
+          id: "with-void",
+          type: "walkin",
+          payments: [
+            {
+              id: "p1",
+              amount: 300,
+              date: "2026-06-10T09:00:00.000Z",
+              method: "cash",
+            },
+            {
+              id: "p2",
+              amount: 200,
+              date: "2026-06-10T10:00:00.000Z",
+              method: "cash",
+              voided: true,
+            },
+          ],
+          amountPaid: 300,
+          paymentStatus: "paid",
+        }),
+      ],
+      now,
+    );
+
+    expect(metrics.todayPhp).toBe(300);
+    expect(metrics.todayBreakdown.cashPhp).toBe(300);
+  });
 });

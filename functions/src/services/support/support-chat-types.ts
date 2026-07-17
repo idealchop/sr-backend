@@ -35,6 +35,14 @@ export type SupportSessionStatus = "ai_active" | "escalated" | "resolved";
 
 export type SupportMessageRole = "user" | "ai" | "system";
 
+export type SupportResolutionSource =
+  | "greeting"
+  | "human_request"
+  | "knowledge_cache"
+  | "deterministic_howto"
+  | "workspace"
+  | "gemini";
+
 export type SupportChatSession = {
   id: string;
   businessId: string;
@@ -76,6 +84,8 @@ export type SupportChatMessage = {
     presencePrompt?: boolean;
     inactiveClose?: boolean;
     structuredReply?: SupportStructuredReply;
+    /** Deterministic / FAQ short-circuit source when Gemini was skipped. */
+    resolutionSource?: SupportResolutionSource;
   };
 };
 
@@ -93,6 +103,8 @@ export type SupportAiTurnResult = {
   sessionSummary?: string;
   /** Card-style layout for the dashboard UI. */
   structured?: SupportStructuredReply;
+  /** Which Buddy tier produced this reply (preflow vs Gemini). */
+  resolutionSource?: SupportResolutionSource;
 };
 
 export type SupportAiKnowledgeDoc = {

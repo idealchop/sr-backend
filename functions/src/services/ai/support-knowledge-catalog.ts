@@ -84,8 +84,8 @@ ${SUPPORT_WATER_STATION_CONTEXT}
 ### Subscriptions & support
 - Plans: Starter, Grow, Scale, Enterprise — features vary (team hub, live human chat, AI credits for
   other in-app AI tools).
-- Support: River AI chat is included for help with the app and water station topics; human live chat
-  (Brevo) when you need a person.
+- Support: River AI Buddy (header) is AI-only for app and water station topics; live helpdesk is
+  **Profile → Chat support** (Brevo) — a separate entry, not a Buddy handoff.
 `;
 
 /** Static FAQ entries (station-owner focused). */
@@ -150,7 +150,8 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
     content:
       "Starter has core features with limits. Grow adds team hub and live human support. " +
       "Scale/Enterprise add higher limits and advanced operations. " +
-      "Check Account → Subscription for your plan, usage, auto-renew, and billing account status.",
+      "Check Account → Subscription for your plan, usage, and auto-renew status (Cancel / Keep My Plan). " +
+      "At checkout, leave **Allow auto-renew** checked so paying GCash/Maya also links wallet billing for the next cycle.",
   },
   {
     id: "subscription-checkout",
@@ -162,12 +163,11 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
   },
   {
     id: "subscription-auto-renew",
-    topic: "Auto-renew and link payment account",
+    topic: "Allow auto-renew at checkout",
     content:
-      "Leave **Auto-renew my plan each billing cycle** checked to stay on your paid plan. " +
-      "Use **Link payment account** on Account → Subscription to save GCash, Maya, or card for automatic " +
-      "renewal charges when wallet billing is enabled. Without a linked wallet, you get a payment link " +
-      "reminder a few days before your period ends.",
+      "Leave **Allow auto-renew** checked when you pay (default). That payment links your GCash, Maya, or card " +
+      "so the next billing cycle can charge automatically when wallet billing is enabled. Without vaulting, " +
+      "you get a payment link reminder a few days before your period ends. Cancel anytime from Account → Subscription.",
   },
   {
     id: "subscription-renew-addons",
@@ -193,10 +193,11 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
   },
   {
     id: "human-support",
-    topic: "Talk to a human",
+    topic: "Talk to a human / live helpdesk",
     content:
-      "If River AI cannot resolve your issue, tap Talk to human agent in support chat " +
-      "to connect with the Smart Refill helpdesk via live chat.",
+      "River AI Buddy is AI-only. For the live helpdesk (billing, account, escalated issues), " +
+      "open **Profile menu → Chat support**. That chat is separate from Buddy and does not " +
+      "hand off from this conversation.",
   },
   {
     id: "station-hygiene-basics",
@@ -234,6 +235,17 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
   ...SUPPORT_WATER_SCIENCE_FAQ,
 ];
 
+/** Minimum score for a Buddy preflow cache hit (skip Gemini). */
+export const SUPPORT_KNOWLEDGE_HIGH_CONFIDENCE_MIN = 14;
+
+export type SupportKnowledgeHitSource = "faq" | "confirmed" | "tutorial" | "doc";
+
+export type SupportKnowledgeHit = {
+  entry: SupportKnowledgeEntry;
+  score: number;
+  source: SupportKnowledgeHitSource;
+};
+
 function tokenize(text: string): string[] {
   return (text || "")
     .toLowerCase()
@@ -243,14 +255,52 @@ function tokenize(text: string): string[] {
     .filter((t) => t.length >= 3);
 }
 
+function parseStoredQa(content: string): { question: string; answer: string } | null {
+  const match = content.match(/^Q:\s*([\s\S]+?)\nA:\s*([\s\S]+)$/i);
+  if (!match) return null;
+  const question = match[1].trim();
+  const answer = match[2].trim();
+  if (!question || !answer) return null;
+  return { question, answer };
+}
+
+function knowledgeHitSource(entry: SupportKnowledgeEntry): SupportKnowledgeHitSource {
+  if (entry.id.startsWith("learned-") || parseStoredQa(entry.content)) {
+    return "confirmed";
+  }
+  if (entry.id.startsWith("tutorial-") || /tutorial/i.test(entry.topic)) {
+    return "tutorial";
+  }
+  if (entry.id.startsWith("doc-")) return "doc";
+  return "faq";
+}
+
 function scoreKnowledgeEntry(entry: SupportKnowledgeEntry, queryTokens: string[]): number {
   if (!queryTokens.length) return 0;
+  const topic = entry.topic.toLowerCase();
   const haystack = `${entry.topic}\n${entry.content}`.toLowerCase();
   let score = 0;
   for (const token of queryTokens) {
-    if (entry.topic.toLowerCase().includes(token)) score += 6;
+    if (topic.includes(token)) score += 6;
     if (haystack.includes(token)) score += 2;
   }
+
+  const stored = parseStoredQa(entry.content);
+  if (stored) {
+    const qTokens = tokenize(stored.question);
+    const overlap = queryTokens.filter((t) => qTokens.includes(t)).length;
+    score += overlap * 5;
+    if (overlap >= 2 && overlap / Math.max(queryTokens.length, 1) >= 0.5) {
+      score += 8;
+    }
+  }
+
+  // Whole-phrase lean: "add delivery" vs topic "How do I create a delivery?"
+  const queryJoined = queryTokens.join(" ");
+  if (queryJoined.length >= 8 && topic.includes(queryJoined)) {
+    score += 10;
+  }
+
   return score;
 }
 
@@ -280,6 +330,32 @@ function pickRelevantKnowledge(
     .filter((e) => !best.some((b) => b.id === e.id))
     .slice(0, Math.max(0, limit - best.length));
   return [...best, ...fallback];
+}
+
+/**
+ * High-confidence FAQ / confirmed-Q&A match for Buddy preflow (skip Gemini).
+ * Conservative threshold — prefer the model when unsure.
+ */
+export function findHighConfidenceKnowledgeHit(
+  entries: SupportKnowledgeEntry[],
+  query: string,
+  minScore = SUPPORT_KNOWLEDGE_HIGH_CONFIDENCE_MIN,
+): SupportKnowledgeHit | null {
+  const queryTokens = tokenize(query);
+  if (queryTokens.length < 2) return null;
+
+  let best: SupportKnowledgeHit | null = null;
+  for (const entry of entries) {
+    const source = knowledgeHitSource(entry);
+    const score = scoreKnowledgeEntry(entry, queryTokens);
+    // Confirmed owner Q&A can clear a slightly lower bar (already human-validated).
+    const threshold = source === "confirmed" ? Math.max(10, minScore - 2) : minScore;
+    if (score < threshold) continue;
+    if (!best || score > best.score) {
+      best = { entry, score, source };
+    }
+  }
+  return best;
 }
 
 export function buildSupportKnowledgeContext(

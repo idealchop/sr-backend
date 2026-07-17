@@ -97,25 +97,6 @@ function memberDocIsActive(d: Record<string, unknown>): boolean {
 
 // eslint-disable-next-line valid-jsdoc
 // eslint-disable-next-line valid-jsdoc
-/**
- * Active seats only (inactive members free a slot). Owner excluded from role buckets.
- */
-function countOccupiedMemberSeatsByRole(members: TeamMemberDto[]): {
-  admins: number;
-  riders: number;
-} {
-  let admins = 0;
-  let riders = 0;
-  for (const m of members) {
-    if (!m.isActive) continue;
-    const r = String(m.role || "rider").toLowerCase();
-    if (r === "owner") continue;
-    if (r === "admin") admins++;
-    else riders++;
-  }
-  return { admins, riders };
-}
-
 function countSeatRolesFromMemberDocs(
   docs: Array<{ data: () => Record<string, unknown> }>,
   options?: { activeOnly?: boolean },
@@ -394,6 +375,8 @@ export interface TeamHubRecordRiderDto {
   photoUrl?: string | null;
   role: TeamSeatRole;
   status: "active" | "inactive";
+  /** Set when rider linked Facebook Messenger for field ops (Phase 2e). */
+  messengerLinked?: boolean;
 }
 
 function isRecordOnlyRiderUserId(userId: unknown): boolean {
@@ -411,6 +394,7 @@ function mapDirectoryRecordDoc(
     photoUrl: data.photoUrl ? String(data.photoUrl).trim() : null,
     role: normalizeSeatRole(data.role),
     status: data.status === "inactive" ? "inactive" : "active",
+    messengerLinked: Boolean(String(data.messengerPsid || "").trim()),
   };
 }
 
@@ -439,6 +423,9 @@ export async function listRecordOnlyRidersForHub(
       status: (r.status === "inactive" ? "inactive" : "active") as
         | "active"
         | "inactive",
+      messengerLinked: Boolean(
+        String((r as { messengerPsid?: string }).messengerPsid || "").trim(),
+      ),
     }));
 
   const directoryRows = directorySnap.docs.map((doc) =>

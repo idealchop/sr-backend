@@ -121,6 +121,7 @@ vi.mock("../../services/inventory/inventory-service", async (importOriginal) => 
 vi.mock("../../services/observability/logging/logger", () => ({
   logger: {
     info: vi.fn(),
+    warn: vi.fn(),
     error: vi.fn((msg, err) => {
       console.error(`LOGGER ERROR: ${msg}`, err);
     }),
@@ -150,6 +151,8 @@ describe("Transaction API Endpoints", () => {
 
   describe("POST /business/:businessId/transactions", () => {
     it("should create a new transaction and update customer hasBalance flag", async () => {
+      // hasBalance only flips for fulfilled unpaid/partial receivables
+      // (pending deliveries are not debt yet).
       const res = await request(app)
         .post("/business/test-biz/transactions")
         .send({
@@ -157,6 +160,7 @@ describe("Transaction API Endpoints", () => {
           totalAmount: 200,
           amountPaid: 50,
           type: "delivery",
+          deliveryStatus: "completed",
         });
       expect(res.status).toBe(201);
       expect(res.body.data.id).toBe("new-tx-id");

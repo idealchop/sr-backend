@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applySupportTurnHeuristics,
   DISSATISFIED_PATTERNS,
-  HUMAN_ESCALATION_PATTERNS,
+  HUMAN_SUPPORT_POINTER_PATTERNS,
 } from "../../../../services/support/support-chat-turn-heuristics";
 import type { SupportAiTurnResult } from "../../../../services/support/support-chat-types";
 
@@ -21,32 +21,23 @@ function baseTurn(overrides: Partial<SupportAiTurnResult> = {}): SupportAiTurnRe
 }
 
 describe("applySupportTurnHeuristics", () => {
-  it("does not suggest human for Filipino negation with attachments", () => {
+  it("never escalates Buddy to human / Brevo", () => {
     const turn = applySupportTurnHeuristics(
-      baseTurn({ suggestHuman: true }),
-      "Hindi ko ma-open ang delivery page, eto screenshot",
-      true,
+      baseTurn({ suggestHuman: true, detectedHumanRequest: true }),
+      "Please talk to a human agent",
+    );
+    expect(HUMAN_SUPPORT_POINTER_PATTERNS.test("Please talk to a human agent")).toBe(true);
+    expect(turn.suggestHuman).toBe(false);
+    expect(turn.detectedHumanRequest).toBe(false);
+  });
+
+  it("clears Gemini suggestHuman flags", () => {
+    const turn = applySupportTurnHeuristics(
+      baseTurn({ suggestHuman: true, detectedHumanRequest: true }),
+      "What is this error on my screen?",
     );
     expect(turn.suggestHuman).toBe(false);
     expect(turn.detectedHumanRequest).toBe(false);
-    expect(DISSATISFIED_PATTERNS.test("Hindi ko ma-open ang delivery page")).toBe(false);
-  });
-
-  it("clears Gemini suggestHuman when message has attachments", () => {
-    const turn = applySupportTurnHeuristics(
-      baseTurn({ suggestHuman: true, detectedHumanRequest: false }),
-      "What is this error on my screen?",
-      true,
-    );
-    expect(turn.suggestHuman).toBe(false);
-  });
-
-  it("escalates only on explicit human request", () => {
-    const text = "Please talk to a human agent";
-    expect(HUMAN_ESCALATION_PATTERNS.test(text)).toBe(true);
-    const turn = applySupportTurnHeuristics(baseTurn(), text, true);
-    expect(turn.detectedHumanRequest).toBe(true);
-    expect(turn.suggestHuman).toBe(true);
   });
 
   it("does not treat bare 'no' in a sentence as dissatisfaction", () => {
@@ -54,7 +45,6 @@ describe("applySupportTurnHeuristics", () => {
     const turn = applySupportTurnHeuristics(
       baseTurn(),
       "I have no idea what this button does",
-      false,
     );
     expect(turn.detectedDissatisfied).toBe(false);
     expect(turn.suggestHuman).toBe(false);

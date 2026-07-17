@@ -14,13 +14,23 @@ import {
 export type SubscriptionBillingProfile = {
   linked: boolean;
   canAutoCharge: boolean;
+  /** Start a first-time vault checkout. */
   canLink: boolean;
+  /** Replace / finish payment method when already linked or incomplete. */
+  canUpdate: boolean;
   billingMode: "none" | "recurring" | "recurring_link" | "mock";
   status: "none" | "incomplete" | "active" | "past_due" | "cancelled";
   paymentMethodLabel?: string;
   customerId?: string;
   subscriptionId?: string;
   message?: string;
+};
+
+export type CreateBillingLinkResult = {
+  checkoutUrl: string;
+  alreadyLinked?: boolean;
+  intentId?: string;
+  billingMode?: string;
 };
 
 type PaymongoSubscriptionResponse = {
@@ -76,16 +86,28 @@ function normalizePaymongoStatus(raw: string): SubscriptionBillingProfile["statu
 }
 
 export class SubscriptionBillingService {
+  /**
+   * Mock / fallback vault marker after a billing_link payment succeeds.
+   * Prefer real PayMongo customer/subscription ids when the intent already has them.
+   */
   static async completeBillingLinkSetup(
     businessId: string,
     intentId: string,
     provider = "mock",
+    ids?: { customerId?: string; subscriptionId?: string },
   ): Promise<void> {
     const prefix = provider === "paymongo" ? "paymongo" : "mock";
+    const customerId =
+      String(ids?.customerId || "").trim() ||
+      `${prefix}_cus_${intentId.slice(0, 12)}`;
+    const subscriptionId =
+      String(ids?.subscriptionId || "").trim() ||
+      `${prefix}_sub_${intentId.slice(0, 12)}`;
+
     await billingDoc(businessId).set(
       {
-        customerId: `${prefix}_cus_${intentId.slice(0, 12)}`,
-        subscriptionId: `${prefix}_sub_${intentId.slice(0, 12)}`,
+        customerId,
+        subscriptionId,
         status: "active",
         linkPurpose: FieldValue.delete(),
         updatedAt: FieldValue.serverTimestamp(),
@@ -104,9 +126,12 @@ export class SubscriptionBillingService {
           linked: true,
           canAutoCharge: true,
           canLink: false,
+          canUpdate: true,
           billingMode: "mock",
           status: "active",
           paymentMethodLabel: "Mock GCash",
+          customerId: String(stored?.customerId || "") || undefined,
+          subscriptionId: String(stored?.subscriptionId || "") || undefined,
           message: "Test billing account linked (dev/emulator).",
         };
       }
@@ -114,6 +139,7 @@ export class SubscriptionBillingService {
         linked: false,
         canAutoCharge: false,
         canLink: true,
+        canUpdate: false,
         billingMode: "mock",
         status: "none",
         message: "Test mode — link billing is simulated at checkout.",
@@ -125,6 +151,7 @@ export class SubscriptionBillingService {
         linked: false,
         canAutoCharge: false,
         canLink: false,
+        canUpdate: false,
         billingMode: "recurring_link",
         status: "none",
         message:
@@ -142,6 +169,7 @@ export class SubscriptionBillingService {
         linked: false,
         canAutoCharge: false,
         canLink: true,
+        canUpdate: false,
         billingMode: "none",
         status: "none",
         customerId: customerId || undefined,
@@ -171,30 +199,38 @@ export class SubscriptionBillingService {
     }
 
     const linked = liveStatus === "active" || liveStatus === "past_due";
+    const incomplete = liveStatus === "incomplete";
     const canAutoCharge = linked;
 
     return {
       linked,
       canAutoCharge,
-      canLink: !linked,
-      billingMode: linked ? "recurring" : "none",
+      canLink: !linked && !incomplete,
+      canUpdate: linked || incomplete,
+      billingMode: linked ? "recurring" : incomplete ? "none" : "none",
       status: liveStatus === "none" ? storedStatus : liveStatus,
       paymentMethodLabel,
       customerId: customerId || undefined,
       subscriptionId,
       message: linked ?
         "Your billing account is linked. Renewals can charge automatically." :
-        liveStatus === "incomplete" ?
+        incomplete ?
           "Finish linking your billing account in PayMongo checkout." :
           "Link a payment account for automatic renewals.",
     };
   }
 
+  /**
+   * Start (or replace) vaulted billing via a RENEW payment intent.
+   * First successful charge extends the plan and marks paymongo_billing active.
+   */
   static async createLinkSession(
     businessId: string,
     userId: string,
     apiBaseUrl: string,
-  ): Promise<{ checkoutUrl: string; alreadyLinked?: boolean }> {
+    options?: { update?: boolean },
+  ): Promise<CreateBillingLinkResult> {
+    const update = options?.update === true;
     const provider = resolvePaymentProvider();
 
     const rows = await fetchRecentSubscriptionRows(businessId);
@@ -210,77 +246,87 @@ export class SubscriptionBillingService {
     const amount = Number(effective.data.price || 0);
     if (!amount || amount <= 0) throw new Error("NO_AMOUNT_DUE");
 
-    if (provider.id === "mock") {
-      const profile = await SubscriptionBillingService.getProfile(businessId);
-      if (profile.linked && profile.canAutoCharge) {
-        return { checkoutUrl: "", alreadyLinked: true };
-      }
+    const profile = await SubscriptionBillingService.getProfile(businessId);
 
-      const billingCycle = cycle === "yearly" ? "yearly" as const : "monthly" as const;
-      const intent = await PaymentIntentService.createSubscriptionIntent({
-        businessId,
-        userId,
-        targetPlanCode: planCode,
-        subscriptionAction: "RENEW",
-        billingCycle,
-        amount,
-        checkoutPayload: {
-          autoRenew: true,
-          cancelAtPeriodEnd: false,
-          purpose: "billing_link",
-          billingCycle,
-        },
-        apiBaseUrl,
-      });
-      return { checkoutUrl: intent.checkoutUrl };
-    }
-
-    if (!paymongoRecurringEnabled()) {
+    if (provider.id === "paymongo" && !paymongoRecurringEnabled()) {
       throw new Error("BILLING_LINK_UNAVAILABLE");
     }
 
-    const profile = await SubscriptionBillingService.getProfile(businessId);
-    if (profile.linked && profile.canAutoCharge) {
+    if (profile.linked && profile.canAutoCharge && !update) {
       return { checkoutUrl: "", alreadyLinked: true };
     }
 
-    const uSnap = await db.collection("users").doc(userId).get();
-    const u = uSnap.exists ? (uSnap.data() as Record<string, unknown>) : {};
-    const ownerEmail = String(u.email || "").trim();
-    const ownerName = String(u.displayName || u.name || "").trim();
-    if (!ownerEmail) throw new Error("OWNER_EMAIL_REQUIRED");
+    if (update && (profile.linked || profile.status === "incomplete")) {
+      try {
+        await PaymongoRecurringService.cancelSubscription(businessId);
+      } catch (err) {
+        logger.warn("billing update: cancel previous PayMongo subscription failed", {
+          businessId,
+          err: err instanceof Error ? err.message : err,
+        });
+      }
+    }
 
-    const billingCycle = cycle === "yearly" ? "yearly" as const : "monthly" as const;
+    const billingCycle = cycle === "yearly" ? ("yearly" as const) : ("monthly" as const);
 
-    const recurring = await PaymongoRecurringService.createSubscriptionCheckout({
+    let ownerEmail: string | undefined;
+    let ownerName: string | undefined;
+    if (provider.id === "paymongo") {
+      const uSnap = await db.collection("users").doc(userId).get();
+      const u = uSnap.exists ? (uSnap.data() as Record<string, unknown>) : {};
+      ownerEmail = String(u.email || "").trim() || undefined;
+      ownerName = String(u.displayName || u.name || "").trim() || undefined;
+      if (!ownerEmail) throw new Error("OWNER_EMAIL_REQUIRED");
+    }
+
+    const intent = await PaymentIntentService.createSubscriptionIntent({
       businessId,
-      ownerEmail,
-      ownerName: ownerName || undefined,
+      userId,
       targetPlanCode: planCode,
+      subscriptionAction: "RENEW",
       billingCycle,
       amount,
-      metadata: {
-        businessId,
-        userId,
-        targetPlanCode: planCode,
-        subscriptionAction: "RENEW",
-        source: "subscription",
+      checkoutPayload: {
+        autoRenew: true,
+        cancelAtPeriodEnd: false,
         purpose: "billing_link",
+        billingSetup: true,
+        billingUpdate: update,
+        billingCycle,
       },
+      ownerEmail,
+      ownerName,
+      apiBaseUrl,
     });
 
     await billingDoc(businessId).set(
       {
-        customerId: recurring.customerId,
-        planId: recurring.planId,
-        subscriptionId: recurring.subscriptionId,
+        ...(intent.providerCustomerId ?
+          { customerId: intent.providerCustomerId } :
+          {}),
+        ...(intent.providerSubscriptionId ?
+          { subscriptionId: intent.providerSubscriptionId } :
+          {}),
         status: "incomplete",
         linkPurpose: "billing_setup",
+        linkIntentId: intent.id,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
     );
 
-    return { checkoutUrl: recurring.checkoutUrl };
+    logger.info("billing link session created", {
+      businessId,
+      intentId: intent.id,
+      provider: intent.provider,
+      billingMode: intent.billingMode,
+      update,
+    });
+
+    return {
+      checkoutUrl: intent.checkoutUrl,
+      intentId: intent.id,
+      billingMode: intent.billingMode,
+    };
   }
 }

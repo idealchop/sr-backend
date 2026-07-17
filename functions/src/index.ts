@@ -117,6 +117,7 @@ export { purgeExpiredProactiveScheduleWeekSnapshots } from
   "./jobs/purge-proactive-schedule-snapshots";
 export { purgeExpiredTeamChats } from "./jobs/purge-expired-team-chats";
 export { backfillCustomerLastFulfilled } from "./jobs/backfill-customer-last-fulfilled";
+export { reconcileAnalyticsSnapshots } from "./jobs/reconcile-analytics-snapshots";
 export { dormantDigestNotification } from "./jobs/dormant-digest-notification";
 export { morningOwnerIntelligence } from "./jobs/morning-owner-intelligence";
 export { proactiveInsightPushNotification } from "./jobs/proactive-insight-push-notification";

@@ -8,6 +8,7 @@ import {
   normalizeCustomerContainerPolicy,
   type CustomerContainerPolicy,
 } from "./container-policy";
+import { isUnpaidReceivableTransaction } from "../../utils/unpaid-receivable";
 
 export interface Customer {
   id?: string;
@@ -377,7 +378,9 @@ export class CustomerService {
         if (data.type !== "expense") {
           totalOrders++;
           totalRevenue += data.totalAmount || 0;
-          balanceDue += data.balanceDue || 0;
+          if (isUnpaidReceivableTransaction({ id: doc.id, ...data })) {
+            balanceDue += data.balanceDue || 0;
+          }
 
           const scheduledAt = data.scheduledAt?.toDate ?
             data.scheduledAt.toDate() :

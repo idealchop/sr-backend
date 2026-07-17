@@ -5,7 +5,7 @@ export function maskPortalCustomerName(name: string | undefined): string {
 
   const parts = trimmed.split(/\s+/).filter(Boolean);
   const first = parts[0] ?? trimmed;
-  const last = parts.length > 1 ? parts[parts.length - 1]! : first;
+  const last = parts.length > 1 ? (parts[parts.length - 1] ?? first) : first;
 
   if (parts.length === 1) {
     if (first.length <= 1) return "*";

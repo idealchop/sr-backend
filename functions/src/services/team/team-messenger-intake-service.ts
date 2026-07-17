@@ -1,4 +1,3 @@
-import { logger } from "../observability/logging/logger";
 import {
   sendMetaMessengerText,
   type SendTextResult,
@@ -19,7 +18,6 @@ import {
 } from "./team-messenger-session-service";
 
 const TEAM_LINK_RE = /^LINK\s+TMR-/i;
-const TEAM_CHAT_RE = /^(CHAT|CLOSE\s+CHAT|CLOSECHAT|HELP|MENU)(\s|$)/i;
 const DELIVERY_REF_PREFIX_RE = /^(TX-|CR-)/i;
 
 function parseTeamMessengerCommand(input: string):
@@ -109,7 +107,7 @@ async function openOwnerChatSession(params: {
     return;
   }
 
-  let selected = waiting.length === 1 ? waiting[0]! : null;
+  let selected = waiting.length === 1 ? (waiting[0] ?? null) : null;
   if (params.target) {
     selected = matchRiderChatTarget(waiting, params.target);
     if (!selected) {
@@ -133,15 +131,25 @@ async function openOwnerChatSession(params: {
     return;
   }
 
+  if (!selected) {
+    await replyTeam({
+      psid: params.psid,
+      stationLabel: "Team chat",
+      memberName: params.memberName,
+      body: "Walang rider na nag-CHAT ngayon. Hintayin silang mag-CHAT sa Messenger.",
+    });
+    return;
+  }
+
   await saveTeamMessengerSession({
     psid: params.psid,
     businessId: params.businessId,
     userId: params.userId,
     memberName: params.memberName,
     chatMode: true,
-    activeRiderPsid: selected!.psid,
-    activeRiderId: selected!.riderId,
-    activeRiderName: selected!.riderName,
+    activeRiderPsid: selected.psid,
+    activeRiderId: selected.riderId,
+    activeRiderName: selected.riderName,
   });
 
   await replyTeam({
@@ -149,7 +157,7 @@ async function openOwnerChatSession(params: {
     stationLabel: "Team chat",
     memberName: params.memberName,
     body: [
-      `Chat open kay ${selected!.riderName}.`,
+      `Chat open kay ${selected.riderName}.`,
       "Reply freely — naka-sync sa Team Chat sa app.",
       "CLOSE CHAT pag tapos na.",
     ].join("\n"),

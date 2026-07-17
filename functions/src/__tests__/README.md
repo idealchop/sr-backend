@@ -120,6 +120,15 @@ Google OAuth runs in the **frontend only** (Firebase Auth). The API receives the
 - **Duplicate suki:** `unit/services/ai/duplicate-customers-service.unit.test.ts` — heuristic clustering (phone, email, name; numeric phone coercion); `duplicate-customers-ai-validation-service.unit.test.ts` — Gemini filter; `duplicate-dismissals-service.unit.test.ts` — `dismissedDuplicateCustomerIds`, legacy group keys, `dismissDuplicateCustomer`
 - **Local:** `GEMINI_API_KEY` in `functions/.env` (see `functions/.env.example`)
 
+### River AI Buddy (support chat preflow)
+
+- **Architecture:** Cheap tiers (workspace → preflow greeting/FAQ/howto) then Gemini Flash-lite — **not** an on-device SLM hybrid. Docs: `frontend/docs/river-ai-buddy-feature-documentation.md`, `river-ai-buddy-test-summary.md` (TC-BUDDY-*).
+- **Unit:** `unit/services/support/support-chat-preflow.unit.test.ts` — greeting, human→Chat support pointer, FAQ/howto hits, skip live sales & attachments
+- **Unit:** `unit/services/ai/support-knowledge-expanded.unit.test.ts` — `findHighConfidenceKnowledgeHit`
+- **Unit:** `unit/services/support/support-chat-turn-heuristics.unit.test.ts` — satisfied / human-pointer patterns
+- **Wiring:** `services/support/support-chat-service.ts` stores `meta.resolutionSource` on AI messages
+- **FE unit:** `frontend/src/__tests__/unit/features/dashboard/support-resolution-source.test.ts`
+
 ### Team chat (direct messages)
 
 - **Unit:** `unit/services/team/team-chat-profanity-filter.unit.test.ts`, `team-chat-retention.unit.test.ts`, `team-chat-reactions.unit.test.ts`

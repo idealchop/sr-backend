@@ -16,13 +16,24 @@ export const transactionHandler = {
   async listTransactions(req: Request, res: Response) {
     try {
       const { businessId } = req.params;
-      const { limit, offset, customerId } = req.query;
+      const { limit, offset, customerId, startDate, endDate, orderBy } = req.query;
+      const parsedLimit = limit ? parseInt(limit as string, 10) : 50;
+      const safeLimit = Number.isFinite(parsedLimit) ?
+        Math.max(1, Math.min(parsedLimit, 5000)) :
+        50;
+      const orderField =
+        orderBy === "createdAt" || orderBy === "scheduledAt" ?
+          orderBy :
+          undefined;
       const transactions = await TransactionService.getTransactionsByBusiness(
         businessId,
         {
-          limit: limit ? parseInt(limit as string) : 50,
-          offset: offset ? parseInt(offset as string) : 0,
+          limit: safeLimit,
+          offset: offset ? parseInt(offset as string, 10) : 0,
           customerId: customerId as string | undefined,
+          startDate: typeof startDate === "string" ? startDate : undefined,
+          endDate: typeof endDate === "string" ? endDate : undefined,
+          orderBy: orderField,
         },
       );
       res.json({ data: transactions });
@@ -52,11 +63,18 @@ export const transactionHandler = {
   async createTransaction(req: Request, res: Response) {
     const { businessId } = req.params;
     const user = (req as any).user;
+    const actorName =
+      typeof user?.name === "string" ?
+        user.name :
+        typeof user?.displayName === "string" ?
+          user.displayName :
+          undefined;
     try {
       const { transaction, created } = await TransactionService.addTransaction(
         businessId,
         req.body,
         user?.uid,
+        actorName,
       );
 
       res.status(created ? 201 : 200).json({
@@ -112,6 +130,12 @@ export const transactionHandler = {
   async updateTransaction(req: Request, res: Response) {
     const { businessId, id } = req.params;
     const user = (req as any).user;
+    const actorName =
+      typeof user?.name === "string" ?
+        user.name :
+        typeof user?.displayName === "string" ?
+          user.displayName :
+          undefined;
     try {
       const before = await TransactionService.getTransaction(businessId, id);
       const applied = await TransactionService.updateTransaction(
@@ -119,6 +143,7 @@ export const transactionHandler = {
         id,
         req.body,
         user?.uid,
+        actorName,
       );
 
       // NT-33 — staff ledger terminal delivery/collection/walk-in customer receipt
@@ -178,8 +203,19 @@ export const transactionHandler = {
   async deleteTransaction(req: Request, res: Response) {
     const { businessId, id } = req.params;
     const user = (req as any).user;
+    const actorName =
+      typeof user?.name === "string" ?
+        user.name :
+        typeof user?.displayName === "string" ?
+          user.displayName :
+          undefined;
     try {
-      await TransactionService.deleteTransaction(businessId, id, user?.uid);
+      await TransactionService.deleteTransaction(
+        businessId,
+        id,
+        user?.uid,
+        actorName,
+      );
 
       res.json({ success: true });
     } catch (error: any) {

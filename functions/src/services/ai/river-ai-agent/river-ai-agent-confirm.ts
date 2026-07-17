@@ -9,6 +9,10 @@ import {
   type TransactionPayment,
   type TransactionRefill,
 } from "../../transactions/transaction-service";
+import {
+  derivePaymentFields,
+  getActiveAmountPaid,
+} from "../../transactions/payment-status";
 import type { RiverAiAgentConfirmResult, RiverAiAgentPendingAction } from "./river-ai-agent-types";
 import { deletePendingAction } from "./river-ai-agent-pending-store";
 import { logRiverAiAgentConfirm } from "./river-ai-agent-audit";
@@ -167,9 +171,6 @@ export async function confirmRiverAiAgentAction(args: {
         return { success: false, summary: "Transaction not found.", errors: ["NOT_FOUND"] };
       }
       const amount = Number(p.amount) || 0;
-      const newPaid = (tx.amountPaid || 0) + amount;
-      const total = tx.totalAmount || 0;
-      const paymentStatus = newPaid >= total && total > 0 ? "paid" : newPaid > 0 ? "partial" : "unpaid";
       const payment: TransactionPayment = {
         id: randomUUID(),
         amount,
@@ -177,10 +178,19 @@ export async function confirmRiverAiAgentAction(args: {
         date: new Date().toISOString(),
       };
       const payments: TransactionPayment[] = [...(tx.payments || []), payment];
+      const derived = derivePaymentFields(
+        tx.totalAmount || 0,
+        getActiveAmountPaid({ payments, amountPaid: 0 }),
+      );
       await TransactionService.updateTransaction(
         businessId,
         txId,
-        { amountPaid: newPaid, paymentStatus, payments },
+        {
+          amountPaid: derived.amountPaid,
+          paymentStatus: derived.paymentStatus,
+          balanceDue: derived.balanceDue,
+          payments,
+        },
         userId,
       );
       return completeConfirm(businessId, pending, userId, {

@@ -4,7 +4,7 @@ import { logAuditEvent } from "../observability/logging/logger";
 import { SubscriptionService } from "../subscriptions/subscription-service";
 import { TrialLifecycleService } from "../subscriptions/trial-lifecycle-service";
 
-const TRIAL_DAYS = 7;
+const TRIAL_DAYS = 15;
 
 function addDays(base: Date, days: number): Date {
   const d = new Date(base);
@@ -13,7 +13,7 @@ function addDays(base: Date, days: number): Date {
 }
 
 /**
- * First workspace onboarding: Scale plan, 7-day trial (`billingCycle: trial`).
+ * First workspace onboarding: Scale plan, 15-day trial (`billingCycle: trial`).
  * Uses `dates.expiresAt` (not `trialExpiresAt`) so subscription status UI counts days correctly.
  * @param {DocumentReference} businessRef The document reference to the business
  */

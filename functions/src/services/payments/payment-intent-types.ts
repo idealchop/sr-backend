@@ -9,7 +9,11 @@ export type PaymentIntentStatus =
   | "expired"
   | "cancelled";
 
-export type PaymentIntentSource = "subscription";
+export type PaymentIntentSource =
+  | "subscription"
+  | "resource_video"
+  | "resource_webinar"
+  | "resource_blog";
 
 export type SubscriptionPaymentAction = "RENEW" | "UPGRADE" | "DOWNGRADE";
 
@@ -55,6 +59,33 @@ export type CreateSubscriptionPaymentIntentInput = {
   checkoutPayload?: Record<string, unknown>;
   ownerEmail?: string;
   ownerName?: string;
+  apiBaseUrl: string;
+};
+
+export type CreateResourceVideoUnlockIntentInput = {
+  businessId: string;
+  userId: string;
+  videoId: string;
+  videoName: string;
+  amount: number;
+  apiBaseUrl: string;
+};
+
+export type CreateResourceWebinarUnlockIntentInput = {
+  businessId: string;
+  userId: string;
+  eventId: string;
+  eventName: string;
+  amount: number;
+  apiBaseUrl: string;
+};
+
+export type CreateResourceBlogUnlockIntentInput = {
+  businessId: string;
+  userId: string;
+  articleId: string;
+  articleTitle: string;
+  amount: number;
   apiBaseUrl: string;
 };
 

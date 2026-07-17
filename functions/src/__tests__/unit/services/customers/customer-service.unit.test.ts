@@ -73,19 +73,26 @@ describe("CustomerService Unit Tests", () => {
         .spyOn(CustomerService, "getCustomer")
         .mockResolvedValue(mockCustomer as any);
 
-      // Mock transactions snapshot
+      // Mock transactions snapshot — balanceDue only counts fulfilled unpaid/partial
+      // receivables (see isUnpaidReceivableTransaction).
       const mockTransactions = [
         {
+          id: "tx-1",
           data: () => ({
-            type: "refill",
+            type: "delivery",
+            deliveryStatus: "completed",
+            paymentStatus: "partial",
             totalAmount: 100,
             balanceDue: 20,
             scheduledAt: { toDate: () => new Date("2024-05-01") },
           }),
         },
         {
+          id: "tx-2",
           data: () => ({
-            type: "refill",
+            type: "delivery",
+            deliveryStatus: "completed",
+            paymentStatus: "paid",
             totalAmount: 150,
             balanceDue: 0,
             scheduledAt: { toDate: () => new Date("2024-05-10") },

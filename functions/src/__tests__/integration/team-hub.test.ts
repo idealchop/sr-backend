@@ -42,7 +42,7 @@ vi.mock("../../config/firebase-admin", () => ({
 }));
 
 vi.mock("../../services/observability/logging/logger", () => ({
-  logger: { info: vi.fn(), error: vi.fn() },
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
   logAuditEvent: vi.fn().mockResolvedValue({}),
 }));
 
@@ -95,17 +95,24 @@ describe("Team Hub API Endpoints", () => {
       expect(res.body.error).toMatch(/Starter plan/i);
     });
 
-    it("should return 403 for trial period", async () => {
+    it("should allow Team Hub during Scale trial", async () => {
       (SubscriptionService.getSubscriptionStatus as any).mockResolvedValue({
-        planCode: "premium",
+        planCode: "scale",
         billingCycle: "trial",
         status: "active",
+      });
+      (getTeamHubOverview as any).mockResolvedValue({
+        members: [],
+        pendingInvites: [],
+        recordOnlyRiders: [],
+        assignableRoles: ["admin", "rider"],
+        staffLimit: 5,
+        currentStaffCount: 0,
       });
 
       const res = await request(app).get("/business/test-biz/team");
 
-      expect(res.status).toBe(403);
-      expect(res.body.error).toMatch(/trial period/i);
+      expect(res.status).toBe(200);
     });
 
     it("should return 403 for inactive subscriptions", async () => {

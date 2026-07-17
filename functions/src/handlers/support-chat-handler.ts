@@ -24,20 +24,8 @@ function mapError(res: Response, e: unknown): void {
       .status(409)
       .json({ error: "This support session is already resolved." });
     return;
-  case "SESSION_ESCALATED":
-    res
-      .status(409)
-      .json({ error: "Session escalated to human support. Use live chat." });
-    return;
   case "SESSION_NOT_AI_ACTIVE":
     res.status(409).json({ error: "Session is not in AI mode." });
-    return;
-  case "LIVE_CHAT_NOT_AVAILABLE":
-    res.status(403).json({
-      error:
-        "Human agent chat is available on Grow, Scale, and Enterprise plans " +
-        "(Scale trial includes agent chat). Upgrade to unlock live help.",
-    });
     return;
   default:
     logger.error("support-chat-handler", e);
@@ -178,31 +166,6 @@ export const postSupportSatisfaction = async (req: Request, res: Response) => {
       },
     );
     res.json({ data: result });
-  } catch (e) {
-    mapError(res, e);
-  }
-};
-
-// eslint-disable-next-line valid-jsdoc
-// eslint-disable-next-line valid-jsdoc
-/**
- * POST /business/:businessId/support/session/escalate
- */
-export const postSupportEscalate = async (req: Request, res: Response) => {
-  const { businessId } = req.params;
-  const user = (req as { user?: { uid: string } }).user;
-  const { sessionId } = req.body as { sessionId?: string };
-  if (!businessId || !user?.uid || !sessionId) {
-    res.status(400).json({ error: "sessionId is required" });
-    return;
-  }
-  try {
-    const session = await SupportChatService.escalateToHuman(
-      businessId,
-      sessionId,
-      user.uid,
-    );
-    res.json({ data: { session } });
   } catch (e) {
     mapError(res, e);
   }

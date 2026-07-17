@@ -557,10 +557,13 @@ export const pauseTrialSubscription = async (req: Request, res: Response) => {
     if (!hasAccess || role !== "owner") {
       return res.status(403).json({ error: "Forbidden" });
     }
+    if (!user?.uid) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
 
     const result = await TrialLifecycleService.pauseTrialIfRunning(
       businessId,
-      user!.uid,
+      user.uid,
     );
     return res.json({ data: result });
   } catch (error: unknown) {

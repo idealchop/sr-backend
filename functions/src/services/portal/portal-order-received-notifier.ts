@@ -4,6 +4,7 @@ import { brevo, getBrevoApi } from "../../utils/brevo";
 import { resolveAppBaseUrlForEmail } from "../../utils/app-base-url";
 import { buildPortalOrderReceivedEmail } from "../../utils/portal-order-received-email-template";
 import { resolveBusinessEmailLogoUrl } from "../../utils/customer-email-branding";
+import { formatPhilippineDateTime } from "../../utils/philippine-datetime";
 import { maybeSendPortalOrderReceivedWebPush } from "./customer-web-push-notifier";
 import { CustomerService } from "../customers/customer-service";
 import type { RawSubmissionPayload, RawSubmissionType } from "./raw-submission-types";
@@ -30,17 +31,8 @@ function customerWantsOrderEmail(
 function formatScheduledLabel(payload: RawSubmissionPayload): string | undefined {
   const scheduled = payload.scheduledAt;
   if (typeof scheduled !== "string" || !scheduled.trim()) return undefined;
-  try {
-    const d = new Date(scheduled);
-    if (Number.isNaN(d.getTime())) return scheduled;
-    return d.toLocaleString("en-PH", {
-      timeZone: "Asia/Manila",
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  } catch {
-    return scheduled;
-  }
+  const formatted = formatPhilippineDateTime(scheduled);
+  return formatted === "—" ? scheduled : formatted;
 }
 
 function buildTrackUrl(

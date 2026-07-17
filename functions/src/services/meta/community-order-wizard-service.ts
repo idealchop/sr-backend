@@ -339,12 +339,12 @@ export async function maybeRestartCommunitySessionAfterInactivity(
 
   const key = sessionKey(contact);
   const session = await getCommunityMessengerSession(key);
-  if (sessionHasOrderProgress(session)) {
-    await saveCommunityPendingOrderIntent(contact, sessionToPendingIntent(session!));
+  if (session && sessionHasOrderProgress(session)) {
+    await saveCommunityPendingOrderIntent(contact, sessionToPendingIntent(session));
   }
   await clearCommunityMessengerSession(key);
   await replyCommunityWelcomeWithChoice(contact);
-  if (sessionHasOrderProgress(session)) {
+  if (session && sessionHasOrderProgress(session)) {
     await sendWizardMessage(
       contact,
       buildCommunityPendingOrderResumeHint(),

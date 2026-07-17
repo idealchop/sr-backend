@@ -55,7 +55,7 @@ function classifyJob(
   const day = scheduleDay(tx);
 
   const base = {
-    transactionId: tx.id!,
+    transactionId: tx.id || "",
     referenceId: tx.referenceId || tx.id || "—",
     customerName: tx.customerName || "Customer",
     type: tx.type as "delivery" | "collection",
@@ -65,6 +65,8 @@ function classifyJob(
     isTodo: false,
     isDoneToday: false,
   };
+
+  if (!tx.id) return null;
 
   if (DONE_STATUSES.has(s)) {
     const completionSource = tx.deliveredAt || tx.updatedAt;

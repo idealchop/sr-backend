@@ -8,6 +8,7 @@ import { ensureCustomerActiveForPortalAcceptance } from "./portal-customer-activ
 import { InventoryService } from "../inventory/inventory-service";
 import { logger } from "../observability/logging/logger";
 import { TransactionService } from "../transactions/transaction-service";
+import { derivePaymentFields } from "../transactions/payment-status";
 import {
   applyPortalCompletionTransactionPatch,
   buildPortalCompletionTransactionUpdates,
@@ -312,14 +313,10 @@ const submissionHandlers: Record<string, SubmissionHandler> = {
       payloadTotal > 0 ?
         payloadTotal :
         calculatedTotal;
-    const balanceDue = Math.max(0, declaredTotal - amountPaid);
-
-    let paymentStatus: any = "unpaid";
-    if (balanceDue <= 0 && declaredTotal > 0) {
-      paymentStatus = "paid";
-    } else if (amountPaid > 0) {
-      paymentStatus = "partial";
-    }
+    const { amountPaid: paid, balanceDue, paymentStatus } = derivePaymentFields(
+      declaredTotal,
+      amountPaid,
+    );
 
     const isWalkin = submission.payload.type === "walkin";
 
@@ -334,7 +331,7 @@ const submissionHandlers: Record<string, SubmissionHandler> = {
         items: invItems,
         collectionItems: isWalkin ? [] : collectionItems,
         totalAmount: declaredTotal,
-        amountPaid,
+        amountPaid: paid,
         balanceDue,
         paymentMethod: (pay?.method as any) || "cash",
         paymentStatus,

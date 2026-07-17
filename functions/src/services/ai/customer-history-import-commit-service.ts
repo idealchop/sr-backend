@@ -1,6 +1,7 @@
 import { logger } from "../observability/logging/logger";
 import { TransactionService } from "../transactions/transaction-service";
 import type { ExtractedCustomerHistoryRow } from "./customer-history-import-from-file-service";
+import { resolveImportedRowPayment } from "./imported-row-payment";
 
 function mapPaymentMethod(
   m?: string,
@@ -14,21 +15,7 @@ function resolvePayment(
   row: ExtractedCustomerHistoryRow,
   totalAmount: number,
 ): { amountPaid: number; paymentStatus: "paid" | "partial" | "unpaid" } {
-  if (row.paymentStatus === "paid") {
-    return { amountPaid: totalAmount, paymentStatus: "paid" };
-  }
-  if (row.paymentStatus === "partial") {
-    const half = Math.max(0, Math.round(totalAmount / 2));
-    return { amountPaid: half, paymentStatus: "partial" };
-  }
-  if (row.paymentStatus === "unpaid" || row.paymentMethod === "Not Paid") {
-    return { amountPaid: 0, paymentStatus: "unpaid" };
-  }
-  const delivered = row.deliveryStatus !== "pending";
-  if (delivered && totalAmount > 0) {
-    return { amountPaid: totalAmount, paymentStatus: "paid" };
-  }
-  return { amountPaid: 0, paymentStatus: totalAmount > 0 ? "unpaid" : "paid" };
+  return resolveImportedRowPayment(row, totalAmount);
 }
 
 export class CustomerHistoryImportCommitService {

@@ -49,6 +49,7 @@ export const postSubscriptionBillingLink = async (req: Request, res: Response) =
       businessId,
       user.uid,
       resolvePublicApiBase(req),
+      { update: req.body?.update === true },
     );
 
     if (result.alreadyLinked) {

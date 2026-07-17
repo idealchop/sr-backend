@@ -28,6 +28,12 @@ vi.mock("../../../handlers/analytics-handler", () => ({
     res.json({ route: "cohort-stats", businessId: req.params.businessId }),
   getRevenueTrendAnalytics: (req: express.Request, res: express.Response) =>
     res.json({ route: "revenue-trend", businessId: req.params.businessId }),
+  getDashboardAnalyticsSnapshot: (req: express.Request, res: express.Response) =>
+    res.json({ route: "dashboard-snapshot", businessId: req.params.businessId }),
+  getAnalyticsDailySum: (req: express.Request, res: express.Response) =>
+    res.json({ route: "daily-sum", businessId: req.params.businessId }),
+  postAnalyticsMaterialize: (req: express.Request, res: express.Response) =>
+    res.json({ route: "materialize", businessId: req.params.businessId }),
 }));
 
 import analyticsRoutes from "../../../routes/analytics-routes";
@@ -50,6 +56,8 @@ describe("analytics-routes", () => {
       "/debt-aging",
       "/cohort-stats",
       "/revenue-trend",
+      "/dashboard-snapshot",
+      "/daily-sum",
     ] as const;
 
     for (const endpoint of endpoints) {
@@ -57,5 +65,11 @@ describe("analytics-routes", () => {
       expect(res.status).toBe(200);
       expect(res.body.businessId).toBe(businessId);
     }
+
+    const postRes = await request(app)
+      .post(`/business/${businessId}/analytics/materialize`)
+      .send({ mode: "incremental" });
+    expect(postRes.status).toBe(200);
+    expect(postRes.body.businessId).toBe(businessId);
   });
 });

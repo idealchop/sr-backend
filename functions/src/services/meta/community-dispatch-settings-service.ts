@@ -75,8 +75,10 @@ export async function getCommunityDispatchSettings(
 
   const snap = await db.collection("businesses").doc(businessId).get();
   if (!snap.exists) return null;
+  const data = snap.data();
+  if (!data) return null;
   const planEligible = await isBusinessEligibleForCommunityMessenger(businessId);
-  return readSettingsFromDoc(snap.data()!, planEligible);
+  return readSettingsFromDoc(data, planEligible);
 }
 
 export type PatchCommunityDispatchSettingsInput = {
@@ -105,7 +107,8 @@ export async function patchCommunityDispatchSettings(
   const snap = await ref.get();
   if (!snap.exists) return { ok: false, code: "NOT_FOUND" };
 
-  const data = snap.data()!;
+  const data = snap.data();
+  if (!data) return { ok: false, code: "NOT_FOUND" };
   const planEligible = await isBusinessEligibleForCommunityMessenger(businessId);
   if (!planEligible) {
     return { ok: false, code: "PLAN_NOT_ELIGIBLE" };

@@ -167,20 +167,57 @@ export const getMockPaymentCheckout = async (req: Request, res: Response) => {
       token,
     );
 
+    const source = String(intent.source || "subscription");
+    const isResourceUnlock =
+      source === "resource_video" ||
+      source === "resource_webinar" ||
+      source === "resource_blog";
+
+    const resourceLabel =
+      source === "resource_blog" ?
+        "premium article" :
+        source === "resource_webinar" ?
+          "premium webinar" :
+          source === "resource_video" ?
+            "premium recording" :
+            "subscription";
+
     const linkPurpose =
       intent.checkoutPayload &&
       typeof intent.checkoutPayload === "object" &&
       String(intent.checkoutPayload.purpose || "") === "billing_link";
+
     const pageTitle = linkPurpose ?
       "SmartRefill link billing account" :
-      "SmartRefill subscription test payment";
+      isResourceUnlock ?
+        `SmartRefill ${resourceLabel} test payment` :
+        "SmartRefill subscription test payment";
     const pageHeading = linkPurpose ?
       "Link billing account (test)" :
-      "Test subscription checkout";
+      isResourceUnlock ?
+        `Unlock ${resourceLabel} (test)` :
+        "Test subscription checkout";
     const pageNote = linkPurpose ?
       "Emulator/dev only — simulates linking GCash/Maya for auto-renew." :
-      "Emulator/dev only — simulates a successful provider webhook.";
-    const submitLabel = linkPurpose ? "Simulate link account" : "Simulate payment";
+      isResourceUnlock ?
+        "Emulator/dev only — simulates a successful unlock webhook (same path as PayMongo)." :
+        "Emulator/dev only — simulates a successful provider webhook.";
+    const submitLabel = linkPurpose ?
+      "Simulate link account" :
+      isResourceUnlock ?
+        "Simulate unlock payment" :
+        "Simulate payment";
+
+    const detailLine = isResourceUnlock ?
+      `<p>Item: <strong>${
+        String(
+          intent.checkoutPayload?.articleTitle ||
+              intent.checkoutPayload?.eventName ||
+              intent.checkoutPayload?.videoName ||
+              resourceLabel,
+        )
+      }</strong></p>` :
+      `<p>Plan: <strong>${intent.targetPlanCode}</strong> (${intent.subscriptionAction})</p>`;
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -199,7 +236,7 @@ export const getMockPaymentCheckout = async (req: Request, res: Response) => {
 <body>
   <div class="card">
     <h1>${pageHeading}</h1>
-    <p>Plan: <strong>${intent.targetPlanCode}</strong> (${intent.subscriptionAction})</p>
+    ${detailLine}
     <p>Amount: <strong>₱${intent.amount.toFixed(2)}</strong></p>
     <p>${pageNote}</p>
     <form method="POST" action="">
@@ -240,10 +277,19 @@ export const getMockPaymentCheckout = async (req: Request, res: Response) => {
       );
     }
 
+    const successHeading = linkPurpose ?
+      "Billing account linked" :
+      isResourceUnlock ?
+        "Unlock payment recorded" :
+        "Subscription payment recorded";
+    const successHint = isResourceUnlock ?
+      "Close this tab and return to Resources — the article/recording should unlock after refresh." :
+      "Close this tab and refresh your plan page.";
+
     return res.type("html").send(
       `<!DOCTYPE html><html><body style="font-family:system-ui;max-width:420px;margin:2rem auto">
-      <h1>${linkPurpose ? "Billing account linked" : "Subscription payment recorded"}</h1>
-      <p>Status: <strong>${result.status}</strong>. Close this tab and refresh your plan page.</p>
+      <h1>${successHeading}</h1>
+      <p>Status: <strong>${result.status}</strong>. ${successHint}</p>
       </body></html>`,
     );
   } catch (err) {

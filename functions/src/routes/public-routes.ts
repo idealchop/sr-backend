@@ -6,13 +6,15 @@ import {
   getPortalCustomerContext,
   getPortalBusinessProfile,
   getQrPng,
-  postPortalSubmission,
-  trackOrder,
-  searchTrackOrders,
   cancelPortalOrder,
   patchPortalCustomerProfile,
   getContainerCustodyAgreementPdf,
 } from "../handlers/portal/portal-public-handler";
+import { postPortalSubmission } from "../handlers/portal/portal-submission-handler";
+import {
+  trackOrder,
+  searchTrackOrders,
+} from "../handlers/portal/portal-track-handler";
 import {
   getPublicPlantMaintenanceTasks,
   postPublicPlantMaintenanceComplete,
@@ -34,6 +36,15 @@ import {
   getMockPaymentCheckout,
   paymentProviderWebhook,
 } from "../handlers/payments/payment-intent-handler";
+import {
+  getPublicBlogEngagement,
+  getPublicResourceVideoById,
+  getPublicWebinarEvents,
+  getPublicWebinarRecordings,
+  getPublicWrsBlogById,
+  getPublicWrsBlogs,
+  getPublicWrsStories,
+} from "../handlers/public-resources-handler";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
 
 const router = express.Router(); // eslint-disable-line new-cap
@@ -57,6 +68,14 @@ const statementShareLimiter = rateLimit({
 const marketingLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 30,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  skip: (req) => req.method === "OPTIONS" || !!process.env.FUNCTIONS_EMULATOR,
+});
+
+const resourcesLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 120,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   skip: (req) => req.method === "OPTIONS" || !!process.env.FUNCTIONS_EMULATOR,
@@ -105,6 +124,23 @@ router.post(
   "/marketing/partner-application",
   marketingLimiter,
   postPartnerApplication,
+);
+
+/** Public Events & Training marketing catalogs (published + visibility:public). */
+router.get("/resources/wrs-stories", resourcesLimiter, getPublicWrsStories);
+router.get("/resources/webinars", resourcesLimiter, getPublicWebinarRecordings);
+router.get("/resources/webinar-events", resourcesLimiter, getPublicWebinarEvents);
+router.get("/resources/blogs", resourcesLimiter, getPublicWrsBlogs);
+router.get(
+  "/resources/blogs/:articleId/engagement",
+  resourcesLimiter,
+  getPublicBlogEngagement,
+);
+router.get("/resources/blogs/:idOrSlug", resourcesLimiter, getPublicWrsBlogById);
+router.get(
+  "/resources/videos/:videoId",
+  resourcesLimiter,
+  getPublicResourceVideoById,
 );
 
 router.get("/webhooks/meta/community", metaCommunityWebhook);

@@ -5,7 +5,7 @@ import {
   parseSubscriptionTimestamp,
 } from "./subscription-effective";
 
-const TRIAL_MS = 7 * 24 * 60 * 60 * 1000;
+const TRIAL_MS = 15 * 24 * 60 * 60 * 1000;
 
 function isScaleTrialRow(data: Record<string, unknown>): boolean {
   return (
@@ -60,7 +60,7 @@ export class TrialLifecycleService {
 
   /**
    * Pause an in-progress Scale trial (MIA). Remaining time can be resumed later
-   * until the original 7-day budget is consumed.
+   * until the original 15-day budget is consumed.
    */
   static async pauseTrialIfRunning(
     businessId: string,
@@ -87,7 +87,6 @@ export class TrialLifecycleService {
     );
     if (remainingMs <= 0) return { paused: false };
 
-    const meta = (data.metadata as Record<string, unknown> | undefined) ?? {};
     await trial.ref.update({
       "metadata.trialState": "paused",
       "metadata.trialRemainingMs": remainingMs,
@@ -106,7 +105,7 @@ export class TrialLifecycleService {
   }
 
   /**
-   * Resume a paused trial when the owner returns before the 7-day budget ends.
+   * Resume a paused trial when the owner returns before the 15-day budget ends.
    */
   static async resumeTrialIfPaused(businessId: string): Promise<boolean> {
     const rows = await fetchRecentSubscriptionRows(businessId);

@@ -46,6 +46,7 @@ vi.mock("sharp", () => {
 vi.mock("../../services/observability/logging/logger", () => ({
   logger: {
     info: vi.fn(),
+    warn: vi.fn(),
     error: vi.fn(),
   },
 }));

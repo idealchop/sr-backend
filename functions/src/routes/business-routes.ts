@@ -48,7 +48,7 @@ import {
   listCommunityInquiryThreadsHandler,
   postCommunityInquiryReplyHandler,
 } from "../handlers/community-inquiry-handler";
-import { validateBusinessAccess, requireBusinessOwner } from "../middleware/business-middleware";
+import { validateBusinessAccess } from "../middleware/business-middleware";
 import { getOfflineSnapshot } from "../handlers/offline-snapshot-handler";
 import {
   deleteRiderMessengerLink,
