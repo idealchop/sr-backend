@@ -669,3 +669,25 @@ export const changePassword = async (req: Request, res: Response) => {
       .json({ error: "Failed to update password", details: error.message });
   }
 };
+
+/**
+ * Cross-origin session handoff: verify a Firebase ID token and mint a custom token
+ * for signInWithCustomToken on the product app origin.
+ */
+export const postCustomToken = async (req: Request, res: Response) => {
+  const { idToken } = req.body ?? {};
+
+  if (!idToken || typeof idToken !== "string") {
+    res.status(400).json({ error: "idToken is required" });
+    return;
+  }
+
+  try {
+    const decoded = await auth.verifyIdToken(idToken);
+    const customToken = await auth.createCustomToken(decoded.uid);
+    res.json({ data: { customToken } });
+  } catch (error) {
+    logger.warn("postCustomToken failed", { error });
+    res.status(401).json({ error: "Invalid or expired token" });
+  }
+};

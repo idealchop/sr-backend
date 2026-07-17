@@ -10,6 +10,7 @@ import {
   updateAccount,
   changePassword,
   forgotPassword,
+  postCustomToken,
 } from "../handlers/auth-handler";
 import { postCompleteStaffOnboarding } from "../handlers/team-invite-public-handler";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
@@ -43,6 +44,7 @@ router.post(
 );
 router.post("/login", validateFirebaseIdToken, recordLoginEvent);
 router.post("/forgot-password", authLimiter, forgotPassword);
+router.post("/custom-token", authLimiter, postCustomToken);
 router.put("/account", validateFirebaseIdToken, updateAccount);
 router.put("/change-password", validateFirebaseIdToken, changePassword);
 router.post(
