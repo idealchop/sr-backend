@@ -1,5 +1,4 @@
 import { db, FieldValue } from "../../config/firebase-admin";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { logger } from "../observability/logging/logger";
 import { geminiGenerateJsonWithParts } from "../ai/gemini-multimodal";
 import type { GeminiContentPart } from "../ai/gemini-multimodal";
@@ -65,6 +64,7 @@ import {
   type SupportAiUsageSnapshot,
 } from "../../utils/support-ai-plan-limits";
 import { SupportAiUsageService } from "./support-ai-usage-service";
+import { notifyRiverAiBuddyTurn } from "../notifications/station-activity-notification-service";
 import {
   coerceToDate,
   manilaDateKey,
@@ -879,6 +879,35 @@ export class SupportChatService {
       businessId,
       limits,
     );
+
+    const promptForLog = trimmed || attachmentOnlyLabel;
+    logger.info("river_ai_buddy_turn", {
+      businessId,
+      userId,
+      sessionId,
+      resolutionSource: turn.resolutionSource || "gemini",
+      attachmentCount: sanitized.length,
+      promptPreview: promptForLog.slice(0, 160),
+      chatUsed: supportAiUsage.chatUsed,
+      chatMax: supportAiUsage.chatMax,
+    });
+    void notifyRiverAiBuddyTurn({
+      businessId,
+      userId,
+      sessionId,
+      prompt: promptForLog,
+      resolutionSource: turn.resolutionSource,
+      attachmentCount: sanitized.length,
+      chatUsed: supportAiUsage.chatUsed,
+      chatMax: supportAiUsage.chatMax,
+    }).catch((error) => {
+      logger.warn("river_ai_buddy activity feed notify failed", {
+        businessId,
+        sessionId,
+        error,
+      });
+    });
+
     return {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       session: serializeSession(sessionId, businessId, sessionDoc.data()!),

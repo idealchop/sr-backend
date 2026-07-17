@@ -272,8 +272,8 @@ const LIVE_CHAT_ACTIVE_STATUSES = new Set(["active", "grace_period"]);
 
 /**
  * Applies subscription state on top of plan catalog support flags.
- * Scale/Grow/Enterprise may include chat in plan limits, but trial and Starter
- * never get Brevo live chat.
+ * Grow / Scale / Enterprise (including Scale free trial) get Brevo live chat when
+ * the plan catalog enables it. Starter never does.
  * @param {object} input Plan support + active subscription row fields.
  * @return {PlanSupportAccess} Effective support access for the dashboard and APIs.
  */
@@ -289,15 +289,14 @@ export function resolveEffectiveSupportAccess(input: {
   const status = (input.status || "").toLowerCase();
   const isTrial = cycle === "trial" || status === "trial";
   const isStarter = code === "starter" || code === "free";
-  const isScaleTrial = isTrial && code === "scale";
-  const subscriptionActive = LIVE_CHAT_ACTIVE_STATUSES.has(status);
+  const subscriptionActive =
+    LIVE_CHAT_ACTIVE_STATUSES.has(status) || status === "trial";
 
   const chatEnabled =
     input.planSupport.chatEnabled &&
     subscriptionActive &&
     !isStarter &&
-    !input.isExpired &&
-    (!isTrial || isScaleTrial);
+    !input.isExpired;
 
   let level = input.planSupport.level;
   if (!chatEnabled) {

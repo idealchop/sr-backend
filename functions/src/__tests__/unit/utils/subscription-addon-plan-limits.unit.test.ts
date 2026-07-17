@@ -65,6 +65,22 @@ describe("resolveEffectiveSupportAccess", () => {
     expect(effective.level).toBe("chat");
   });
 
+  it("enables agent chat for Grow trial when plan support allows it", () => {
+    const planSupport = parsePlanSupportAccess(
+      { support: SUBSCRIPTION_PLAN_LIMITATION_PATCHES.grow.support },
+      "grow",
+    );
+    const effective = resolveEffectiveSupportAccess({
+      planSupport,
+      planCode: "grow",
+      billingCycle: "trial",
+      status: "active",
+      isExpired: false,
+    });
+    expect(effective.chatEnabled).toBe(true);
+    expect(effective.level).toBe("chat");
+  });
+
   it("disables chat on Starter free mode", () => {
     const planSupport = parsePlanSupportAccess(null, "starter");
     const effective = resolveEffectiveSupportAccess({

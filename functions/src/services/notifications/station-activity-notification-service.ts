@@ -1029,6 +1029,79 @@ export async function notifyInventoryStockAdjusted(
   });
 }
 
+const RIVER_AI_PROMPT_PREVIEW_MAX = 160;
+
+function truncatePromptPreview(text: string, max = RIVER_AI_PROMPT_PREVIEW_MAX): string {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (!cleaned) return "(attachment only)";
+  if (cleaned.length <= max) return cleaned;
+  return `${cleaned.slice(0, max - 1)}…`;
+}
+
+function riverAiResolutionLabel(source: string | undefined): string {
+  switch (source) {
+  case "greeting":
+    return "greeting";
+  case "knowledge_cache":
+    return "FAQ / saved answer";
+  case "deterministic_howto":
+    return "quick how-to";
+  case "human_request":
+    return "helpdesk pointer";
+  case "workspace":
+    return "station data";
+  case "gemini":
+  default:
+    return "River AI";
+  }
+}
+
+/**
+ * Activity feed + ops trail when an owner uses River AI Buddy.
+ * Shows who prompted, a short prompt preview, and how the turn was resolved.
+ */
+export async function notifyRiverAiBuddyTurn(input: {
+  businessId: string;
+  userId: string;
+  sessionId: string;
+  prompt: string;
+  resolutionSource?: string;
+  attachmentCount?: number;
+  chatUsed?: number;
+  chatMax?: number | null;
+}): Promise<void> {
+  const actor = await resolveActorLabel(input.businessId, input.userId);
+  const promptPreview = truncatePromptPreview(input.prompt);
+  const via = riverAiResolutionLabel(input.resolutionSource);
+  const attachments =
+    input.attachmentCount && input.attachmentCount > 0 ?
+      ` · ${input.attachmentCount} attachment${input.attachmentCount === 1 ? "" : "s"}` :
+      "";
+  const usage =
+    typeof input.chatUsed === "number" && input.chatMax != null ?
+      ` · ${input.chatUsed}/${input.chatMax} chats used` :
+      typeof input.chatUsed === "number" ?
+        ` · ${input.chatUsed} chats used` :
+        "";
+
+  await notifyManagement(input.businessId, {
+    title: "River AI Buddy",
+    message: `${actor} asked: “${promptPreview}” (${via}${attachments}${usage}).`,
+    type: "info",
+    metadata: {
+      reviewTab: "dashboard",
+      category: "river_ai_buddy",
+      sessionId: input.sessionId,
+      promptPreview,
+      resolutionSource: input.resolutionSource || "gemini",
+      attachmentCount: input.attachmentCount ?? 0,
+      actorUserId: input.userId,
+      chatUsed: input.chatUsed,
+      chatMax: input.chatMax ?? null,
+    },
+  });
+}
+
 /** @deprecated Prefer notifyManagement — kept for gradual migration.
  * @param {string} businessId Business id.
  * @param {Omit<NotificationPayload, "userId" | "businessId">} payload Notification copy.
