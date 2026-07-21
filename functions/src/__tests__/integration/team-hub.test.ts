@@ -23,6 +23,7 @@ vi.mock("../../services/subscriptions/subscription-service", () => ({
 vi.mock("../../services/team/team-hub-service", () => ({
   getTeamHubOverview: vi.fn(),
   createTeamInvite: vi.fn(),
+  createProvisionedTeamMemberForHub: vi.fn(),
   createRecordOnlyRiderForHub: vi.fn(),
   deleteRecordOnlyRiderFromHub: vi.fn(),
   setTeamMemberActiveStatus: vi.fn(),
@@ -50,6 +51,7 @@ import { SubscriptionService } from "../../services/subscriptions/subscription-s
 import {
   getTeamHubOverview,
   createTeamInvite,
+  createProvisionedTeamMemberForHub,
   createRecordOnlyRiderForHub,
   deleteRecordOnlyRiderFromHub,
   removeTeamMember,
@@ -259,6 +261,52 @@ describe("Team Hub API Endpoints", () => {
 
       expect(res.status).toBe(409);
       expect(res.body.error).toBe("User is already a member");
+    });
+  });
+
+  describe("POST /business/:businessId/team/accounts", () => {
+    it("should provision a Firebase Auth account and member", async () => {
+      (createProvisionedTeamMemberForHub as any).mockResolvedValue({
+        ok: true,
+        member: {
+          id: "uid-new",
+          userId: "uid-new",
+          name: "Juan",
+          email: "juan@test.com",
+          role: "rider",
+          isActive: true,
+        },
+      });
+
+      const res = await request(app)
+        .post("/business/test-biz/team/accounts")
+        .send({
+          email: "juan@test.com",
+          password: "secret123",
+          name: "Juan",
+          role: "rider",
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.id).toBe("uid-new");
+      expect(createProvisionedTeamMemberForHub).toHaveBeenCalledWith(
+        expect.objectContaining({
+          businessId: "test-biz",
+          email: "juan@test.com",
+          password: "secret123",
+          name: "Juan",
+          role: "rider",
+        }),
+      );
+    });
+
+    it("should return 400 when password is missing", async () => {
+      const res = await request(app)
+        .post("/business/test-biz/team/accounts")
+        .send({ email: "juan@test.com", role: "rider" });
+
+      expect(res.status).toBe(400);
+      expect(createProvisionedTeamMemberForHub).not.toHaveBeenCalled();
     });
   });
 

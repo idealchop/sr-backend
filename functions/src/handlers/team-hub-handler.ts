@@ -7,6 +7,7 @@ import {
 import {
   createTeamInvite,
   createRecordOnlyRiderForHub,
+  createProvisionedTeamMemberForHub,
   deleteRecordOnlyRiderFromHub,
   deleteTeamHubInvite,
   getTeamHubOverview,
@@ -376,6 +377,75 @@ export const postTeamRecord = async (req: Request, res: Response) => {
   } catch (e) {
     logger.error("postTeamRecord failed", e);
     res.status(500).json({ error: "Failed to save record" });
+  }
+};
+
+/**
+ * POST /business/:businessId/team/accounts — owner creates Firebase Auth + member.
+ * @param {Request} req The express request object.
+ * @param {Response} res The express response object.
+ * @return {Promise<void>}
+ */
+export const postTeamAccount = async (req: Request, res: Response) => {
+  const { businessId } = req.params;
+  const user = (
+    req as { user?: { uid: string; email?: string; name?: string } }
+  ).user;
+  if (!businessId || !user?.uid) {
+    res.status(400).json({ error: "Invalid request" });
+    return;
+  }
+
+  const { email, password, name, role } = req.body as {
+    email?: string;
+    password?: string;
+    name?: string;
+    role?: string;
+  };
+
+  if (!email || typeof email !== "string") {
+    res.status(400).json({ error: "email is required" });
+    return;
+  }
+  if (!password || typeof password !== "string") {
+    res.status(400).json({ error: "password is required" });
+    return;
+  }
+
+  const raw = String(role ?? "")
+    .trim()
+    .toLowerCase();
+  if (raw !== "admin" && raw !== "rider" && raw !== "staff") {
+    res.status(400).json({ error: "role must be \"admin\" or \"rider\"" });
+    return;
+  }
+
+  const normalizedRole = normalizeSeatRole(role);
+  try {
+    const result = await createProvisionedTeamMemberForHub({
+      businessId,
+      email,
+      password,
+      name: typeof name === "string" ? name : undefined,
+      role: normalizedRole,
+    });
+
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.message });
+      return;
+    }
+
+    await logAuditEvent(
+      "TEAM_MEMBER_ACCOUNT_PROVISIONED",
+      { businessId, userId: user.uid, memberId: result.member.id },
+      null,
+      { email: result.member.email, role: normalizedRole },
+    );
+
+    res.status(201).json({ success: true, data: result.member });
+  } catch (e) {
+    logger.error("postTeamAccount failed", e);
+    res.status(500).json({ error: "Failed to create team member account" });
   }
 };
 

@@ -8,6 +8,7 @@ import {
   postResendTeamInvite,
   postTeamInvite,
   postTeamRecord,
+  postTeamAccount,
 } from "../handlers/team-hub-handler";
 import {
   deleteTeamChatMessageHandler,
@@ -39,6 +40,7 @@ router.get("/", requireBusinessOwner, getTeamHub);
 router.patch("/members/:memberId", requireBusinessOwner, patchTeamMemberStatus);
 router.delete("/members/:memberId", requireBusinessOwner, deleteTeamMember);
 router.post("/invites", requireBusinessOwner, postTeamInvite);
+router.post("/accounts", requireBusinessOwner, postTeamAccount);
 router.post("/records", requireBusinessOwner, postTeamRecord);
 router.post(
   "/invites/:inviteId/resend",

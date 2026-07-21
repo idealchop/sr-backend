@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import { logger } from "../observability/logging/logger";
-import { db, FieldValue, Timestamp } from "../../config/firebase-admin";
+import { auth, db, FieldValue, Timestamp } from "../../config/firebase-admin";
 import { brevo, getBrevoApi } from "../../utils/brevo";
 import { getTeamWorkspaceInviteEmail } from "../../utils/email-templates";
 import { resolveAppBaseUrlForEmail } from "../../utils/app-base-url";
@@ -21,6 +21,7 @@ import {
   countActiveStaffSeatsForBusiness,
   TEAM_DIRECTORY_RECORDS,
 } from "./staff-seat-usage";
+import { mergeGrantedSmartrefillAppAccess } from "./workspace-member-access";
 
 export type TeamMemberRole = "owner" | "admin" | "staff" | "rider" | string;
 
@@ -611,6 +612,236 @@ export async function createRecordOnlyRiderForHub(params: {
     return {
       ok: false,
       message: "Could not save the directory record.",
+      status: 500,
+    };
+  }
+}
+
+const MIN_PROVISIONED_PASSWORD_LENGTH = 6;
+
+/**
+ * Owner-provisioned Firebase Auth account + workspace member (no email invite).
+ */
+export async function createProvisionedTeamMemberForHub(params: {
+  businessId: string;
+  email: string;
+  password: string;
+  name?: string;
+  role: TeamSeatRole;
+}): Promise<
+  | { ok: true; member: TeamMemberDto }
+  | { ok: false; message: string; status: number }
+> {
+  const email = normalizeEmail(params.email);
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return {
+      ok: false,
+      message: "A valid work email is required.",
+      status: 400,
+    };
+  }
+
+  const password = params.password;
+  if (typeof password !== "string" || password.length < MIN_PROVISIONED_PASSWORD_LENGTH) {
+    return {
+      ok: false,
+      message: `Password must be at least ${MIN_PROVISIONED_PASSWORD_LENGTH} characters.`,
+      status: 400,
+    };
+  }
+
+  const sub = await SubscriptionService.getSubscriptionStatus(params.businessId);
+  const gate = assertTeamHubEligible(sub);
+  if (gate) {
+    return { ok: false, message: gate, status: 403 };
+  }
+
+  const seatRole = normalizeSeatRole(params.role);
+  const eligibility = await evaluateMemberActivationEligibility(
+    params.businessId,
+    seatRole,
+  );
+  if (!eligibility.canActivate) {
+    return {
+      ok: false,
+      message: eligibility.reason || "Staff seat limit reached.",
+      status: 400,
+    };
+  }
+
+  const businessRef = db.collection("businesses").doc(params.businessId);
+  const membersSnap = await businessRef.collection("members").get();
+  const duplicateMember = membersSnap.docs.some(
+    (d) => normalizeEmail((d.data().email as string) || "") === email,
+  );
+  if (duplicateMember) {
+    return {
+      ok: false,
+      message: "That email already belongs to a workspace member.",
+      status: 400,
+    };
+  }
+
+  try {
+    const existingAuth = await auth.getUserByEmail(email);
+    if (existingAuth?.uid) {
+      return {
+        ok: false,
+        message:
+          "This email already has a Smart Refill account. Use Send invitation instead.",
+        status: 409,
+      };
+    }
+  } catch (err: unknown) {
+    const code =
+      err && typeof err === "object" && "code" in err ?
+        String((err as { code?: string }).code) :
+        "";
+    if (code !== "auth/user-not-found") {
+      logger.error("createProvisionedTeamMemberForHub getUserByEmail failed", err);
+      return {
+        ok: false,
+        message: "Could not verify this email. Please try again.",
+        status: 500,
+      };
+    }
+  }
+
+  const displayName =
+    (params.name || "").trim() || email.split("@")[0] || "Team member";
+
+  let uid: string | null = null;
+  try {
+    const userRecord = await auth.createUser({
+      email,
+      password,
+      displayName,
+      emailVerified: false,
+    });
+    uid = userRecord.uid;
+
+    const memberRef = businessRef.collection("members").doc(uid);
+    const userRef = db.collection("users").doc(uid);
+
+    const batch = db.batch();
+    batch.set(memberRef, {
+      userId: uid,
+      email,
+      name: displayName,
+      displayName,
+      role: seatRole,
+      isActive: true,
+      provisionedByOwner: true,
+      joinedAt: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    batch.set(
+      userRef,
+      {
+        uid,
+        email,
+        displayName,
+        onboardingComplete: false,
+        appAccess: mergeGrantedSmartrefillAppAccess(undefined, {
+          businessId: params.businessId,
+          role: "staff",
+          onboardingComplete: false,
+        }),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    await batch.commit();
+
+    if (seatRole === "rider") {
+      try {
+        const ridersSnap = await businessRef
+          .collection("riders")
+          .where("userId", "==", uid)
+          .limit(1)
+          .get();
+
+        if (ridersSnap.empty) {
+          await RiderService.addRider(params.businessId, {
+            userId: uid,
+            name: displayName,
+            phone: "",
+            status: "active",
+            vehicle: "Fleet rider",
+          });
+        }
+      } catch (err) {
+        logger.warn("Rider profile link failed after provisioned account", {
+          businessId: params.businessId,
+          uid,
+          err,
+        });
+      }
+    }
+
+    logger.info("Provisioned team member account", {
+      businessId: params.businessId,
+      uid,
+      seatRole,
+    });
+
+    return {
+      ok: true,
+      member: {
+        id: uid,
+        userId: uid,
+        name: displayName,
+        email,
+        role: seatRole,
+        isActive: true,
+      },
+    };
+  } catch (err: unknown) {
+    if (uid) {
+      try {
+        await auth.deleteUser(uid);
+      } catch (deleteErr) {
+        logger.warn("Rollback deleteUser failed after provision error", {
+          uid,
+          deleteErr,
+        });
+      }
+    }
+
+    const code =
+      err && typeof err === "object" && "code" in err ?
+        String((err as { code?: string }).code) :
+        "";
+    if (code === "auth/email-already-exists") {
+      return {
+        ok: false,
+        message:
+          "This email already has a Smart Refill account. Use Send invitation instead.",
+        status: 409,
+      };
+    }
+    if (code === "auth/invalid-email") {
+      return {
+        ok: false,
+        message: "A valid work email is required.",
+        status: 400,
+      };
+    }
+    if (code === "auth/weak-password") {
+      return {
+        ok: false,
+        message: `Password must be at least ${MIN_PROVISIONED_PASSWORD_LENGTH} characters.`,
+        status: 400,
+      };
+    }
+
+    logger.error("createProvisionedTeamMemberForHub failed", err);
+    return {
+      ok: false,
+      message: "Could not create this account. Please try again.",
       status: 500,
     };
   }
