@@ -55,7 +55,9 @@ function buildOnboardingBusinessPayload(
     location: body.location || {},
     waterTypes: body.config?.waterTypes || [],
     inventoryCategories: body.config?.inventoryItems || [],
-    expenseCategories: body.config?.expenseCategories || [],
+    expenseCategories: body.config?.expenseCategories?.length
+      ? body.config.expenseCategories
+      : [{ name: "Salary", description: "Payroll and staff pay" }],
     usageGoals: body.config?.usageGoals || [],
     onboardingComplete: true,
     ownerId,
