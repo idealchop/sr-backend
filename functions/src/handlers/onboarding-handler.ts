@@ -34,6 +34,7 @@ function buildOnboardingBusinessPayload(
   user: { email?: string },
   body: {
     logo?: string;
+    banner?: string;
     businessName: string;
     email?: string;
     phone?: string;
@@ -49,6 +50,7 @@ function buildOnboardingBusinessPayload(
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     logo: body.logo || "",
+    banner: body.banner || "",
     name: body.businessName,
     email: body.email || user.email || "",
     phone: body.phone || "",
@@ -80,7 +82,7 @@ export const completeOnboarding = async (req: Request, res: Response) => {
     email?: string;
     name?: string;
   };
-  const { logo, businessName, email, phone, location, config } = req.body;
+  const { logo, banner, businessName, email, phone, location, config } = req.body;
 
   if (!businessName) {
     res.status(400).json({ error: "Business name is required" });
@@ -109,7 +111,7 @@ export const completeOnboarding = async (req: Request, res: Response) => {
     const onboardingPayload = buildOnboardingBusinessPayload(
       user.uid,
       user,
-      { logo, businessName, email, phone, location, config },
+      { logo, banner, businessName, email, phone, location, config },
       created,
     );
     if (!existingBusiness.data()?.workspaceOnboardedAt) {

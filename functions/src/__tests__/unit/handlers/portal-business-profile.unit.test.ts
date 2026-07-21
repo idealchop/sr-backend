@@ -38,6 +38,7 @@ describe("getPortalBusinessProfile", () => {
     vi.mocked(PortalBusinessProfileService.getPublicProfile).mockResolvedValue({
       businessName: "Aqua Station",
       businessLogo: null,
+      businessBanner: null,
       phone: "09171234567",
       address: "BF Homes",
       location: { latitude: 14.4, longitude: 121.0 },

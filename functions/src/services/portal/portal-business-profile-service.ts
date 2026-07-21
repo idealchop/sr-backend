@@ -18,6 +18,7 @@ export type PortalBusinessProfileFeedbackItem = {
 export type PortalBusinessProfileResult = {
   businessName: string;
   businessLogo: string | null;
+  businessBanner: string | null;
   phone: string | null;
   address: string | null;
   location: { latitude: number; longitude: number } | null;
@@ -138,6 +139,10 @@ export class PortalBusinessProfileService {
     return {
       businessName: String(biz?.businessName || biz?.name || "Your water station"),
       businessLogo: typeof biz?.logo === "string" ? biz.logo : null,
+      businessBanner:
+        typeof biz?.banner === "string" && biz.banner.trim() ?
+          biz.banner.trim() :
+          null,
       phone: typeof biz?.phone === "string" && biz.phone.trim() ? biz.phone.trim() : null,
       address,
       location,

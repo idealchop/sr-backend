@@ -192,6 +192,9 @@ export const getPortalCustomerContext = async (req: Request, res: Response) => {
         phone: customer?.phone || "",
         businessName: biz?.businessName || biz?.name || "Your water station",
         businessLogo: typeof biz?.logo === "string" ? biz.logo : null,
+        businessBanner: typeof biz?.banner === "string" && biz.banner.trim() ?
+          biz.banner.trim() :
+          null,
         businessLocation,
         address: customer?.address || "",
         latitude: customer?.latitude,

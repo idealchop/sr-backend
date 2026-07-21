@@ -1395,6 +1395,7 @@ export const openApiSpec = {
                       properties: {
                         businessName: { type: "string" },
                         businessLogo: { type: "string", nullable: true },
+                        businessBanner: { type: "string", nullable: true },
                         phone: { type: "string", nullable: true },
                         address: { type: "string", nullable: true },
                         location: {
