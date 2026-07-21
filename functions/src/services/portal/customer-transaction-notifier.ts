@@ -285,7 +285,10 @@ export async function maybeNotifyCustomerOnTransactionStatus(args: {
             recipientCount: 1,
             successCount: ok ? 1 : 0,
             failureCount: ok ? 0 : 1,
-            detail: customerDeliveryDetail({ event, referenceId }, { customerId, toEmail: customer.email }),
+            detail: customerDeliveryDetail(
+              { event, referenceId },
+              { customerId, toEmail: customer.email },
+            ),
           });
         } else {
           const tpl = buildCustomerTxnStatusEmail({
@@ -331,7 +334,10 @@ export async function maybeNotifyCustomerOnTransactionStatus(args: {
               audience: "customer",
               recipientCount: 1,
               successCount: 1,
-              detail: customerDeliveryDetail({ event, referenceId }, { customerId, toEmail: customer.email }),
+              detail: customerDeliveryDetail(
+                { event, referenceId },
+                { customerId, toEmail: customer.email },
+              ),
             });
           }
         }
@@ -349,7 +355,10 @@ export async function maybeNotifyCustomerOnTransactionStatus(args: {
           audience: "customer",
           recipientCount: 1,
           failureCount: 1,
-          detail: customerDeliveryDetail({ event, referenceId }, { customerId, toEmail: customer.email }),
+          detail: customerDeliveryDetail(
+            { event, referenceId },
+            { customerId, toEmail: customer.email },
+          ),
         });
       }
     }
@@ -373,7 +382,10 @@ export async function maybeNotifyCustomerOnTransactionStatus(args: {
         audience: "customer",
         recipientCount: 1,
         successCount: smsResult.sent ? 1 : 0,
-        detail: customerDeliveryDetail({ event, referenceId }, { customerId, toEmail: customer.email }),
+        detail: customerDeliveryDetail(
+          { event, referenceId },
+          { customerId, toEmail: customer.email },
+        ),
       });
     }
   }
@@ -505,7 +517,10 @@ export async function maybeNotifyCustomerOnPaymentUpdate(args: {
         audience: "customer",
         recipientCount: 1,
         successCount: 1,
-        detail: customerDeliveryDetail({ eventKey: paymentUpdate.eventKey, referenceId }, { customerId, toEmail: customer.email }),
+        detail: customerDeliveryDetail(
+          { eventKey: paymentUpdate.eventKey, referenceId },
+          { customerId, toEmail: customer.email },
+        ),
       });
       return { sent: true };
     }
@@ -535,7 +550,10 @@ export async function maybeNotifyCustomerOnPaymentUpdate(args: {
       audience: "customer",
       recipientCount: 1,
       successCount: 1,
-      detail: customerDeliveryDetail({ eventKey: paymentUpdate.eventKey, referenceId }, { customerId, toEmail: customer.email }),
+      detail: customerDeliveryDetail(
+        { eventKey: paymentUpdate.eventKey, referenceId },
+        { customerId, toEmail: customer.email },
+      ),
     });
     return { sent: true };
   } catch (err) {
@@ -552,7 +570,10 @@ export async function maybeNotifyCustomerOnPaymentUpdate(args: {
       audience: "customer",
       recipientCount: 1,
       failureCount: 1,
-      detail: customerDeliveryDetail({ eventKey: paymentUpdate.eventKey, referenceId }, { customerId, toEmail: customer.email }),
+      detail: customerDeliveryDetail(
+        { eventKey: paymentUpdate.eventKey, referenceId },
+        { customerId, toEmail: customer.email },
+      ),
     });
     return { sent: false };
   }

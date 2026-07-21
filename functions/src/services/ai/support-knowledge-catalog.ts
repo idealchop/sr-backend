@@ -250,7 +250,11 @@ const KNOWLEDGE_PHRASE_BOOSTS: Array<{ re: RegExp; boost: number }> = [
   { re: /\b(qr\s*portal|customer\s+portal|portal\s+order)\b/i, boost: 6 },
   { re: /\b(gcash|maya|auto-?renew|subscription|magbayad\s+ng\s+plan)\b/i, boost: 6 },
   { re: /\b(offline|brownout|walang\s+signal|sync\s+queue)\b/i, boost: 6 },
-  { re: /\b(inventory|stocks?|containers?)\b.{0,16}\b(add|setup|mag-?add)\b|\b(add|setup)\b.{0,16}\binventory\b/i, boost: 6 },
+  {
+    re: /\b(inventory|stocks?|containers?)\b.{0,16}\b(add|setup|mag-?add)\b/i,
+    boost: 6,
+  },
+  { re: /\b(add|setup)\b.{0,16}\binventory\b/i, boost: 6 },
   { re: /\b(walk-?in|record\s+order)\b/i, boost: 5 },
   { re: /\b(my\s+area|rider\s+app)\b/i, boost: 5 },
 ];

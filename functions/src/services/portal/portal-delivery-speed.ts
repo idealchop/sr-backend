@@ -40,7 +40,7 @@ export function clampPortalMoney(value: unknown, max = 50_000): number {
  * Resolve tip + delivery speed extras from a portal payment payload.
  * Tip is rider-only (not station commission). Speed fee is station revenue.
  * @param {Record<string, unknown> | null | undefined} payload
- * @return {{ deliverySpeed: PortalDeliverySpeed, deliverySpeedFee: number, riderTipAmount: number }}
+ * @return {Object} deliverySpeed, deliverySpeedFee, riderTipAmount
  */
 export function resolvePortalPaymentExtras(payload: {
   deliverySpeed?: unknown;
@@ -58,7 +58,7 @@ export function resolvePortalPaymentExtras(payload: {
   const deliverySpeedFee =
     deliverySpeed === "standard" ? 0 :
       rawFee > 0 ? Math.min(rawFee, expectedFee) :
-      expectedFee;
+        expectedFee;
   const riderTipAmount = clampPortalMoney(payload?.riderTipAmount, 500);
   return { deliverySpeed, deliverySpeedFee, riderTipAmount };
 }
