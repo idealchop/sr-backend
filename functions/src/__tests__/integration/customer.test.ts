@@ -222,6 +222,7 @@ describe("Customer API Endpoints", () => {
           name: "Jane Smith",
           email: "jane@example.com",
           phone: "1234567890",
+          containerPolicy: "wrs_rotation",
           pricing: {
             "alkaline-id": 50,
             "purified-id": 35,
@@ -270,6 +271,7 @@ describe("Customer API Endpoints", () => {
       const res = await request(app)
         .patch("/business/test-id/customers/test-customer-id")
         .send({
+          containerPolicy: "wrs_rotation",
           possession: {
             "slim-5g": { quantity: 5 },
           },
