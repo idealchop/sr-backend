@@ -105,6 +105,7 @@ test.describe("Customer Management Lifecycle (BDD)", () => {
         data: {
           name: "Inventory Test User",
           email: "inv@test.com",
+          containerPolicy: "wrs_rotation",
           possession: {
             [itemId]: { quantity: 5, itemName: "Slim Container (BDD)" },
           },
