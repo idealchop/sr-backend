@@ -15,6 +15,7 @@ import {
   resolvePortalCompletionTransaction,
 } from "./portal-transaction-completion";
 import {
+  assertPortalAdvancePaymentFullAmount,
   buildPortalBalancePaymentUpdates,
   maybeDeleteRawSubmissionsAfterPaidComplete,
   maybeSendAdvancePaymentReceiptEmail,
@@ -241,12 +242,21 @@ const submissionHandlers: Record<string, SubmissionHandler> = {
           r.unitPrice >= 0 ?
             r.unitPrice :
             await resolveWaterPrice(businessId, r.type, customer);
+        const deliveredQty = Math.max(0, Math.floor(Number(r.qty) || 0));
+        const rawPaid = (r as { paidQuantity?: number }).paidQuantity;
+        const paidQty =
+          typeof rawPaid === "number" &&
+          Number.isFinite(rawPaid) &&
+          rawPaid >= 0 ?
+            Math.floor(rawPaid) :
+            deliveredQty;
         return {
           waterTypeId: r.type,
           name: r.type,
-          quantity: r.qty,
+          quantity: deliveredQty,
+          ...(paidQty !== deliveredQty ? { paidQuantity: paidQty } : {}),
           unitPrice: adjustedUnit,
-          subtotal: adjustedUnit * r.qty,
+          subtotal: adjustedUnit * paidQty,
         };
       }),
     );
@@ -431,37 +441,51 @@ const submissionHandlers: Record<string, SubmissionHandler> = {
   },
 
   PORTAL_PAY_BALANCE: async (businessId, submission, userId) => {
-    const { txDocId } = await resolvePortalBalancePaymentTransaction(
-      businessId,
-      submission.customerId || "",
-      submission.payload,
-    );
-    const latest = await TransactionService.getTransaction(businessId, txDocId);
+    const { txDocId, current: resolved } =
+      await resolvePortalBalancePaymentTransaction(
+        businessId,
+        submission.customerId || "",
+        submission.payload,
+        { allowAlreadyPaid: true },
+      );
+    const latest =
+      (await TransactionService.getTransaction(businessId, txDocId)) ||
+      resolved;
     if (!latest) {
       throw new Error("TX_NOT_FOUND");
     }
-    if (String(latest.paymentStatus || "").toLowerCase() === "paid") {
-      throw new Error("TX_ALREADY_PAID");
-    }
-    const updates = buildPortalBalancePaymentUpdates(
-      latest,
-      submission.payload,
-    );
-    await applyPortalCompletionTransactionPatch(
-      businessId,
-      txDocId,
-      updates,
-      userId,
-    );
-    const after = await TransactionService.getTransaction(businessId, txDocId);
-    if (after) {
-      await maybeSendAdvancePaymentReceiptEmail(
-        businessId,
-        submission,
+    const alreadyPaid =
+      String(latest.paymentStatus || "").toLowerCase() === "paid";
+
+    // Prior accept may have written payment then failed on post-commit/email.
+    // Skip re-patching when already paid so staff confirm can finish cleanly.
+    if (!alreadyPaid) {
+      assertPortalAdvancePaymentFullAmount(latest, submission.payload);
+      const updates = buildPortalBalancePaymentUpdates(
         latest,
-        after,
+        submission.payload,
       );
+      await applyPortalCompletionTransactionPatch(
+        businessId,
+        txDocId,
+        updates,
+        userId,
+      );
+      const after = await TransactionService.getTransaction(businessId, txDocId);
+      if (after) {
+        try {
+          await maybeSendAdvancePaymentReceiptEmail(
+            businessId,
+            submission,
+            latest,
+            after,
+          );
+        } catch (emailErr) {
+          logger.error("portal_advance_payment_receipt_email_failed", emailErr);
+        }
+      }
     }
+
     await maybeDeleteRawSubmissionsAfterPaidComplete(
       businessId,
       txDocId,
@@ -501,17 +525,20 @@ export class RawSubmissionProcessor {
       const handler = submissionHandlers[submission.submissionType];
       if (!handler) throw new Error("UNKNOWN_SUBMISSION_TYPE");
 
-      let paymentOnlyPortalCompletion = submission.submissionType === "PORTAL_PAY_BALANCE";
-      if (
-        !paymentOnlyPortalCompletion &&
-        submission.submissionType === "MARK_TX_COMPLETE"
-      ) {
+      // Completion receipt is for post-delivery settlement only — never advance pay.
+      let sendCompletionReceipt = false;
+      if (submission.submissionType === "MARK_TX_COMPLETE") {
         const { current } = await resolvePortalCompletionTransaction(
           businessId,
           submission.customerId || "",
           submission.payload,
         );
-        paymentOnlyPortalCompletion = current.deliveryStatus === "completed";
+        sendCompletionReceipt = current.deliveryStatus === "completed";
+      } else if (
+        submission.submissionType === "PORTAL_PAY_BALANCE" &&
+        submission.payload.portalPaymentPhase === "balance"
+      ) {
+        sendCompletionReceipt = true;
       }
 
       await handler(businessId, submission, userId, null as any);
@@ -526,7 +553,7 @@ export class RawSubmissionProcessor {
         type: submission.submissionType,
       });
 
-      if (paymentOnlyPortalCompletion) {
+      if (sendCompletionReceipt) {
         try {
           await maybeNotifyPortalCompletionReceipt({ businessId, submission });
         } catch (emailErr) {

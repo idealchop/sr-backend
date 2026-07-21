@@ -5,8 +5,10 @@ import { checkBusinessAccess } from "../utils/auth-utils";
 import { AlertDeliveryLogService } from "../services/notifications/alert-delivery-log-service";
 import {
   AlertDeliveryResendError,
+  previewAlertDeliveryLogEntry,
   resendAlertDeliveryLogEntry,
 } from "../services/notifications/alert-delivery-resend-service";
+import { CustomerService } from "../services/customers/customer-service";
 
 /**
  * Lists notifications for the authenticated user.
@@ -133,6 +135,8 @@ export const markAsRead = async (req: Request, res: Response) => {
 export const listAlertDeliveryLog = async (req: Request, res: Response) => {
   const user = (req as { user?: { uid: string } }).user;
   const businessId = String(req.query.businessId || "").trim();
+  const customerId = String(req.query.customerId || "").trim();
+  const channelRaw = String(req.query.channel || "").trim();
   const limit = Number(req.query.limit) || 50;
 
   if (!user?.uid || !businessId) {
@@ -147,6 +151,44 @@ export const listAlertDeliveryLog = async (req: Request, res: Response) => {
       return;
     }
 
+    if (customerId) {
+      const customer = await CustomerService.getCustomer(businessId, customerId);
+      if (!customer) {
+        res.status(404).json({ error: "Customer not found" });
+        return;
+      }
+
+      const txSnap = await db
+        .collection("businesses")
+        .doc(businessId)
+        .collection("transactions")
+        .where("customerId", "==", customerId)
+        .limit(100)
+        .get();
+      const referenceIds = txSnap.docs
+        .map((doc) => String(doc.data()?.referenceId || "").trim())
+        .filter(Boolean);
+
+      const channel =
+        channelRaw === "email" || channelRaw === "sms" || channelRaw === "push" ?
+          channelRaw :
+          "email";
+
+      const data = await AlertDeliveryLogService.listForCustomer(
+        businessId,
+        customerId,
+        {
+          limit,
+          channel,
+          audience: "customer",
+          customerEmail: customer.email,
+          referenceIds,
+        },
+      );
+      res.json({ data });
+      return;
+    }
+
     const data = await AlertDeliveryLogService.list(businessId, limit);
     res.json({ data });
   } catch (error) {
@@ -154,6 +196,42 @@ export const listAlertDeliveryLog = async (req: Request, res: Response) => {
       error,
       userId: user.uid,
       businessId,
+      customerId: customerId || undefined,
+    });
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+/** NT-75 — preview reconstructed customer email HTML from delivery history. */
+export const previewAlertDeliveryLog = async (req: Request, res: Response) => {
+  const user = (req as { user?: { uid: string } }).user;
+  const businessId = String(req.query.businessId || req.body?.businessId || "").trim();
+  const logId = String(req.params.logId || "").trim();
+
+  if (!user?.uid || !businessId || !logId) {
+    res.status(400).json({ error: "User ID, Business ID, and log ID are required" });
+    return;
+  }
+
+  try {
+    const { hasAccess } = await checkBusinessAccess(user.uid, businessId);
+    if (!hasAccess) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+
+    const data = await previewAlertDeliveryLogEntry(businessId, logId);
+    res.json({ data });
+  } catch (error) {
+    if (error instanceof AlertDeliveryResendError) {
+      res.status(error.statusCode).json({ error: error.message, code: error.code });
+      return;
+    }
+    logger.error("Error previewing alert delivery log", {
+      error,
+      userId: user.uid,
+      businessId,
+      logId,
     });
     res.status(500).json({ error: "Internal Server Error" });
   }

@@ -235,8 +235,25 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
   ...SUPPORT_WATER_SCIENCE_FAQ,
 ];
 
-/** Minimum score for a Buddy preflow cache hit (skip Gemini). */
-export const SUPPORT_KNOWLEDGE_HIGH_CONFIDENCE_MIN = 14;
+/**
+ * Minimum score for a Buddy preflow cache hit (skip Gemini).
+ * Tuned to catch clear FAQ / doc overlaps while still rejecting weak noise.
+ */
+export const SUPPORT_KNOWLEDGE_HIGH_CONFIDENCE_MIN = 12;
+
+/** Extra score when the query contains a known how-to phrase for a FAQ/doc entry. */
+const KNOWLEDGE_PHRASE_BOOSTS: Array<{ re: RegExp; boost: number }> = [
+  { re: /\b(add|create|mag-?add|gumawa|record)\b.{0,24}\b(deliver|delivery|order)\b/i, boost: 8 },
+  { re: /\b(add|create|mag-?add|gumawa)\b.{0,24}\b(collection|koleksyon|pickup)\b/i, boost: 8 },
+  { re: /\b(invite|mag-?invite)\b.{0,20}\b(staff|rider|team)\b|\bteam\s*hub\b/i, boost: 8 },
+  { re: /\b(tutorial|video\s+tutorial|how-?to\s+video|manood)\b/i, boost: 6 },
+  { re: /\b(qr\s*portal|customer\s+portal|portal\s+order)\b/i, boost: 6 },
+  { re: /\b(gcash|maya|auto-?renew|subscription|magbayad\s+ng\s+plan)\b/i, boost: 6 },
+  { re: /\b(offline|brownout|walang\s+signal|sync\s+queue)\b/i, boost: 6 },
+  { re: /\b(inventory|stocks?|containers?)\b.{0,16}\b(add|setup|mag-?add)\b|\b(add|setup)\b.{0,16}\binventory\b/i, boost: 6 },
+  { re: /\b(walk-?in|record\s+order)\b/i, boost: 5 },
+  { re: /\b(my\s+area|rider\s+app)\b/i, boost: 5 },
+];
 
 export type SupportKnowledgeHitSource = "faq" | "confirmed" | "tutorial" | "doc";
 
@@ -275,7 +292,11 @@ function knowledgeHitSource(entry: SupportKnowledgeEntry): SupportKnowledgeHitSo
   return "faq";
 }
 
-function scoreKnowledgeEntry(entry: SupportKnowledgeEntry, queryTokens: string[]): number {
+function scoreKnowledgeEntry(
+  entry: SupportKnowledgeEntry,
+  queryTokens: string[],
+  rawQuery = "",
+): number {
   if (!queryTokens.length) return 0;
   const topic = entry.topic.toLowerCase();
   const haystack = `${entry.topic}\n${entry.content}`.toLowerCase();
@@ -301,6 +322,17 @@ function scoreKnowledgeEntry(entry: SupportKnowledgeEntry, queryTokens: string[]
     score += 10;
   }
 
+  // Intent phrases boost matching FAQ/doc rows so clear app how-tos skip Gemini.
+  if (rawQuery) {
+    for (const { re, boost } of KNOWLEDGE_PHRASE_BOOSTS) {
+      if (!re.test(rawQuery)) continue;
+      // Only apply when the entry is actually about that intent.
+      if (re.test(`${entry.topic} ${entry.content}`)) {
+        score += boost;
+      }
+    }
+  }
+
   return score;
 }
 
@@ -315,7 +347,7 @@ function pickRelevantKnowledge(
     .map((entry, idx) => ({
       entry,
       idx,
-      score: scoreKnowledgeEntry(entry, queryTokens),
+      score: scoreKnowledgeEntry(entry, queryTokens, focusQuery || ""),
     }))
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
@@ -334,7 +366,7 @@ function pickRelevantKnowledge(
 
 /**
  * High-confidence FAQ / confirmed-Q&A match for Buddy preflow (skip Gemini).
- * Conservative threshold — prefer the model when unsure.
+ * Prefer cache when score is clear; still require meaningful token overlap.
  */
 export function findHighConfidenceKnowledgeHit(
   entries: SupportKnowledgeEntry[],
@@ -342,14 +374,19 @@ export function findHighConfidenceKnowledgeHit(
   minScore = SUPPORT_KNOWLEDGE_HIGH_CONFIDENCE_MIN,
 ): SupportKnowledgeHit | null {
   const queryTokens = tokenize(query);
-  if (queryTokens.length < 2) return null;
+  // Single strong tokens (e.g. "tutorials") can still hit when phrase/topic score is high.
+  if (queryTokens.length < 1) return null;
 
   let best: SupportKnowledgeHit | null = null;
   for (const entry of entries) {
     const source = knowledgeHitSource(entry);
-    const score = scoreKnowledgeEntry(entry, queryTokens);
+    const score = scoreKnowledgeEntry(entry, queryTokens, query);
     // Confirmed owner Q&A can clear a slightly lower bar (already human-validated).
-    const threshold = source === "confirmed" ? Math.max(10, minScore - 2) : minScore;
+    // Single-token queries need a higher bar to avoid accidental FAQ hits.
+    let threshold = source === "confirmed" ? Math.max(10, minScore - 2) : minScore;
+    if (queryTokens.length === 1) {
+      threshold = Math.max(threshold + 4, 16);
+    }
     if (score < threshold) continue;
     if (!best || score > best.score) {
       best = { entry, score, source };

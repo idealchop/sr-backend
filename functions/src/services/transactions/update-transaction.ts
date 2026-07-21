@@ -98,6 +98,21 @@ export async function updateTransaction(
 
     await syncTransactionRiderRef(businessId, updates);
 
+    if (Object.prototype.hasOwnProperty.call(updates, "expenseStaffId")) {
+      const rawStaffId = (updates as { expenseStaffId?: unknown }).expenseStaffId;
+      if (rawStaffId === null || rawStaffId === undefined || rawStaffId === "") {
+        (updates as Record<string, unknown>).expenseStaffId = FieldValue.delete();
+        (updates as Record<string, unknown>).expenseStaffName = FieldValue.delete();
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, "expenseStaffName")) {
+      const rawStaffName = (updates as { expenseStaffName?: unknown }).expenseStaffName;
+      if (rawStaffName === null || rawStaffName === undefined || rawStaffName === "") {
+        (updates as Record<string, unknown>).expenseStaffName = FieldValue.delete();
+      }
+    }
+
     // Allow payment updates even for completed transactions
     const isCoreChange =
       updates.items !== undefined ||

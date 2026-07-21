@@ -97,20 +97,28 @@ export async function runUpdateTransactionPostCommit(params: {
 
   const customerId = updates.customerId || current.customerId;
   if (customerId) {
-    const hasBalance = await customerHasUnpaidReceivable(
-      businessId,
-      customerId,
-    );
+    try {
+      const hasBalance = await customerHasUnpaidReceivable(
+        businessId,
+        customerId,
+      );
 
-    await db
-      .collection("businesses")
-      .doc(businessId)
-      .collection("customers")
-      .doc(customerId)
-      .update({
-        hasBalance,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+      await db
+        .collection("businesses")
+        .doc(businessId)
+        .collection("customers")
+        .doc(customerId)
+        .update({
+          hasBalance,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+    } catch (err) {
+      // Missing composite index (customerId + balanceDue) must not fail payment accept.
+      logger.error(
+        `Failed to refresh hasBalance for customer ${customerId}`,
+        err,
+      );
+    }
   }
 
   const possessionSyncType = current.type;

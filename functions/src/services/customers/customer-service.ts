@@ -8,6 +8,7 @@ import {
   normalizeCustomerContainerPolicy,
   type CustomerContainerPolicy,
 } from "./container-policy";
+import { normalizeRefillBonus } from "./refill-bonus";
 import { isUnpaidReceivableTransaction } from "../../utils/unpaid-receivable";
 
 export interface Customer {
@@ -38,6 +39,17 @@ export interface Customer {
   pricing?: Record<string, number>;
   /** Preferred water type label or id (portal, community, CRM). */
   preferredWaterType?: string;
+  /**
+   * Per-suki refill promo — flexible (+free each order) or fixed (pay X get Y).
+   * Charge uses paid qty; delivered qty goes on waterRefills.quantity.
+   */
+  refillBonus?: {
+    enabled: boolean;
+    mode: "flexible" | "fixed";
+    freePerOrder?: number;
+    buyQty?: number;
+    getQty?: number;
+  };
 
   // Inventory/Possession (Physical assets in customer possession)
   // Maps itemIds (from inventory) to their quantities
@@ -215,6 +227,14 @@ export class CustomerService {
         updatedAt: FieldValue.serverTimestamp(),
       };
 
+      const refillBonus = normalizeRefillBonus(customer.refillBonus);
+      if (refillBonus) {
+        newCustomer.refillBonus = refillBonus;
+      }
+      if (customer.referredByCustomerId) {
+        newCustomer.referredByCustomerId = customer.referredByCustomerId;
+      }
+
       if (location.latitude != null && location.longitude != null) {
         newCustomer.latitude = location.latitude;
         newCustomer.longitude = location.longitude;
@@ -249,12 +269,18 @@ export class CustomerService {
         .doc(businessId)
         .collection("customers")
         .doc(customerId);
-      await docRef.update(
-        applyCustomerLocationPatch({
-          ...updates,
-          updatedAt: FieldValue.serverTimestamp(),
-        }),
-      );
+
+      const patch: Record<string, unknown> = {
+        ...updates,
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+
+      if (Object.prototype.hasOwnProperty.call(updates, "refillBonus")) {
+        const normalized = normalizeRefillBonus(updates.refillBonus);
+        patch.refillBonus = normalized ?? FieldValue.delete();
+      }
+
+      await docRef.update(applyCustomerLocationPatch(patch));
     } catch (error) {
       logger.error(`Error updating customer ${customerId}`, error);
       throw error;

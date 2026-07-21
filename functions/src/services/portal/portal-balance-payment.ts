@@ -14,11 +14,17 @@ import {
   ratingPatchFromPortalPayload,
 } from "./portal-rating-updates";
 import { portalPaymentConfirmedByRider } from "./portal-payment-utils";
+import { resolvePortalPaymentExtras } from "./portal-delivery-speed";
 import type { RawSubmission, RawSubmissionPayload } from "./raw-submission-types";
 
 export type ResolvedPortalBalancePayment = {
   txDocId: string;
   current: Transaction;
+};
+
+export type ResolvePortalBalancePaymentOptions = {
+  /** When true, return the tx even if already paid (idempotent staff accept). */
+  allowAlreadyPaid?: boolean;
 };
 
 /**
@@ -27,12 +33,14 @@ export type ResolvedPortalBalancePayment = {
  * @param {string} businessId
  * @param {string} portalCustomerId
  * @param {RawSubmissionPayload} payload
+ * @param {ResolvePortalBalancePaymentOptions} [options]
  * @return {Promise<ResolvedPortalBalancePayment>}
  */
 export async function resolvePortalBalancePaymentTransaction(
   businessId: string,
   portalCustomerId: string,
   payload: RawSubmissionPayload,
+  options: ResolvePortalBalancePaymentOptions = {},
 ): Promise<ResolvedPortalBalancePayment> {
   const targetId =
     typeof payload.targetTransactionId === "string" ?
@@ -85,11 +93,52 @@ export async function resolvePortalBalancePaymentTransaction(
     throw new Error("TX_NOT_ELIGIBLE_FOR_PORTAL_PAYMENT");
   }
   const ps = String(current.paymentStatus || "unpaid").toLowerCase();
-  if (ps === "paid" || ps === "n/a") {
+  if (
+    !options.allowAlreadyPaid &&
+    (ps === "paid" || ps === "n/a")
+  ) {
     throw new Error("TX_ALREADY_PAID");
   }
 
   return { txDocId, current };
+}
+
+/**
+ * Customer transfer expected for this payment (station remaining + new tip).
+ * Tip is rider-only; speed fee increases station total.
+ */
+export function expectedPortalCustomerPaymentAmount(
+  current: Transaction,
+  payload: RawSubmissionPayload,
+): number {
+  const extras = resolvePortalPaymentExtras(payload);
+  const existingTip = Math.max(0, Number(current.riderTipAmount ?? 0));
+  const existingSpeedFee = Math.max(0, Number(current.deliverySpeedFee ?? 0));
+  const tipDelta = Math.max(0, extras.riderTipAmount - existingTip);
+  const speedFeeDelta = Math.max(0, extras.deliverySpeedFee - existingSpeedFee);
+  const declaredTotal =
+    Math.max(0, Number(current.totalAmount ?? 0)) + speedFeeDelta;
+  const prevPaid = Math.max(0, Number(current.amountPaid ?? 0));
+  const remainingStation = Math.max(0, declaredTotal - prevPaid);
+  return remainingStation + tipDelta;
+}
+
+/**
+ * Advance pay must cover order + delivery speed fee + tip in one transfer.
+ * @param {Transaction} current
+ * @param {RawSubmissionPayload} payload
+ */
+export function assertPortalAdvancePaymentFullAmount(
+  current: Transaction,
+  payload: RawSubmissionPayload,
+): void {
+  if (payload.portalPaymentPhase !== "advance") return;
+  const expected = expectedPortalCustomerPaymentAmount(current, payload);
+  if (expected <= 0) return;
+  const incremental = Math.max(0, Number(payload.payment?.amountPaid ?? 0));
+  if (Math.round(incremental * 100) < Math.round(expected * 100)) {
+    throw new Error("ADVANCE_PAYMENT_AMOUNT_INSUFFICIENT");
+  }
 }
 
 /**
@@ -105,9 +154,18 @@ export function buildPortalBalancePaymentUpdates(
   const pay = payload.payment;
   const cashConfirmedByRider = portalPaymentConfirmedByRider(pay);
   const incremental = Math.max(0, Number(pay?.amountPaid ?? 0));
-  const declaredTotal = Number(current.totalAmount ?? 0);
+  const extras = resolvePortalPaymentExtras(payload);
+  const existingTip = Math.max(0, Number(current.riderTipAmount ?? 0));
+  const existingSpeedFee = Math.max(0, Number(current.deliverySpeedFee ?? 0));
+  // Speed fee is station revenue; tip is rider-only and never enters totalAmount.
+  const tipDelta = Math.max(0, extras.riderTipAmount - existingTip);
+  const speedFeeDelta = Math.max(0, extras.deliverySpeedFee - existingSpeedFee);
+  const declaredTotal =
+    Math.max(0, Number(current.totalAmount ?? 0)) + speedFeeDelta;
+  // Customer may remit station total + tip in one transfer; only station share settles the order.
+  const stationIncremental = Math.max(0, incremental - tipDelta);
   const prevPaid = Number(current.amountPaid ?? 0);
-  const newPaid = Math.min(declaredTotal, prevPaid + incremental);
+  const newPaid = Math.min(declaredTotal, prevPaid + stationIncremental);
   const { balanceDue, paymentStatus } = derivePaymentFields(declaredTotal, newPaid);
 
   const paymentProof = pay?.proofUrl;
@@ -125,10 +183,31 @@ export function buildPortalBalancePaymentUpdates(
     .filter(Boolean)
     .join(" · ");
 
+  const tipApplied = existingTip + tipDelta;
+  const speedFeeApplied = existingSpeedFee + speedFeeDelta;
+  const speedApplied =
+    current.deliverySpeed ||
+    (extras.deliverySpeed !== "standard" ? extras.deliverySpeed : undefined) ||
+    extras.deliverySpeed;
+
+  const extrasMeta = [
+    tipApplied > 0 ?
+      `Rider tip ₱${tipApplied.toFixed(2)} (100% to rider, not in station total)` :
+      "",
+    speedFeeApplied > 0 ?
+      `Delivery ${speedApplied} fee ₱${speedFeeApplied.toFixed(2)}` :
+      speedApplied === "priority" || speedApplied === "express" ?
+        `Delivery ${speedApplied}` :
+        "",
+  ]
+    .filter(Boolean)
+    .join(" | ");
+
   const payMeta = [
     pay?.reference && `Payment ref: ${String(pay.reference).trim()}`,
     pay?.date && `Payment date: ${String(pay.date).trim()}`,
     cashConfirmedByRider ? "Cash: confirmed received by rider" : "",
+    extrasMeta,
     ratingLine,
   ]
     .filter(Boolean)
@@ -143,10 +222,14 @@ export function buildPortalBalancePaymentUpdates(
   const mergedNotes = base ? `${base}\n${portalBlock}` : portalBlock;
 
   const updates: Record<string, unknown> = {
+    totalAmount: declaredTotal,
     amountPaid: newPaid,
     balanceDue,
     paymentStatus,
     notes: mergedNotes,
+    deliverySpeed: speedApplied,
+    deliverySpeedFee: speedFeeApplied,
+    riderTipAmount: tipApplied,
   };
 
   const ratingPatch = ratingPatchFromPortalPayload(payload);
@@ -170,6 +253,11 @@ export function buildPortalBalancePaymentUpdates(
         pay?.reference && `Ref: ${String(pay.reference).trim()}`,
         pay?.date && `Paid: ${String(pay.date).trim()}`,
         cashConfirmedByRider ? "Cash: confirmed by rider" : "",
+        tipDelta > 0 ? `Rider tip ₱${tipDelta.toFixed(2)} (not in station total)` : "",
+        speedFeeDelta > 0 ? `Delivery ${speedApplied} ₱${speedFeeDelta.toFixed(2)}` : "",
+        tipDelta > 0 && incremental > entryAmount ?
+          `Customer transfer ₱${incremental.toFixed(2)}` :
+          "",
       ]
         .filter(Boolean)
         .join(" · ") ||

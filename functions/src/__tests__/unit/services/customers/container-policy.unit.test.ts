@@ -6,15 +6,19 @@ import {
 } from "../../../../services/customers/container-policy";
 
 describe("container-policy", () => {
-  it("defaults business policy to wrs_rotation", () => {
-    expect(getBusinessContainerDefaultPolicy({})).toBe("wrs_rotation");
+  it("defaults business policy to byog (own gallon)", () => {
+    expect(getBusinessContainerDefaultPolicy({})).toBe("byog");
     expect(getBusinessContainerDefaultPolicy({ containerDefaultPolicy: "byog" })).toBe(
       "byog",
     );
+    expect(
+      getBusinessContainerDefaultPolicy({ containerDefaultPolicy: "wrs_rotation" }),
+    ).toBe("wrs_rotation");
   });
 
   it("resolves customer policy with inheritance", () => {
     expect(resolveContainerPolicy("unspecified", "byog")).toBe("byog");
+    expect(resolveContainerPolicy(undefined, undefined)).toBe("byog");
     expect(resolveContainerPolicy(undefined, "wrs_rotation")).toBe("wrs_rotation");
   });
 
@@ -25,5 +29,8 @@ describe("container-policy", () => {
     expect(
       customerUsesWrContainerRotation({ containerPolicy: "unspecified" }, "wrs_rotation"),
     ).toBe(true);
+    expect(
+      customerUsesWrContainerRotation({ containerPolicy: "unspecified" }, undefined),
+    ).toBe(false);
   });
 });

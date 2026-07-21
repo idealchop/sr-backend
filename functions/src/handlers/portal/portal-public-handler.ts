@@ -5,6 +5,7 @@ import { QrCustomerService } from "../../services/customers/qr-customer-service"
 import { PortalBusinessProfileService } from "../../services/portal/portal-business-profile-service";
 import { CustomerService } from "../../services/customers/customer-service";
 import {
+  businessHasActiveContainerCustodyAgreement,
   customerNeedsContainerCustodyAcceptance,
   normalizeCustomerContainerCustodyAgreement,
   resolveBusinessContainerCustodyAgreement,
@@ -213,6 +214,7 @@ export const getPortalCustomerContext = async (req: Request, res: Response) => {
         collectionConfig: customer?.collectionConfig ?? null,
         containerCustodyAgreement: resolvedCustody ?
           {
+            enabled: true,
             documentUrl: resolvedCustody.documentUrl,
             version: resolvedCustody.version,
             source: resolvedCustody.source,
@@ -222,7 +224,7 @@ export const getPortalCustomerContext = async (req: Request, res: Response) => {
           null,
         containerPolicy: customer?.containerPolicy ?? "unspecified",
         possession: customer?.possession ?? {},
-        containerDefaultPolicy: biz?.containerDefaultPolicy ?? "wrs_rotation",
+        containerDefaultPolicy: biz?.containerDefaultPolicy ?? "byog",
         deliveryInventorySalesEnabled:
           biz?.deliveryInventorySalesEnabled === true,
       },
@@ -364,6 +366,11 @@ export const getContainerCustodyAgreementPdf = async (
       return res.status(404).json({ error: "Station not found" });
     }
     const biz = bizSnap.data() || {};
+    if (!businessHasActiveContainerCustodyAgreement(biz)) {
+      return res.status(404).json({
+        error: "Container custody agreement is not enabled for this station.",
+      });
+    }
     const stationName = String(biz.businessName || biz.name || "Water Refilling Station");
     const pdf = await buildDefaultContainerCustodyAgreementPdf({ stationName });
     res.setHeader("Content-Type", "application/pdf");

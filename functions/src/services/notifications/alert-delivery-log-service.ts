@@ -23,6 +23,17 @@ export type AlertDeliveryLogRecord = AlertDeliveryLogInput & {
   sent?: boolean;
 };
 
+export type ListAlertDeliveryLogOptions = {
+  limit?: number;
+  /** When set, only rows for this suki (email channel by default). */
+  customerId?: string;
+  customerEmail?: string | null;
+  /** Transaction reference ids belonging to the customer (legacy matching). */
+  referenceIds?: string[];
+  channel?: AlertDeliveryChannel;
+  audience?: "owner" | "customer";
+};
+
 function collection(businessId: string) {
   return db.collection("businesses").doc(businessId).collection("alert_delivery_log");
 }
@@ -74,6 +85,42 @@ function inferLegacyChannel(contributorId: string): AlertDeliveryChannel {
   return "push";
 }
 
+function normalizeEmail(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+/**
+ * Match delivery-log rows to a customer (new rows use detail.customerId / toEmail;
+ * legacy rows match by order referenceId).
+ */
+export function matchesCustomerDeliveryLog(
+  entry: Pick<AlertDeliveryLogRecord, "audience" | "detail">,
+  args: {
+    customerId: string;
+    customerEmail?: string | null;
+    referenceIds?: Iterable<string>;
+  },
+): boolean {
+  const detail = entry.detail ?? {};
+  const customerId = String(args.customerId || "").trim();
+  if (!customerId) return false;
+
+  if (entry.audience && entry.audience !== "customer") return false;
+
+  if (String(detail.customerId || "").trim() === customerId) return true;
+
+  const email = normalizeEmail(args.customerEmail);
+  if (email && normalizeEmail(detail.toEmail) === email) return true;
+
+  const ref = String(detail.referenceId || "").trim();
+  if (ref && args.referenceIds) {
+    for (const id of args.referenceIds) {
+      if (String(id || "").trim() === ref) return true;
+    }
+  }
+  return false;
+}
+
 /** NT-75 — owner-visible delivery log for push, email, and SMS. */
 export class AlertDeliveryLogService {
   static async record(
@@ -109,6 +156,35 @@ export class AlertDeliveryLogService {
     return snap.docs.map((doc) => serialize(doc.id, doc.data()));
   }
 
+  /**
+   * Customer-scoped email history for CRM profile.
+   * Scans recent logs (up to 100) and filters by customerId / toEmail / order refs.
+   */
+  static async listForCustomer(
+    businessId: string,
+    customerId: string,
+    options: ListAlertDeliveryLogOptions = {},
+  ): Promise<AlertDeliveryLogRecord[]> {
+    const channel = options.channel ?? "email";
+    const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
+    const scanLimit = 100;
+    const rows = await this.list(businessId, scanLimit);
+
+    return rows
+      .filter((row) => {
+        if (channel && row.channel !== channel) return false;
+        if (options.audience && row.audience && row.audience !== options.audience) {
+          return false;
+        }
+        return matchesCustomerDeliveryLog(row, {
+          customerId,
+          customerEmail: options.customerEmail,
+          referenceIds: options.referenceIds,
+        });
+      })
+      .slice(0, limit);
+  }
+
   static async getById(
     businessId: string,
     logId: string,
@@ -131,5 +207,18 @@ export function mapContributorToDeliveryLog(
     status: sent ? "sent" : "skipped",
     audience: "owner",
     detail,
+  };
+}
+
+/** Shared detail fields for customer transactional emails. */
+export function customerDeliveryDetail(
+  base: Record<string, unknown>,
+  args: { customerId: string; toEmail?: string | null },
+): Record<string, unknown> {
+  const toEmail = normalizeEmail(args.toEmail);
+  return {
+    ...base,
+    customerId: args.customerId,
+    ...(toEmail ? { toEmail } : {}),
   };
 }

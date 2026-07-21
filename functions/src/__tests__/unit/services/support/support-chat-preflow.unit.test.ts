@@ -117,4 +117,36 @@ describe("tryResolveSupportPreflow", () => {
     expect(hit?.turn.resolutionSource).toBe("deterministic_howto");
     expect(hit?.turn.structured?.steps?.length).toBeGreaterThan(0);
   });
+
+  it("short-circuits short thanks without Gemini", () => {
+    const hit = tryResolveSupportPreflow({
+      userText: "Salamat!",
+      history: [msg("ai", "here is the answer")],
+      knowledgeEntries: SUPPORT_FAQ_ENTRIES,
+    });
+    expect(hit?.source).toBe("greeting");
+    expect(hit?.turn.detectedSatisfied).toBe(true);
+    expect(hit?.turn.reply).toMatch(/Salamat/i);
+  });
+
+  it("resolves intent-only howto without paano opener", () => {
+    const hit = tryResolveSupportPreflow({
+      userText: "Add delivery for a suki",
+      history: [],
+      knowledgeEntries: [],
+    });
+    expect(hit?.source).toBe("deterministic_howto");
+    expect(hit?.turn.reply.toLowerCase()).toMatch(/delivery|transactions/);
+  });
+
+  it("resolves subscription how-to from FAQ before Gemini", () => {
+    const hit = tryResolveSupportPreflow({
+      userText: "Paano magbayad ng plan with GCash?",
+      history: [],
+      knowledgeEntries: SUPPORT_FAQ_ENTRIES,
+    });
+    expect(hit).not.toBeNull();
+    expect(["knowledge_cache", "deterministic_howto"]).toContain(hit?.source);
+    expect(hit?.turn.reply.toLowerCase()).toMatch(/gcash|subscription|maya|account/);
+  });
 });

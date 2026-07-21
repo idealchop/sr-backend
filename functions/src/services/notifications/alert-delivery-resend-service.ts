@@ -9,7 +9,10 @@ import { CustomerService } from "../customers/customer-service";
 import {
   type CustomerTxnNotifyEvent,
 } from "../portal/customer-transaction-notifier";
-import { sendTransactionCompletionReceiptEmail } from "../portal/transaction-completion-receipt-email";
+import {
+  buildTransactionCompletionReceiptArtifacts,
+  sendTransactionCompletionReceiptEmail,
+} from "../portal/transaction-completion-receipt-email";
 import type { Transaction } from "../transactions/transaction-service";
 import {
   AlertDeliveryLogService,
@@ -117,6 +120,157 @@ export function canResendAlertDeliveryLog(entry: AlertDeliveryLogRecord): boolea
     entry.category === "customer_payment_update" ||
     typeof entry.detail?.event === "string"
   );
+}
+
+/** Owner can preview reconstructed HTML for customer emails tied to a transaction. */
+export function canPreviewAlertDeliveryLog(entry: AlertDeliveryLogRecord): boolean {
+  if (entry.channel !== "email") return false;
+  if (!String(entry.detail?.referenceId || "").trim()) return false;
+  return (
+    entry.category === "portal_completion_receipt" ||
+    entry.category === "customer_txn_status" ||
+    entry.category === "customer_payment_update" ||
+    typeof entry.detail?.event === "string"
+  );
+}
+
+export type AlertDeliveryEmailPreview = {
+  subject: string;
+  html: string;
+  text: string;
+  category: string;
+  referenceId: string;
+  toEmail: string;
+};
+
+/**
+ * Rebuild customer email HTML/text from the linked transaction (does not send).
+ */
+export async function previewAlertDeliveryLogEntry(
+  businessId: string,
+  logId: string,
+): Promise<AlertDeliveryEmailPreview> {
+  const entry = await AlertDeliveryLogService.getById(businessId, logId);
+  if (!entry) {
+    throw new AlertDeliveryResendError("Delivery log entry not found", "NOT_FOUND", 404);
+  }
+  if (!canPreviewAlertDeliveryLog(entry)) {
+    throw new AlertDeliveryResendError(
+      "This delivery cannot be previewed",
+      "PREVIEW_NOT_SUPPORTED",
+    );
+  }
+
+  const referenceId = String(entry.detail?.referenceId || "").trim();
+  const tx = await findTransactionByReference(businessId, referenceId);
+  if (!tx?.customerId) {
+    throw new AlertDeliveryResendError(
+      "Linked transaction not found",
+      "TX_NOT_FOUND",
+      404,
+    );
+  }
+
+  const customer = await CustomerService.getCustomer(businessId, tx.customerId);
+  if (!customer) {
+    throw new AlertDeliveryResendError("Customer not found", "CUSTOMER_NOT_FOUND", 404);
+  }
+
+  const bizSnap = await db.collection("businesses").doc(businessId).get();
+  const biz = bizSnap.data() ?? {};
+  const businessName = String(biz.name || "Your water station");
+  const businessLogoUrl = resolveBusinessEmailLogoUrl(biz.logo);
+  const trackUrl = buildTrackUrl(businessId, tx.customerId, referenceId);
+  const customerName = customer.name || tx.customerName || "Customer";
+  const toEmail = String(
+    entry.detail?.toEmail || customer.email || "",
+  ).trim();
+
+  if (
+    entry.category === "portal_completion_receipt" ||
+    entry.detail?.event === "completed"
+  ) {
+    const artifacts = await buildTransactionCompletionReceiptArtifacts({
+      businessId,
+      transaction: tx,
+      customer,
+      recipientEmail: toEmail || customer.email,
+    });
+    if (!artifacts) {
+      throw new AlertDeliveryResendError(
+        "Could not build receipt preview",
+        "PREVIEW_BUILD_FAILED",
+      );
+    }
+    return {
+      subject: artifacts.template.subject,
+      html: artifacts.template.html,
+      text: artifacts.template.text,
+      category: "portal_completion_receipt",
+      referenceId,
+      toEmail: toEmail || String(customer.email || ""),
+    };
+  }
+
+  if (entry.category === "customer_payment_update") {
+    const total = Number(tx.totalAmount ?? 0);
+    const paid = Number(tx.amountPaid ?? 0);
+    const balance = Number(tx.balanceDue ?? Math.max(0, total - paid));
+    const paymentStatus = String(tx.paymentStatus || "").toLowerCase();
+    const kind = paymentStatus === "paid" ? "paid" : "partial";
+    const statusLabel =
+      kind === "paid" ? "Payment received" : "Partial payment received";
+    const detailLine =
+      kind === "paid" ?
+        `Fully paid na ang order mo sa ${businessName}. Salamat sa payment!` :
+        `Nakatanggap kami ng partial payment. Natitirang balance: ${formatCustomerMoney(balance)}.`;
+    const tpl = buildCustomerPaymentUpdateEmail({
+      customerName,
+      businessName,
+      businessLogoUrl,
+      referenceId,
+      trackUrl,
+      statusLabel,
+      totalAmount: formatCustomerMoney(total),
+      amountPaid: formatCustomerMoney(paid),
+      balanceDue: formatCustomerMoney(balance),
+      detailLine,
+    });
+    return {
+      subject: tpl.subject,
+      html: tpl.html,
+      text: tpl.text,
+      category: tpl.brevoTag,
+      referenceId,
+      toEmail: toEmail || String(customer.email || ""),
+    };
+  }
+
+  const event = String(entry.detail?.event || "order_accepted") as CustomerTxnNotifyEvent;
+  const statusLabel = EVENT_STATUS_LABEL[event] ?? "Order update";
+  const detailLine =
+    event === "in_transit" ?
+      "Ang order mo ay on the way na." :
+      event === "cancelled" ?
+        "Na-cancel ang order na ito. Mag-message sa station kung may tanong." :
+        "Tinanggap na ng station ang order mo at iaasikaso na.";
+  const tpl = buildCustomerTxnStatusEmail({
+    customerName,
+    businessName,
+    businessLogoUrl,
+    referenceId,
+    statusLabel,
+    trackUrl,
+    detailLine,
+  });
+  return {
+    subject: tpl.subject,
+    html: tpl.html,
+    text: tpl.text,
+    category: tpl.brevoTag,
+    referenceId,
+    toEmail: toEmail || String(customer.email || ""),
+  };
 }
 
 /** Re-send a failed customer email logged in alert_delivery_log. */

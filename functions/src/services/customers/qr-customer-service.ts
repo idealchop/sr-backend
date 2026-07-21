@@ -68,6 +68,8 @@ export function buildQrImageUrl(
 export class QrCustomerService {
   /**
    * Rotates QR token and updates qrCodeUrl + lastUpdated on the customer document.
+   * Explicit staff action only — never call from portal order/pay/profile flows.
+   * Existing printed customer QRs must keep working until this is invoked.
    * @param {string} businessId The business ID
    * @param {string} customerId The customer ID
    * @param {Request} req The request

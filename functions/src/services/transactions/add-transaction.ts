@@ -161,6 +161,12 @@ export async function addTransaction(
       attachmentUrl: transaction.attachmentUrl,
       signatureUrl: transaction.signatureUrl,
       expenseCategory: transaction.expenseCategory,
+      ...(transaction.expenseStaffId && transaction.expenseStaffName ?
+        {
+          expenseStaffId: transaction.expenseStaffId,
+          expenseStaffName: transaction.expenseStaffName,
+        } :
+        {}),
       scheduledAt: scheduledAt,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),

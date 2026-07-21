@@ -2,6 +2,20 @@
   "indexes": [
     {
       "collectionGroup": "transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "customerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "balanceDue",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "transactions",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         {

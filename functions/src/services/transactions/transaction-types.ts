@@ -6,9 +6,12 @@
 export interface TransactionRefill {
   waterTypeId: string;
   name?: string;
+  /** Delivered gallons (paid + free bonus when applicable). */
   quantity: number;
   unitPrice: number;
   subtotal: number;
+  /** Gallons charged; omit on legacy rows (derived from subtotal / unitPrice). */
+  paidQuantity?: number;
 }
 
 export interface TransactionInventoryItem {
@@ -104,6 +107,10 @@ export interface Transaction {
   deliveryProofUrl?: string;
   signatureUrl?: string;
   expenseCategory?: string;
+  /** Salary expenses — Team Hub (`member:` / `rider:`) or expense-only (`salary:`). */
+  expenseStaffId?: string;
+  /** Denormalized staff display name for salary expenses. */
+  expenseStaffName?: string;
   /** @deprecated Prefer `serviceRating`; kept for legacy rows and portal backward compatibility. */
   rating?: number;
   /** Customer-rated station / fulfillment quality (1–5). */
@@ -113,6 +120,19 @@ export interface Transaction {
   /** Customer-rated rider experience when a rider was involved (1–5). */
   riderRating?: number;
   feedback?: string;
+  /**
+   * Portal delivery speed after advance payment.
+   * `priority` ≈ 30–60 min; `express` ≈ 1–2 h; `standard` ≈ 4–6 h.
+   */
+  deliverySpeed?: "priority" | "express" | "standard";
+  /** Station fee for priority/express (included in `totalAmount`). */
+  deliverySpeedFee?: number;
+  /**
+   * Customer tip for the rider — **excluded from `totalAmount` / station revenue**.
+   * Included in the customer's transfer for settlement tracking only; 100% to rider
+   * (never commission base).
+   */
+  riderTipAmount?: number;
   createdAt?: any;
   updatedAt?: any;
   /** Offline outbox idempotency key (unique per business when set). */

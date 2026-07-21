@@ -41,7 +41,18 @@ export interface RawSubmissionPayload {
     companyName?: string;
     [key: string]: any;
   };
-  refillItems?: Array<{ type: string; qty: number; unitPrice?: number }>;
+  /**
+   * Water refill lines. `qty` is delivered gallons (paid + free bonus when applicable).
+   * `paidQuantity` is charged gallons; omit to treat `qty` as paid (legacy).
+   * `gallonShape` is the portal round/slim choice used to split WRS dispatch.
+   */
+  refillItems?: Array<{
+    type: string;
+    qty: number;
+    unitPrice?: number;
+    paidQuantity?: number;
+    gallonShape?: "round" | "slim";
+  }>;
   inventoryItems?: Array<{ inventoryId: string; qty: number; unitPrice?: number }>;
   returnContainers?: Array<{ inventoryId: string; qty: number }>;
   address?: {
@@ -85,6 +96,17 @@ export interface RawSubmissionPayload {
     | "portal_counter_walkin";
   /** Portal track: advance (pre-delivery) vs balance (post-delivery) payment. */
   portalPaymentPhase?: "advance" | "balance";
+  /**
+   * Portal delivery speed selected at advance payment.
+   * `express` is the mid tier (~1–2h); legacy payloads may send `saver`.
+   */
+  deliverySpeed?: "priority" | "express" | "standard" | "saver";
+  /** Station fee for priority/express (not rider tip). */
+  deliverySpeedFee?: number;
+  /**
+   * Driver tip — 100% to the assigned rider, excluded from station commission.
+   */
+  riderTipAmount?: number;
   /** Portal: recurring delivery/collection preferences. */
   schedule?: {
     isDeliveryEnabled?: boolean;

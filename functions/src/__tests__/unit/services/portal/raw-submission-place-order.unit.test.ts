@@ -160,6 +160,32 @@ describe("RawSubmissionProcessor PLACE_ORDER", () => {
     ).toBe(false);
   });
 
+  it("charges paidQuantity and delivers qty when refill bonus is applied", async () => {
+    await RawSubmissionProcessor.accept(
+      "biz-1",
+      buildPlaceOrderSubmission({
+        payload: {
+          refillItems: [{ type: "Mineral", qty: 12, paidQuantity: 10, unitPrice: 25 }],
+          inventoryItems: [{ inventoryId: "round-1", qty: 12 }],
+          totalAmount: 250,
+        },
+      }),
+      "staff-1",
+    );
+
+    const txPayload = addTransactionMock.mock.calls.at(-1)?.[1];
+    expect(txPayload.waterRefills).toEqual([
+      expect.objectContaining({
+        waterTypeId: "Mineral",
+        quantity: 12,
+        paidQuantity: 10,
+        unitPrice: 25,
+        subtotal: 250,
+      }),
+    ]);
+    expect(txPayload.totalAmount).toBe(250);
+  });
+
   it("defaults delivery to placed and passes rider assignment", async () => {
     await RawSubmissionProcessor.accept(
       "biz-1",

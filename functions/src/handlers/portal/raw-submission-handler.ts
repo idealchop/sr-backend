@@ -420,6 +420,19 @@ export const acceptSubmission = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error(error);
     if (respondIfPortalCustomerLimitError(res, error)) return;
+    const msg = String(error?.message || "");
+    if (msg === "TX_ALREADY_PAID") {
+      return res.status(409).json({
+        error: "This order is already marked paid. Refresh and try again.",
+        code: "TX_ALREADY_PAID",
+      });
+    }
+    if (msg === "TX_NOT_FOUND" || msg === "MISSING_TX_REFERENCE") {
+      return res.status(404).json({ error: "Linked order not found.", code: msg });
+    }
+    if (msg === "TX_FORBIDDEN") {
+      return res.status(403).json({ error: "Forbidden", code: msg });
+    }
     res.status(500).json({ error: error?.message || "Accept failed" });
   }
 };

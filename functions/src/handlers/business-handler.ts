@@ -241,15 +241,27 @@ export const updateBusiness = async (req: Request, res: Response) => {
       return;
     }
 
-    const updateData = {
+    const updateData: Record<string, unknown> = {
       ...req.body,
       updatedAt: FieldValue.serverTimestamp(),
     };
 
     // Remove restricted fields
-    delete (updateData as any).ownerId;
-    delete (updateData as any).createdAt;
-    delete (updateData as any).id;
+    delete updateData.ownerId;
+    delete updateData.createdAt;
+    delete updateData.id;
+
+    // Disabled custody must clear the field so QR portal / CRM hide the agreement.
+    if ("containerCustodyAgreement" in updateData) {
+      const custody = updateData.containerCustodyAgreement;
+      const enabled =
+        custody !== null &&
+        typeof custody === "object" &&
+        (custody as { enabled?: unknown }).enabled === true;
+      if (!enabled) {
+        updateData.containerCustodyAgreement = FieldValue.delete();
+      }
+    }
 
     const oldData = businessDoc.data();
     await db.collection("businesses").doc(businessId).update(updateData);

@@ -4,6 +4,7 @@ import {
   listAlertDeliveryLog,
   listMyNotifications,
   markAsRead,
+  previewAlertDeliveryLog,
   resendAlertDeliveryLog,
 } from "../handlers/notification-handler";
 
@@ -14,6 +15,7 @@ router.use(validateFirebaseIdToken);
 
 router.get("/", listMyNotifications);
 router.get("/delivery-log", listAlertDeliveryLog);
+router.get("/delivery-log/:logId/preview", previewAlertDeliveryLog);
 router.post("/delivery-log/:logId/resend", resendAlertDeliveryLog);
 router.put("/read", markAsRead); // Bulk read via body
 router.put("/:notificationId/read", markAsRead); // Single read via URL

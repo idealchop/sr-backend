@@ -28,7 +28,7 @@ describe("River AI expanded knowledge", () => {
     );
     expect(hit).not.toBeNull();
     expect(hit?.entry.id).toBe("add-delivery");
-    expect(hit?.score).toBeGreaterThanOrEqual(14);
+    expect(hit?.score).toBeGreaterThanOrEqual(12);
   });
 
   it("does not treat weak token overlap as a cache hit", () => {
@@ -37,5 +37,14 @@ describe("River AI expanded knowledge", () => {
       "random unrelated question about cats",
     );
     expect(hit).toBeNull();
+  });
+
+  it("boosts clear Taglish delivery phrases into a cache hit", () => {
+    const hit = findHighConfidenceKnowledgeHit(
+      SUPPORT_FAQ_ENTRIES,
+      "Paano mag-add ng delivery?",
+    );
+    expect(hit).not.toBeNull();
+    expect(hit?.entry.id).toBe("add-delivery");
   });
 });

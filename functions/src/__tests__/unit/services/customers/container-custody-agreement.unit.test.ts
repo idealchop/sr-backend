@@ -69,4 +69,24 @@ describe("container-custody-agreement", () => {
       ),
     ).toBe(false);
   });
+
+  it("skips when custody is disabled", () => {
+    expect(
+      customerNeedsContainerCustodyAcceptance(
+        { containerPolicy: "wrs_rotation" },
+        {
+          ...business,
+          containerCustodyAgreement: { enabled: false },
+        },
+      ),
+    ).toBe(false);
+    expect(
+      businessHasActiveContainerCustodyAgreement({
+        containerCustodyAgreement: { enabled: false },
+      }),
+    ).toBe(false);
+    expect(
+      parseBusinessContainerCustodySettings({ enabled: false }),
+    ).toBeNull();
+  });
 });

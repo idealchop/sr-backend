@@ -7,13 +7,14 @@ export type CustomerContainerPolicy =
   | "wrs_rotation"
   | "byog";
 
-export const DEFAULT_CONTAINER_DEFAULT_POLICY: ContainerDefaultPolicy =
-  "wrs_rotation";
+export const DEFAULT_CONTAINER_DEFAULT_POLICY: ContainerDefaultPolicy = "byog";
 
 export function normalizeContainerDefaultPolicy(
   value: unknown,
 ): ContainerDefaultPolicy {
-  return value === "byog" ? "byog" : DEFAULT_CONTAINER_DEFAULT_POLICY;
+  if (value === "wrs_rotation") return "wrs_rotation";
+  if (value === "byog") return "byog";
+  return DEFAULT_CONTAINER_DEFAULT_POLICY;
 }
 
 export function normalizeCustomerContainerPolicy(
