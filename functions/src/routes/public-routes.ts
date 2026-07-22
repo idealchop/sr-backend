@@ -29,6 +29,7 @@ import {
   postPartnerApplication,
   postRequestDemo,
 } from "../handlers/marketing-handler";
+import { getPlatformStats } from "../handlers/marketing-platform-stats-handler";
 import { metaCommunityWebhook } from "../handlers/meta/meta-community-webhook-handler";
 import { metaCommunityWhatsappWebhook } from "../handlers/meta/meta-community-whatsapp-webhook-handler";
 import { viberCommunityWebhook } from "../handlers/viber/viber-community-webhook-handler";
@@ -68,6 +69,14 @@ const statementShareLimiter = rateLimit({
 const marketingLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 30,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  skip: (req) => req.method === "OPTIONS" || !!process.env.FUNCTIONS_EMULATOR,
+});
+
+const marketingStatsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   skip: (req) => req.method === "OPTIONS" || !!process.env.FUNCTIONS_EMULATOR,
@@ -124,6 +133,11 @@ router.post(
   "/marketing/partner-application",
   marketingLimiter,
   postPartnerApplication,
+);
+router.get(
+  "/marketing/platform-stats",
+  marketingStatsLimiter,
+  getPlatformStats,
 );
 
 /** Public Events & Training marketing catalogs (published + visibility:public). */
