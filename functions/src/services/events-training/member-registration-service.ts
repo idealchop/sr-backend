@@ -249,6 +249,7 @@ export async function registerForWebinar(input: {
   if (existing) {
     await webinarRegistrationsCollection().doc(existing.id).set(
       {
+        kind: "member",
         eventId,
         userId,
         businessId,
@@ -272,6 +273,7 @@ export async function registerForWebinar(input: {
 
   const ref = webinarRegistrationsCollection().doc();
   await ref.set({
+    kind: "member",
     eventId,
     userId,
     businessId,

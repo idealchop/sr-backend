@@ -45,6 +45,11 @@ import {
   getPublicWrsBlogById,
   getPublicWrsBlogs,
   getPublicWrsStories,
+  getGuestWebinarJoin,
+  postGuestWebinarCancel,
+  postGuestWebinarJoinByEmail,
+  postGuestWebinarJoinByToken,
+  postGuestWebinarRegister,
 } from "../handlers/public-resources-handler";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
 
@@ -144,6 +149,31 @@ router.get(
 router.get("/resources/wrs-stories", resourcesLimiter, getPublicWrsStories);
 router.get("/resources/webinars", resourcesLimiter, getPublicWebinarRecordings);
 router.get("/resources/webinar-events", resourcesLimiter, getPublicWebinarEvents);
+router.post(
+  "/resources/webinar-events/:eventId/register",
+  marketingLimiter,
+  postGuestWebinarRegister,
+);
+router.post(
+  "/resources/webinar-events/:eventId/join",
+  marketingLimiter,
+  postGuestWebinarJoinByEmail,
+);
+router.get(
+  "/resources/webinar-join/:token",
+  resourcesLimiter,
+  getGuestWebinarJoin,
+);
+router.post(
+  "/resources/webinar-join/:token",
+  marketingLimiter,
+  postGuestWebinarJoinByToken,
+);
+router.post(
+  "/resources/webinar-join/:token/cancel",
+  marketingLimiter,
+  postGuestWebinarCancel,
+);
 router.get("/resources/blogs", resourcesLimiter, getPublicWrsBlogs);
 router.get(
   "/resources/blogs/:articleId/engagement",

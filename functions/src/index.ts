@@ -96,6 +96,10 @@ export const smartrefillV3Api = onRequest(
   {
     region: "asia-southeast1",
     cors: true,
+    // River AI Buddy + agent turns load workspace snapshots (customers/txs/inventory).
+    // Default 256MiB OOMs under those paths and returns opaque HTTP 500s to the client.
+    memory: "1GiB",
+    timeoutSeconds: 120,
     secrets: [
       "DOCS_ADMIN_TOKEN",
       "SMARTREFILL_BREVO_API_KEY",
@@ -124,5 +128,6 @@ export { proactiveInsightPushNotification } from "./jobs/proactive-insight-push-
 export { pmRecurrenceScheduler } from "./jobs/pm-recurrence-scheduler";
 export { subscriptionAutoRenewScheduler } from "./jobs/subscription-auto-renew-scheduler";
 export { communityDispatchExpireOffers } from "./jobs/community-dispatch-expire-offers";
+export { guestWebinarReminders } from "./jobs/guest-webinar-reminders";
 export { ownerDataWarehouseExport } from "./jobs/owner-data-warehouse-export";
 export { onSubscriptionUpdated } from "./triggers/subscription-triggers";

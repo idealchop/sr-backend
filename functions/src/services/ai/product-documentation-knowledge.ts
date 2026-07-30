@@ -24,7 +24,9 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 - **Exports & statements**: bulk print/export use live workspace data instead of large list API calls.
 
 ### Video tutorials (follow-along)
-- Owners open **Tutorial videos** from the sidebar (desktop) or floating Tutorial button (mobile).
+- Owners open **Tutorial videos** from the sidebar (desktop) or **Help & support** → Video tutorials
+  on the Android/iOS app (and phone web).
+- After first station setup on mobile, a short **quick tour** points to Help, then Video tutorials.
 - Published how-to videos come from Smart Refill training content; Play keeps a coach player
   on screen while working. Deep link: /dashboard?tutorial={videoId}.
 - New publishes notify owners in the activity feed; verified emails get a Watch link.
@@ -37,7 +39,8 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
   (Error 403 disallowed_useragent). Open the Smart Refill link in **Safari or Chrome**
   (tap menu → Open in browser), then sign in again.
 - **Local development**: localhost uses its own auth domain so Google sign-in stays on your machine.
-- New owners: verify email → complete station onboarding → dashboard.
+- New owners: verify email → complete station onboarding (mobile app uses a full-screen 3-step setup:
+  Station, Catalog, Goals) → dashboard.
 - Invited staff: accept Team Hub invite link → verify email if needed → staff onboarding →
   **My Area** (riders) or **dashboard** (admins).
 - **Team Hub record-only**: owner can add personnel **without email or login** (toggle
@@ -46,7 +49,9 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 - If you are sent back to onboarding after you already finished: try sign out and sign in;
   confirm you are on the correct station/workspace; use **Profile → Chat support** if it persists
   (account may show complete but station profile may still need a step).
-
+- **Sharing statements or rider trackers from the Android/iOS app** uses public links
+  (app.smartrefill.io), not an internal localhost address. On phone, Save PDF / Share summary
+  replaces desktop print popups.
 ### Transaction ledger (Transactions page)
 - **Search** ledger by customer name, reference ID, notes, or amount.
 - **Tabs/filters** for sales/walk-in, delivery, collection, expenses; status filters for

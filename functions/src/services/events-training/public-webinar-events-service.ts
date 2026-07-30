@@ -8,6 +8,11 @@ import {
   type PublicResourceVideo,
 } from "./public-resources-service";
 import { resolvePremiumUnlockPrice } from "./member-video-unlock-service";
+import { isGuestJoinWindowOpen } from "./guest-webinar-join-service";
+import {
+  isCmsGuestRegistrationAllowed,
+  normalizeWebinarVisibility,
+} from "./guest-webinar-eligibility";
 
 const DEFAULT_PAGE_SIZE = 9;
 const MAX_PAGE_SIZE = 24;
@@ -44,10 +49,19 @@ export type PublicWebinarEvent = {
    * Marketing CTA:
    * - pay → premium PayMongo after sign-in
    * - register → private / members after sign-in
-   * - null → open register flow after sign-in
+   * - null → open register (guest form when guestRegistrationEnabled)
    */
   unlockAction: "pay" | "register" | null;
   schedulePhase: "upcoming" | "ongoing" | "just_finished" | "ended" | "unknown";
+  /** Public + published + seats remaining — guest form on landing (no SmartRefill auth). */
+  guestRegistrationEnabled: boolean;
+  certificationEnabled: boolean;
+  /** True when a linked recording id exists (do not expose unlock details here). */
+  hasLinkedReplay: boolean;
+  /** Replay and/or certificate require SmartRefill account after attend. */
+  requiresSmartRefillForValue: boolean;
+  /** Guest may attempt Join (public + within early/live window). */
+  joinWindowOpen: boolean;
 };
 
 function toIso(value: unknown): string | null {
@@ -106,9 +120,7 @@ function resolveSchedulePhase(
 }
 
 function normalizeVisibility(data: DocumentData): string {
-  const raw = typeof data.visibility === "string" ? data.visibility : "public";
-  if (raw === "members" || raw === "subscription") return "private";
-  return raw;
+  return normalizeWebinarVisibility(data.visibility);
 }
 
 function seatsForEvent(data: DocumentData): {
@@ -160,6 +172,21 @@ function mapPublicEvent(
     unlockAction = "register";
   }
 
+  const certificationEnabled = data.certificationEnabled === true;
+  const hasLinkedReplay = Boolean(linkedVideoId);
+  const guestRegistrationEnabled =
+    LIVE_STATUSES.has(status) &&
+    visibility === "public" &&
+    isCmsGuestRegistrationAllowed(data) &&
+    !seats.isFull &&
+    (schedulePhase === "upcoming" ||
+      schedulePhase === "ongoing" ||
+      schedulePhase === "unknown");
+  const joinWindowOpen =
+    LIVE_STATUSES.has(status) &&
+    visibility === "public" &&
+    isGuestJoinWindowOpen(startsAt, endsAt, nowMs);
+
   return {
     id,
     name: String(data.name ?? "").trim() || "Untitled webinar",
@@ -187,6 +214,11 @@ function mapPublicEvent(
     premiumPrice,
     unlockAction,
     schedulePhase,
+    guestRegistrationEnabled,
+    certificationEnabled,
+    hasLinkedReplay,
+    requiresSmartRefillForValue: certificationEnabled || hasLinkedReplay,
+    joinWindowOpen,
   };
 }
 

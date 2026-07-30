@@ -319,6 +319,77 @@ export async function postClaimWebinarCertificate(
   }
 }
 
+/**
+ * POST /events-training/webinars/:eventId/claim-guest { businessId }
+ * or POST /events-training/webinars/claim-guest { businessId, eventId? }
+ * Links guest registration(s) for the auth email into this workspace.
+ */
+export async function postClaimGuestWebinar(
+  req: AuthedRequest,
+  res: Response,
+): Promise<void> {
+  try {
+    const businessId = readBusinessId(req);
+    const uid = await requireBusinessMember(req, res, businessId);
+    if (!uid) return;
+
+    const email = String(req.user?.email || "").trim();
+    if (!email) {
+      res.status(400).json({
+        error: "Your account needs an email address to claim a guest registration.",
+        code: "EMAIL_REQUIRED",
+      });
+      return;
+    }
+
+    const eventId =
+      String(req.params.eventId || "").trim() ||
+      String((req.body as { eventId?: string })?.eventId || "").trim();
+
+    const {
+      claimGuestWebinarRegistration,
+      claimAllGuestWebinarRegistrationsForEmail,
+    } = await import("../services/events-training/guest-webinar-claim-service");
+
+    if (eventId) {
+      const data = await claimGuestWebinarRegistration({
+        eventId,
+        userId: uid,
+        businessId,
+        email,
+      });
+      res.status(data.alreadyClaimed ? 200 : 201).json({ success: true, data });
+      return;
+    }
+
+    const batch = await claimAllGuestWebinarRegistrationsForEmail({
+      userId: uid,
+      businessId,
+      email,
+    });
+    res.status(200).json({
+      success: true,
+      data: {
+        claimedCount: batch.claimed.filter((c) => c.claimed).length,
+        alreadyClaimedCount: batch.claimed.filter((c) => c.alreadyClaimed).length,
+        items: batch.claimed,
+        scanned: batch.scanned,
+      },
+    });
+  } catch (error) {
+    const status = engagementErrorStatus(error);
+    if (status < 500) {
+      res.status(status).json({
+        error: error instanceof Error ? error.message : "Request failed.",
+        code: (error as { code?: string })?.code,
+      });
+      return;
+    }
+    logger.error("postClaimGuestWebinar failed", error);
+    res.status(500).json({ error: "Failed to claim guest registration." });
+  }
+}
+
 /** GET /events-training/webinars/:eventId/certificate?businessId=&disposition= */
 export async function getWebinarCertificatePdf(
   req: AuthedRequest,

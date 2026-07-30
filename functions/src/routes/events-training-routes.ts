@@ -26,6 +26,7 @@ import {
   getMemberBlogs,
   getWebinarCertificatePdf,
   postCancelWebinar,
+  postClaimGuestWebinar,
   postClaimWebinarCertificate,
   postJoinWebinar,
   postMemberBlogLike,
@@ -87,6 +88,12 @@ router.post("/webinars/:eventId/unlock-checkout", postMemberWebinarUnlockCheckou
 router.post("/webinars/:eventId/register", registerLimiter, postRegisterWebinar);
 router.post("/webinars/:eventId/cancel", registerLimiter, postCancelWebinar);
 router.post("/webinars/:eventId/join", registerLimiter, postJoinWebinar);
+router.post("/webinars/claim-guest", registerLimiter, postClaimGuestWebinar);
+router.post(
+  "/webinars/:eventId/claim-guest",
+  registerLimiter,
+  postClaimGuestWebinar,
+);
 router.get("/webinars/:eventId/certificate", getWebinarCertificatePdf);
 router.post(
   "/webinars/:eventId/certificate",

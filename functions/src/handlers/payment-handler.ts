@@ -6,6 +6,43 @@ import {
 } from "../services/observability/logging/logger";
 import { NotificationService } from "../services/notifications/notification-service";
 
+const PAYMENT_ACCOUNT_TYPES = new Set([
+  "bank_transfer",
+  "credit_card",
+  "digital_wallet",
+]);
+
+/**
+ * Normalizes payment account type for storage and transaction pickers.
+ * Legacy rows used "Bank"; wallet providers are inferred from bankName.
+ * @param {unknown} raw Type from the client or existing document.
+ * @param {unknown} bankName Provider label (e.g. GCash, BDO).
+ * @return {string} Canonical account type.
+ */
+export const normalizePaymentAccountType = (
+  raw: unknown,
+  bankName?: unknown,
+): "bank_transfer" | "credit_card" | "digital_wallet" => {
+  const type = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  if (PAYMENT_ACCOUNT_TYPES.has(type)) {
+    return type as "bank_transfer" | "credit_card" | "digital_wallet";
+  }
+  if (type.includes("wallet")) return "digital_wallet";
+  if (type.includes("card")) return "credit_card";
+
+  const provider =
+    typeof bankName === "string" ? bankName.trim().toLowerCase() : "";
+  if (
+    provider.includes("gcash") ||
+    provider.includes("maya") ||
+    provider.includes("paymaya")
+  ) {
+    return "digital_wallet";
+  }
+  // Legacy "Bank" / "bank transfer" and anything else → bank transfer
+  return "bank_transfer";
+};
+
 /**
  * Verifies if a user has access to a business.
  * @param {string} uid The user ID.
@@ -56,7 +93,7 @@ export const listPaymentInfo = async (req: Request, res: Response) => {
     sortBy = "createdAt",
     sortOrder = "desc",
     page = "1",
-    limit = "10",
+    limit = "100",
   } = req.query;
 
   try {
@@ -76,24 +113,38 @@ export const listPaymentInfo = async (req: Request, res: Response) => {
       query = query.where("bankName", "==", filter);
     }
 
-    // Apply Sorting
-    query = query.orderBy(sortBy as string, sortOrder as "asc" | "desc");
+    // Apply Sorting — fall back to unordered list if createdAt index/docs fail
+    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+    const limitNum = Math.min(
+      200,
+      Math.max(1, parseInt(limit as string, 10) || 100),
+    );
 
-    // Apply Pagination
-    const pageNum = parseInt(page as string);
-    const limitNum = parseInt(limit as string);
-
-    // For proper pagination in Firestore, we usually use startAfter,
-    // but for simple cases offset works (though less efficient for large offsets).
-    const snapshot = await query
-      .limit(limitNum)
-      .offset((pageNum - 1) * limitNum)
-      .get();
+    let snapshot;
+    try {
+      snapshot = await query
+        .orderBy(sortBy as string, sortOrder as "asc" | "desc")
+        .limit(limitNum)
+        .offset((pageNum - 1) * limitNum)
+        .get();
+    } catch (orderError: any) {
+      logger.warn(
+        `Payment info ordered list failed for ${businessId}; falling back`,
+        { error: orderError?.message || String(orderError) },
+      );
+      snapshot = await db
+        .collection("businesses")
+        .doc(businessId)
+        .collection("payment_info")
+        .limit(limitNum)
+        .get();
+    }
 
     const paymentInfos = snapshot.docs.map((doc: any) => {
-      const data = doc.data();
+      const data = doc.data() || {};
       return {
         ...data,
+        type: normalizePaymentAccountType(data.type, data.bankName),
         id: doc.id,
       };
     });
@@ -134,10 +185,21 @@ export const addPaymentInfo = async (req: Request, res: Response) => {
   const user = (req as any).user;
   const { qrCode, bankName, accountName, accountNumber } = req.body;
 
-  if (!bankName || !accountNumber) {
-    res
-      .status(400)
-      .json({ error: "Bank name and account number are required" });
+  const trimmedBank =
+    typeof bankName === "string" ? bankName.trim() : "";
+  const trimmedNumber =
+    typeof accountNumber === "string" ? accountNumber.trim() : "";
+  const trimmedName =
+    typeof accountName === "string" ? accountName.trim() : "";
+
+  if (!trimmedBank) {
+    res.status(400).json({ error: "Provider / bank name is required" });
+    return;
+  }
+  if (!trimmedNumber && !trimmedName) {
+    res.status(400).json({
+      error: "Account number or account holder name is required",
+    });
     return;
   }
 
@@ -158,17 +220,21 @@ export const addPaymentInfo = async (req: Request, res: Response) => {
       .doc(businessId)
       .collection("payment_info")
       .doc();
-    const newData = {
-      qrCode: qrCode || "",
-      bankName,
-      accountName: accountName || "",
-      accountNumber,
-      isPrimary: req.body.isPrimary || false,
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
+    const type = normalizePaymentAccountType(req.body.type, trimmedBank);
+    const persisted = {
+      qrCode: typeof qrCode === "string" ? qrCode : "",
+      bankName: trimmedBank,
+      accountName: trimmedName,
+      accountNumber: trimmedNumber,
+      type,
+      isPrimary: Boolean(req.body.isPrimary),
     };
 
-    await paymentRef.set(newData);
+    await paymentRef.set({
+      ...persisted,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
 
     await logAuditEvent(
       "PAYMENT_INFO_ADDED",
@@ -178,18 +244,30 @@ export const addPaymentInfo = async (req: Request, res: Response) => {
         paymentId: paymentRef.id,
       },
       null,
-      newData,
+      persisted,
     );
 
-    await NotificationService.send({
-      userId: user.uid,
-      businessId,
-      title: "Payment Channel Added",
-      message: `A new payment channel for ${bankName} has been added to your station.`,
-      type: "success",
-    });
+    try {
+      await NotificationService.send({
+        userId: user.uid,
+        businessId,
+        title: "Payment Channel Added",
+        message:
+          `A new payment channel for ${trimmedBank} has been added to your station.`,
+        type: "success",
+      });
+    } catch (notifyError: any) {
+      logger.warn(
+        `Payment info added but notification failed for ${businessId}`,
+        { paymentId: paymentRef.id, error: notifyError?.message },
+      );
+    }
 
-    res.status(201).json({ success: true, paymentId: paymentRef.id });
+    res.status(201).json({
+      success: true,
+      paymentId: paymentRef.id,
+      data: { id: paymentRef.id, ...persisted },
+    });
   } catch (error: any) {
     logger.error(
       `Error adding payment info for business ${businessId}:`,
@@ -233,14 +311,37 @@ export const updatePaymentInfo = async (req: Request, res: Response) => {
       return;
     }
 
-    const oldData = paymentDoc.data();
+    const oldData = paymentDoc.data() || {};
+    const body = { ...(req.body || {}) };
+    delete body.id;
+    delete body.createdAt;
+    delete body.updatedAt;
+
+    if (typeof body.bankName === "string") {
+      body.bankName = body.bankName.trim();
+    }
+    if (typeof body.accountName === "string") {
+      body.accountName = body.accountName.trim();
+    }
+    if (typeof body.accountNumber === "string") {
+      body.accountNumber = body.accountNumber.trim();
+    }
+
+    const nextBankName =
+      typeof body.bankName === "string" ? body.bankName : oldData.bankName;
+    body.type = normalizePaymentAccountType(
+      body.type !== undefined ? body.type : oldData.type,
+      nextBankName,
+    );
+
     const newData = {
-      ...req.body,
+      ...body,
       updatedAt: FieldValue.serverTimestamp(),
     };
 
     await paymentRef.update(newData);
 
+    const auditNewValue = { ...body };
     await logAuditEvent(
       "PAYMENT_INFO_UPDATED",
       {
@@ -249,18 +350,25 @@ export const updatePaymentInfo = async (req: Request, res: Response) => {
         paymentId,
       },
       oldData,
-      newData,
+      auditNewValue,
     );
 
-    await NotificationService.send({
-      userId: user.uid,
-      businessId,
-      title: "Payment Channel Updated",
-      message:
-        `The payment details for ${newData.bankName || oldData?.bankName || "the account"} ` +
-        "have been updated.",
-      type: "success",
-    });
+    try {
+      await NotificationService.send({
+        userId: user.uid,
+        businessId,
+        title: "Payment Channel Updated",
+        message:
+          `The payment details for ${body.bankName || oldData.bankName || "the account"} ` +
+          "have been updated.",
+        type: "success",
+      });
+    } catch (notifyError: any) {
+      logger.warn(
+        `Payment info updated but notification failed for ${businessId}`,
+        { paymentId, error: notifyError?.message },
+      );
+    }
 
     res.json({ success: true, message: "Payment info updated" });
   } catch (error: any) {

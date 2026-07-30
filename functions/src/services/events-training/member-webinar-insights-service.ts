@@ -6,6 +6,12 @@ import {
 
 export type WebinarOpsInsights = {
   generatedAt: string;
+  totals: {
+    guestRegistrations: number;
+    memberRegistrations: number;
+    guestAttended: number;
+    memberAttended: number;
+  };
   webinars: {
     eventId: string;
     name: string;
@@ -17,6 +23,10 @@ export type WebinarOpsInsights = {
     pendingCount: number;
     declinedCount: number;
     attendedCount: number;
+    guestCount: number;
+    memberCount: number;
+    guestAttendedCount: number;
+    memberAttendedCount: number;
   }[];
   recordings: {
     videoId: string;
@@ -77,8 +87,22 @@ export async function getWebinarOpsInsights(): Promise<WebinarOpsInsights> {
 
   const regByEvent = new Map<
     string,
-    { accepted: number; pending: number; declined: number; attended: number }
+    {
+      accepted: number;
+      pending: number;
+      declined: number;
+      attended: number;
+      guest: number;
+      member: number;
+      guestAttended: number;
+      memberAttended: number;
+    }
   >();
+  let guestRegistrations = 0;
+  let memberRegistrations = 0;
+  let guestAttended = 0;
+  let memberAttended = 0;
+
   for (const doc of regsSnap.docs) {
     const data = doc.data() ?? {};
     const eventId = String(data.eventId || "").trim();
@@ -88,13 +112,37 @@ export async function getWebinarOpsInsights(): Promise<WebinarOpsInsights> {
       pending: 0,
       declined: 0,
       attended: 0,
+      guest: 0,
+      member: 0,
+      guestAttended: 0,
+      memberAttended: 0,
     };
     const status = String(data.status || "");
     if (status === "accepted") bucket.accepted += 1;
     else if (status === "pending") bucket.pending += 1;
     else if (status === "declined") bucket.declined += 1;
+
+    const kind = String(data.kind || "member") === "guest" ? "guest" : "member";
+    const isActive = status === "accepted" || status === "pending";
+    if (isActive) {
+      if (kind === "guest") {
+        bucket.guest += 1;
+        guestRegistrations += 1;
+      } else {
+        bucket.member += 1;
+        memberRegistrations += 1;
+      }
+    }
+
     if (String(data.attendanceStatus || "") === "attended") {
       bucket.attended += 1;
+      if (kind === "guest") {
+        bucket.guestAttended += 1;
+        guestAttended += 1;
+      } else {
+        bucket.memberAttended += 1;
+        memberAttended += 1;
+      }
     }
     regByEvent.set(eventId, bucket);
   }
@@ -125,6 +173,10 @@ export async function getWebinarOpsInsights(): Promise<WebinarOpsInsights> {
       pending: 0,
       declined: 0,
       attended: 0,
+      guest: 0,
+      member: 0,
+      guestAttended: 0,
+      memberAttended: 0,
     };
     const capacityRaw =
       data.capacity == null ? null : Number(data.capacity);
@@ -142,6 +194,10 @@ export async function getWebinarOpsInsights(): Promise<WebinarOpsInsights> {
       pendingCount: bucket.pending,
       declinedCount: bucket.declined,
       attendedCount: bucket.attended,
+      guestCount: bucket.guest,
+      memberCount: bucket.member,
+      guestAttendedCount: bucket.guestAttended,
+      memberAttendedCount: bucket.memberAttended,
     };
   });
 
@@ -170,6 +226,12 @@ export async function getWebinarOpsInsights(): Promise<WebinarOpsInsights> {
 
   return {
     generatedAt: new Date().toISOString(),
+    totals: {
+      guestRegistrations,
+      memberRegistrations,
+      guestAttended,
+      memberAttended,
+    },
     webinars,
     recordings,
   };

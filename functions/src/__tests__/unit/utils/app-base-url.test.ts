@@ -29,4 +29,12 @@ describe("app-base-url", () => {
   it("resolveAppBaseUrlForEmail defaults to app.smartrefill.io in production mode", () => {
     expect(resolveAppBaseUrlForEmail()).toBe("https://app.smartrefill.io");
   });
+
+  it("resolveMarketingSiteBaseUrl uses override and prod default", async () => {
+    const { resolveMarketingSiteBaseUrl } = await import("../../../utils/app-base-url");
+    expect(resolveMarketingSiteBaseUrl("https://smartrefill.io/")).toBe(
+      "https://smartrefill.io",
+    );
+    expect(resolveMarketingSiteBaseUrl()).toBe("https://smartrefill.io");
+  });
 });
