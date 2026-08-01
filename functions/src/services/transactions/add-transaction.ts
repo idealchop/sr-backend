@@ -131,6 +131,16 @@ export async function addTransaction(
         notes: initialPaymentNotesForCreate(payMethod, resolvedRiderId),
         ...(confirmedByRider ? { confirmedByRider } : {}),
       });
+    } else if ((transaction.type || "delivery") === "expense" && payments.length > 0) {
+      // Expense has one date field — keep payment date(s) aligned with scheduledAt.
+      for (let i = 0; i < payments.length; i++) {
+        if (payments[i]?.voided) continue;
+        payments[i] = {
+          ...payments[i],
+          id: payments[i].id || `pay-${timestamp}-${random}-${i}`,
+          date: scheduledAt,
+        };
+      }
     }
 
     const newTransaction: Transaction = {

@@ -72,8 +72,25 @@ export async function updateTransaction(
     delete (updates as Partial<Transaction> & { forceApply?: boolean })
       .forceApply;
 
+    const paymentLedgerKeys = new Set([
+      "payments",
+      "amountPaid",
+      "balanceDue",
+      "paymentStatus",
+      "paymentMethod",
+      "baseUpdatedAt",
+      "forceApply",
+    ]);
+    const hasNonPaymentUpdates = Object.keys(updates).some((key) => {
+      if (paymentLedgerKeys.has(key)) return false;
+      return (updates as Record<string, unknown>)[key] !== undefined;
+    });
+
+    // Skip only true payment retries. Expense/date edits re-send the same
+    // amountPaid with scheduledAt (and often a new payment date) — those must write.
     if (
       updates.payments &&
+      !hasNonPaymentUpdates &&
       isIdempotentPaymentPatch(current, {
         payments: updates.payments,
         amountPaid: updates.amountPaid ?? current.amountPaid ?? 0,

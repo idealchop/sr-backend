@@ -67,4 +67,55 @@ describe("applyUpdatePaymentFields", () => {
     expect(updates.paymentStatus).toBe("paid");
     expect(updates.balanceDue).toBe(0);
   });
+
+  it("keeps expense scheduledAt and payment date identical when date changes", () => {
+    const current = baseTx({
+      type: "expense",
+      customerName: "Expense",
+      totalAmount: 250,
+      amountPaid: 250,
+      balanceDue: 0,
+      paymentStatus: "paid",
+      deliveryStatus: "completed",
+      scheduledAt: "2026-06-25T00:00:00.000Z",
+      payments: [
+        { id: "pay-1", amount: 250, date: "2026-06-25T00:00:00.000Z", method: "cash" },
+      ],
+    });
+    const updates: Partial<Transaction> = {
+      scheduledAt: "2026-08-01T00:00:00.000Z",
+      payments: [
+        { id: "pay-1", amount: 250, date: "2026-08-01T00:00:00.000Z", method: "cash" },
+      ],
+      amountPaid: 250,
+    };
+
+    applyUpdatePaymentFields(current, updates);
+
+    expect(updates.scheduledAt).toEqual(new Date("2026-08-01T00:00:00.000Z"));
+    expect(updates.payments?.[0]?.date).toEqual(new Date("2026-08-01T00:00:00.000Z"));
+  });
+
+  it("syncs expense payment dates when only scheduledAt is patched", () => {
+    const current = baseTx({
+      type: "expense",
+      customerName: "Expense",
+      totalAmount: 100,
+      amountPaid: 100,
+      balanceDue: 0,
+      paymentStatus: "paid",
+      deliveryStatus: "completed",
+      scheduledAt: "2026-06-25T00:00:00.000Z",
+      payments: [
+        { id: "pay-1", amount: 100, date: "2026-06-25T00:00:00.000Z", method: "cash" },
+      ],
+    });
+    const updates: Partial<Transaction> = {
+      scheduledAt: "2026-08-01T08:30:00.000Z",
+    };
+
+    applyUpdatePaymentFields(current, updates);
+
+    expect(updates.payments?.[0]?.date).toEqual(new Date("2026-08-01T08:30:00.000Z"));
+  });
 });

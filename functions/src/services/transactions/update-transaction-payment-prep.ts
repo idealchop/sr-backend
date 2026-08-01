@@ -3,13 +3,73 @@ import {
   derivePaymentFields,
   getActiveAmountPaid,
 } from "./payment-status";
-import type { Transaction } from "./transaction-types";
+import type { Transaction, TransactionPayment } from "./transaction-types";
 
 type PaymentPrepUpdates = Partial<Transaction>;
 
+function coerceToDate(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value : null;
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date : null;
+  }
+  if (typeof value === "object" && value !== null && "toDate" in value) {
+    try {
+      const date = (value as { toDate: () => Date }).toDate();
+      return Number.isFinite(date.getTime()) ? date : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Expense UI has one date field: keep scheduledAt and active payment dates identical.
+ */
+function syncExpenseDateFields(
+  current: Transaction,
+  updates: PaymentPrepUpdates,
+): void {
+  const effectiveType = updates.type ?? current.type;
+  if (effectiveType !== "expense") return;
+
+  if (updates.scheduledAt && typeof updates.scheduledAt === "string") {
+    updates.scheduledAt = new Date(updates.scheduledAt);
+  }
+
+  let expenseDate = coerceToDate(updates.scheduledAt);
+
+  if (!expenseDate && updates.payments?.length) {
+    const active = updates.payments.find((payment) => !payment.voided);
+    expenseDate = coerceToDate(active?.date) ?? null;
+    if (expenseDate) {
+      updates.scheduledAt = expenseDate;
+    }
+  }
+
+  if (!expenseDate) return;
+
+  const sourcePayments =
+    updates.payments !== undefined ? updates.payments : current.payments;
+  if (!sourcePayments?.length) return;
+
+  updates.payments = sourcePayments.map((payment: TransactionPayment) => {
+    if (payment.voided) return payment;
+    return {
+      ...payment,
+      date: expenseDate,
+    };
+  });
+}
+
 /**
  * Mutates `updates` to keep amountPaid / payments[] / balanceDue / paymentStatus
- * consistent (void-aware). Also coerces string scheduledAt → Date.
+ * consistent (void-aware). Also coerces string scheduledAt → Date and keeps
+ * expense scheduledAt in sync with payment date(s).
  */
 export function applyUpdatePaymentFields(
   current: Transaction,
@@ -79,4 +139,6 @@ export function applyUpdatePaymentFields(
   if (updates.scheduledAt && typeof updates.scheduledAt === "string") {
     updates.scheduledAt = new Date(updates.scheduledAt);
   }
+
+  syncExpenseDateFields(current, updates);
 }

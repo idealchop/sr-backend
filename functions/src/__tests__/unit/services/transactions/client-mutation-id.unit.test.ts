@@ -48,4 +48,40 @@ describe("client-mutation-id", () => {
 
     expect(isIdempotentPaymentPatch(current, updates)).toBe(false);
   });
+
+  it("allows expense date edits that keep the same paid total", () => {
+    const current = {
+      amountPaid: 250,
+      payments: [
+        { amount: 250, date: "2026-06-25T08:00:00.000Z", method: "cash" },
+      ],
+    };
+
+    const updates = {
+      amountPaid: 250,
+      payments: [
+        { amount: 250, date: "2026-07-01T00:00:00.000Z", method: "cash" },
+      ],
+    };
+
+    expect(isIdempotentPaymentPatch(current, updates)).toBe(false);
+  });
+
+  it("allows payment method corrections with the same paid total", () => {
+    const current = {
+      amountPaid: 100,
+      payments: [
+        { id: "pay-1", amount: 100, date: "2026-06-25T08:00:00.000Z", method: "cash" },
+      ],
+    };
+
+    const updates = {
+      amountPaid: 100,
+      payments: [
+        { id: "pay-1", amount: 100, date: "2026-06-25T08:00:00.000Z", method: "gcash" },
+      ],
+    };
+
+    expect(isIdempotentPaymentPatch(current, updates)).toBe(false);
+  });
 });
