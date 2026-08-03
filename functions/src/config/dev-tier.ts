@@ -37,12 +37,16 @@ export function isSmartrefillDeployedDevTier(): boolean {
 
 /**
  * Firestore database for this instance.
- * Explicit SMARTREFILL_FIRESTORE_DB wins (local .env); else *Dev → riverdb-dev.
+ * *Dev Cloud Functions always use riverdb-dev (ignore local .env riverdb bleed-through).
+ * Otherwise SMARTREFILL_FIRESTORE_DB wins, then riverdb.
  */
 export function resolveFirestoreDatabaseId(): string {
+  if (isSmartrefillDeployedDevTier()) {
+    return "riverdb-dev";
+  }
   const fromEnv = process.env.SMARTREFILL_FIRESTORE_DB?.trim();
   if (fromEnv) return fromEnv;
-  return isSmartrefillDeployedDevTier() ? "riverdb-dev" : "riverdb";
+  return "riverdb";
 }
 
 export function resolvePublicApiBaseUrl(): string {
