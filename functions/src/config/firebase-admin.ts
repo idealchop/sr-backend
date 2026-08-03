@@ -5,6 +5,7 @@ import * as admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
 import { buildFirebaseAdminInit } from "./firebase-admin-options";
+import { resolveFirestoreDatabaseId } from "./dev-tier";
 
 let app: admin.app.App;
 if (admin.apps.length === 0) {
@@ -13,13 +14,13 @@ if (admin.apps.length === 0) {
   logger.info("Firebase Admin SDK initialized for SmartRefill V3", {
     projectId: app.options.projectId ?? projectId,
     credentialMode,
-    firestoreDatabaseId: process.env.SMARTREFILL_FIRESTORE_DB || "riverdb",
+    firestoreDatabaseId: resolveFirestoreDatabaseId(),
   });
 } else {
   app = admin.app();
 }
 
-const firestoreDatabaseId = process.env.SMARTREFILL_FIRESTORE_DB || "riverdb";
+const firestoreDatabaseId = resolveFirestoreDatabaseId();
 export const db = getFirestore(app, firestoreDatabaseId);
 
 db.settings({ ignoreUndefinedProperties: true });

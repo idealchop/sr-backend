@@ -17,6 +17,7 @@ import {
   buildRenewalAddonCheckout,
   type AddonCatalogRow,
 } from "../utils/subscription-renewal-addons";
+import { resolvePublicApiBaseUrl } from "../config/dev-tier";
 
 const RENEWAL_LEAD_DAYS = 3;
 
@@ -69,6 +70,119 @@ async function hasPendingRenewIntent(
  * Creates link-based renewal payment intents before period end (or during grace)
  * when auto-renew is enabled but PayMongo Subscriptions API is unavailable.
  */
+export async function runSubscriptionAutoRenewScheduler(): Promise<void> {
+  const now = new Date();
+  const businessesSnap = await db.collection("businesses").select().get();
+  const addonCatalogLookup = await fetchAddonCatalogLookup();
+  let created = 0;
+
+  for (const businessDoc of businessesSnap.docs) {
+    const businessId = businessDoc.id;
+    try {
+      const rows = await fetchRecentSubscriptionRows(businessId);
+      const effective = pickEffectiveEntitling(rows, now);
+      if (!effective) continue;
+
+      const data = effective.data;
+      const planCode = String(data.planCode || "").toLowerCase();
+      const cycle = String(data.billingCycle || "").toLowerCase();
+
+      const billing = await PaymongoRecurringService.getBillingProfile(businessId);
+      const pmStatus = String(billing?.status || "").toLowerCase();
+      const hasActivePaymongoSubscription =
+        !!billing?.subscriptionId &&
+        (pmStatus === "active" || pmStatus === "trialing");
+
+      const eligible = subscriptionRowEligibleForLinkRenewal({
+        row: effective,
+        now,
+        leadDays: RENEWAL_LEAD_DAYS,
+        hasActivePaymongoSubscription,
+        hasPendingRenewIntent: await hasPendingRenewIntent(businessId, planCode),
+        hasQueuedPaidRenewal: hasQueuedPaidRenewal(rows, planCode, now),
+      });
+      if (!eligible) continue;
+
+      const ownerId = String(
+        (await businessDoc.ref.get()).data()?.ownerId || "",
+      ).trim();
+      if (!ownerId) continue;
+
+      let ownerEmail = "";
+      let ownerName = "";
+      const uSnap = await db.collection("users").doc(ownerId).get();
+      if (uSnap.exists) {
+        const u = uSnap.data() as Record<string, unknown>;
+        ownerEmail = String(u.email || "").trim();
+        ownerName = String(u.displayName || u.name || "").trim();
+      }
+
+      const billingCycle =
+        cycle === "yearly" ? "yearly" as const : "monthly" as const;
+
+      const planLineAmount = await resolvePlanLineAmount(
+        data as Record<string, unknown>,
+        billingCycle,
+      );
+      const { addonLineItems, addonsTotal } = buildRenewalAddonCheckout(
+        data as Record<string, unknown>,
+        addonCatalogLookup,
+        billingCycle,
+      );
+      const amount = planLineAmount + addonsTotal;
+      if (!amount || amount <= 0) continue;
+
+      const intent = await PaymentIntentService.createSubscriptionIntent({
+        businessId,
+        userId: ownerId,
+        targetPlanCode: planCode,
+        subscriptionAction: "RENEW",
+        billingCycle,
+        amount,
+        checkoutPayload: {
+          autoRenew: true,
+          cancelAtPeriodEnd: false,
+          billingCycle,
+          planLineAmount,
+          addonsTotal,
+          addonLineItems,
+        },
+        ownerEmail: ownerEmail || undefined,
+        ownerName: ownerName || undefined,
+        apiBaseUrl: resolvePublicApiBaseUrl(),
+      });
+
+      const planLabel = String(data.planName || planCode);
+      await NotificationService.send({
+        userId: ownerId,
+        businessId,
+        title: "Subscription renewal due",
+        message:
+          `Your ${planLabel} plan needs renewal to stay active. ` +
+          `Pay online: ${intent.checkoutUrl}`,
+        type: "info",
+        metadata: {
+          checkoutUrl: intent.checkoutUrl,
+          intentId: intent.id,
+          kind: "subscription_renewal",
+        },
+      });
+
+      created += 1;
+    } catch (error) {
+      logger.error("subscriptionAutoRenewScheduler business failed", {
+        businessId,
+        error,
+      });
+    }
+  }
+
+  logger.info("subscriptionAutoRenewScheduler complete", {
+    businesses: businessesSnap.size,
+    created,
+  });
+}
+
 export const subscriptionAutoRenewScheduler = onSchedule(
   {
     schedule: "0 6 * * *",
@@ -78,118 +192,5 @@ export const subscriptionAutoRenewScheduler = onSchedule(
     timeoutSeconds: 540,
     secrets: ["PAYMONGO_SECRET_KEY"],
   },
-  async () => {
-    const now = new Date();
-    const businessesSnap = await db.collection("businesses").select().get();
-    const addonCatalogLookup = await fetchAddonCatalogLookup();
-    let created = 0;
-
-    for (const businessDoc of businessesSnap.docs) {
-      const businessId = businessDoc.id;
-      try {
-        const rows = await fetchRecentSubscriptionRows(businessId);
-        const effective = pickEffectiveEntitling(rows, now);
-        if (!effective) continue;
-
-        const data = effective.data;
-        const planCode = String(data.planCode || "").toLowerCase();
-        const cycle = String(data.billingCycle || "").toLowerCase();
-
-        const billing = await PaymongoRecurringService.getBillingProfile(businessId);
-        const pmStatus = String(billing?.status || "").toLowerCase();
-        const hasActivePaymongoSubscription =
-          !!billing?.subscriptionId &&
-          (pmStatus === "active" || pmStatus === "trialing");
-
-        const eligible = subscriptionRowEligibleForLinkRenewal({
-          row: effective,
-          now,
-          leadDays: RENEWAL_LEAD_DAYS,
-          hasActivePaymongoSubscription,
-          hasPendingRenewIntent: await hasPendingRenewIntent(businessId, planCode),
-          hasQueuedPaidRenewal: hasQueuedPaidRenewal(rows, planCode, now),
-        });
-        if (!eligible) continue;
-
-        const ownerId = String(
-          (await businessDoc.ref.get()).data()?.ownerId || "",
-        ).trim();
-        if (!ownerId) continue;
-
-        let ownerEmail = "";
-        let ownerName = "";
-        const uSnap = await db.collection("users").doc(ownerId).get();
-        if (uSnap.exists) {
-          const u = uSnap.data() as Record<string, unknown>;
-          ownerEmail = String(u.email || "").trim();
-          ownerName = String(u.displayName || u.name || "").trim();
-        }
-
-        const billingCycle =
-          cycle === "yearly" ? "yearly" as const : "monthly" as const;
-
-        const planLineAmount = await resolvePlanLineAmount(
-          data as Record<string, unknown>,
-          billingCycle,
-        );
-        const { addonLineItems, addonsTotal } = buildRenewalAddonCheckout(
-          data as Record<string, unknown>,
-          addonCatalogLookup,
-          billingCycle,
-        );
-        const amount = planLineAmount + addonsTotal;
-        if (!amount || amount <= 0) continue;
-
-        const intent = await PaymentIntentService.createSubscriptionIntent({
-          businessId,
-          userId: ownerId,
-          targetPlanCode: planCode,
-          subscriptionAction: "RENEW",
-          billingCycle,
-          amount,
-          checkoutPayload: {
-            autoRenew: true,
-            cancelAtPeriodEnd: false,
-            billingCycle,
-            planLineAmount,
-            addonsTotal,
-            addonLineItems,
-          },
-          ownerEmail: ownerEmail || undefined,
-          ownerName: ownerName || undefined,
-          apiBaseUrl:
-            process.env.PUBLIC_API_BASE_URL?.trim() ||
-            "https://asia-southeast1-aquaflow-management-suite.cloudfunctions.net/smartrefillV3Api",
-        });
-
-        const planLabel = String(data.planName || planCode);
-        await NotificationService.send({
-          userId: ownerId,
-          businessId,
-          title: "Subscription renewal due",
-          message:
-            `Your ${planLabel} plan needs renewal to stay active. ` +
-            `Pay online: ${intent.checkoutUrl}`,
-          type: "info",
-          metadata: {
-            checkoutUrl: intent.checkoutUrl,
-            intentId: intent.id,
-            kind: "subscription_renewal",
-          },
-        });
-
-        created += 1;
-      } catch (error) {
-        logger.error("subscriptionAutoRenewScheduler business failed", {
-          businessId,
-          error,
-        });
-      }
-    }
-
-    logger.info("subscriptionAutoRenewScheduler complete", {
-      businesses: businessesSnap.size,
-      created,
-    });
-  },
+  runSubscriptionAutoRenewScheduler,
 );

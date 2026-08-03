@@ -7,6 +7,14 @@ import { TEAM_CHAT_RETENTION_DAYS } from "../services/team/team-chat-retention";
  * Permanently deletes team chat messages older than the retention window
  * and removes conversation docs that no longer have messages.
  */
+export async function runPurgeExpiredTeamChats(): Promise<void> {
+  const result = await purgeExpiredTeamChatContent();
+  logger.info("purgeExpiredTeamChats complete", {
+    retentionDays: TEAM_CHAT_RETENTION_DAYS,
+    ...result,
+  });
+}
+
 export const purgeExpiredTeamChats = onSchedule(
   {
     schedule: "every day 03:30",
@@ -15,11 +23,5 @@ export const purgeExpiredTeamChats = onSchedule(
     memory: "512MiB",
     timeoutSeconds: 540,
   },
-  async () => {
-    const result = await purgeExpiredTeamChatContent();
-    logger.info("purgeExpiredTeamChats complete", {
-      retentionDays: TEAM_CHAT_RETENTION_DAYS,
-      ...result,
-    });
-  },
+  runPurgeExpiredTeamChats,
 );

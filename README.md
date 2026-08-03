@@ -103,10 +103,19 @@ Docs: [`../frontend/docs/community-dispatch-test-summary.md`](../frontend/docs/c
 From `backend/`:
 
 ```bash
+# Prod (default) — same as before: smartrefillV3Api + riverdb
 ./deploy.sh
+
+# Dev — smartrefillV3ApiDev + riverdb-dev only (does not replace Prod)
+ENV=dev ./deploy.sh
+
+# Dev + on-demand schedulers/triggers against riverdb-dev
+ENV=dev DEPLOY_DEV_JOBS=1 ./deploy.sh
 ```
 
-Pipeline: build → unit → integration → BDD (emulator) → lint → deploy **functions** (`v3-api` codebase) and **Firestore rules/indexes** (synced from frontend).
+Pipeline: build → unit → integration → BDD (emulator) → lint → deploy **functions** and **firestore rules/indexes**.
+
+See [`../frontend/docs/environments.md`](../frontend/docs/environments.md).
 
 **Storage rules** are skipped by default — `aquaflow-management-suite` does not use Firebase Storage for app uploads (files go through the API). To deploy `frontend/storage.rules` after enabling Storage in the console:
 

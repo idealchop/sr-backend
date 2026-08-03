@@ -7,6 +7,19 @@ import { ProactiveScheduleWeekSnapshotService } from
  * Deletes `proactive_schedule_week_snapshots` docs whose `expireAt` is in the past.
  * Run even if Firestore TTL is enabled on `expireAt` (TTL can lag slightly; this is a safety net).
  */
+export async function runPurgeExpiredProactiveScheduleWeekSnapshots(): Promise<void> {
+  let total = 0;
+  for (let i = 0; i < 20; i++) {
+    const n =
+      await ProactiveScheduleWeekSnapshotService.deleteExpiredBatch(500);
+    total += n;
+    if (n < 500) break;
+  }
+  logger.info("purgeExpiredProactiveScheduleWeekSnapshots complete", {
+    deletedApprox: total,
+  });
+}
+
 export const purgeExpiredProactiveScheduleWeekSnapshots = onSchedule(
   {
     schedule: "every day 04:00",
@@ -15,16 +28,5 @@ export const purgeExpiredProactiveScheduleWeekSnapshots = onSchedule(
     memory: "256MiB",
     timeoutSeconds: 300,
   },
-  async () => {
-    let total = 0;
-    for (let i = 0; i < 20; i++) {
-      const n =
-        await ProactiveScheduleWeekSnapshotService.deleteExpiredBatch(500);
-      total += n;
-      if (n < 500) break;
-    }
-    logger.info("purgeExpiredProactiveScheduleWeekSnapshots complete", {
-      deletedApprox: total,
-    });
-  },
+  runPurgeExpiredProactiveScheduleWeekSnapshots,
 );

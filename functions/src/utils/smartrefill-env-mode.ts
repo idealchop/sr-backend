@@ -3,9 +3,13 @@
  *
  * - `SMARTREFILL_ENV_DEV=true` (or `1` / `yes`): use local `functions/.env` values
  *   (e.g. `SMARTREFILL_BREVO_API_KEY`, `APP_BASE_URL`).
+ * - `SMARTREFILL_DEPLOY_TIER=dev`: deployed Dev Cloud Functions (riverdb-dev); honors
+ *   `APP_BASE_URL` without setting SMARTREFILL_ENV_DEV.
  * - Unset / false: production — keys from Secret Manager; public links use the canonical app
-   origin.
+ *   origin.
  */
+
+import { DEV_IN_APP_ORIGIN, isSmartrefillDeployedDevTier } from "../config/dev-tier";
 
 const PRODUCTION_APP_ORIGIN = "https://app.smartrefill.io";
 
@@ -17,9 +21,9 @@ function stripTrailingSlash(origin: string): string {
 /**
  * Dashboard origin for server-built deep links (invites, verification/reset emails).
  *
- * - Dev: non-empty `APP_BASE_URL` from `.env`; otherwise `https://app.smartrefill.io`
- *   (with a console warning).
- * - Prod: always `https://app.smartrefill.io` (ignores `APP_BASE_URL` in the environment).
+ * - Local SMARTREFILL_ENV_DEV or deployed SMARTREFILL_DEPLOY_TIER=dev: non-empty
+ *   `APP_BASE_URL` from env; otherwise `https://app.smartrefill.io` (with a warning in local).
+ * - Prod: always `https://app.smartrefill.io` (ignores `APP_BASE_URL`).
  *
  * @param {string} [override] Optional caller value; wins when non-empty.
  */
@@ -31,12 +35,15 @@ export function resolveSmartrefillPublicBaseUrl(
     return stripTrailingSlash(candidate);
   }
 
-  if (isSmartrefillDevMode()) {
+  if (isSmartrefillDevMode() || isSmartrefillDeployedDevTier()) {
     const fromEnv = process.env.APP_BASE_URL?.trim();
     if (fromEnv?.length) {
       return stripTrailingSlash(fromEnv);
     }
-    if (process.env.NODE_ENV !== "test") {
+    if (isSmartrefillDeployedDevTier()) {
+      return stripTrailingSlash(DEV_IN_APP_ORIGIN);
+    }
+    if (isSmartrefillDevMode() && process.env.NODE_ENV !== "test") {
       console.warn(
         "[SmartRefill] SMARTREFILL_ENV_DEV is enabled but APP_BASE_URL is unset; " +
         "defaulting origin to https://app.smartrefill.io.",

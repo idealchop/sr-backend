@@ -6,6 +6,31 @@ import { db } from "../config/firebase-admin";
  * SC-09 — owner data warehouse export job stub (BigQuery / GCS).
  * Nightly: enqueue export for Scale+ businesses with `dataWarehouseExportEnabled`.
  */
+export async function runOwnerDataWarehouseExport(): Promise<void> {
+  const snap = await db
+    .collection("businesses")
+    .where("dataWarehouseExportEnabled", "==", true)
+    .limit(25)
+    .get();
+
+  let enqueued = 0;
+  for (const doc of snap.docs) {
+    await doc.ref.collection("export_jobs").add({
+      type: "bigquery_rollup",
+      status: "queued",
+      schemaVersion: "2026-06",
+      createdAt: new Date(),
+      note: "Stub job — wire BigQuery extension or GCS sink.",
+    });
+    enqueued += 1;
+  }
+
+  logger.info("ownerDataWarehouseExport complete", {
+    scanned: snap.size,
+    enqueued,
+  });
+}
+
 export const ownerDataWarehouseExport = onSchedule(
   {
     schedule: "every day 02:00",
@@ -14,28 +39,5 @@ export const ownerDataWarehouseExport = onSchedule(
     memory: "512MiB",
     timeoutSeconds: 300,
   },
-  async () => {
-    const snap = await db
-      .collection("businesses")
-      .where("dataWarehouseExportEnabled", "==", true)
-      .limit(25)
-      .get();
-
-    let enqueued = 0;
-    for (const doc of snap.docs) {
-      await doc.ref.collection("export_jobs").add({
-        type: "bigquery_rollup",
-        status: "queued",
-        schemaVersion: "2026-06",
-        createdAt: new Date(),
-        note: "Stub job — wire BigQuery extension or GCS sink.",
-      });
-      enqueued += 1;
-    }
-
-    logger.info("ownerDataWarehouseExport complete", {
-      scanned: snap.size,
-      enqueued,
-    });
-  },
+  runOwnerDataWarehouseExport,
 );

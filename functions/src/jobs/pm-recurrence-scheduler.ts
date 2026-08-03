@@ -6,6 +6,26 @@ import { db } from "../config/firebase-admin";
 /**
  * MP-11 — nightly PM recurrence: roll gallon counters from production shifts.
  */
+export async function runPmRecurrenceScheduler(): Promise<void> {
+  const businessesSnap = await db.collection("businesses").select().get();
+  let updated = 0;
+
+  for (const businessDoc of businessesSnap.docs) {
+    const businessId = businessDoc.id;
+    try {
+      const count = await MaintenanceTemplateService.syncGallonRecurrence(businessId);
+      updated += count;
+    } catch (error) {
+      logger.error("pmRecurrenceScheduler business failed", { businessId, error });
+    }
+  }
+
+  logger.info("pmRecurrenceScheduler complete", {
+    businesses: businessesSnap.size,
+    updated,
+  });
+}
+
 export const pmRecurrenceScheduler = onSchedule(
   {
     schedule: "0 2 * * *",
@@ -14,23 +34,5 @@ export const pmRecurrenceScheduler = onSchedule(
     memory: "512MiB",
     timeoutSeconds: 540,
   },
-  async () => {
-    const businessesSnap = await db.collection("businesses").select().get();
-    let updated = 0;
-
-    for (const businessDoc of businessesSnap.docs) {
-      const businessId = businessDoc.id;
-      try {
-        const count = await MaintenanceTemplateService.syncGallonRecurrence(businessId);
-        updated += count;
-      } catch (error) {
-        logger.error("pmRecurrenceScheduler business failed", { businessId, error });
-      }
-    }
-
-    logger.info("pmRecurrenceScheduler complete", {
-      businesses: businessesSnap.size,
-      updated,
-    });
-  },
+  runPmRecurrenceScheduler,
 );
