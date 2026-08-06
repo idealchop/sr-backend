@@ -138,6 +138,7 @@ export class LedgerScanService {
       user,
       fallback,
       maxOutputTokens: 4096,
+      operation: "ledger.scan.text",
     });
 
     return normalizeExtract({
@@ -200,6 +201,7 @@ export class LedgerScanService {
       parts,
       fallback,
       maxOutputTokens: 4096,
+      operation: "ledger.scan.image",
     });
 
     return normalizeExtract({

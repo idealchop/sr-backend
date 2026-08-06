@@ -1,6 +1,8 @@
 import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "firebase-functions";
 import { AiToolRunService } from "../ai/ai-tool-run-service";
+import { tryConsumeAutoAiToolSlot } from "../ai/auto-ai-tool-budget";
+import { SMARTREFILL_AI_UNDER_MAINTENANCE } from "../ai/ai-maintenance";
 import {
   resolveNotificationPreferencesFromUiConfig,
 } from "../../utils/notification-preferences";
@@ -32,6 +34,8 @@ export async function runAutoMorningBriefForBusiness(
   businessId: string,
   now = new Date(),
 ): Promise<{ ran: boolean; runId?: string }> {
+  if (SMARTREFILL_AI_UNDER_MAINTENANCE) return { ran: false };
+
   const businessRef = db.collection("businesses").doc(businessId);
   const businessDoc = await businessRef.get();
   if (!businessDoc.exists) return { ran: false };
@@ -54,6 +58,10 @@ export async function runAutoMorningBriefForBusiness(
   }
 
   const dateKey = manilaDateKey(now);
+  if (!(await tryConsumeAutoAiToolSlot(businessId, dateKey))) {
+    return { ran: false };
+  }
+
   const run = await AiToolRunService.executeTool({
     businessId,
     uid: ownerId,

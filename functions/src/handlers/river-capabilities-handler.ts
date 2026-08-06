@@ -13,6 +13,14 @@ import {
   excludeDismissedDuplicateCustomers,
   readDismissedDuplicateCustomerIds,
 } from "../services/ai/duplicate-dismissals-service";
+import {
+  assertInteractiveAiQuota,
+  sendAiQuotaExceeded,
+} from "../services/ai/ai-tool-quota-service";
+import {
+  assertAiFeatureAvailable,
+  sendAiUnderMaintenance,
+} from "../services/ai/ai-maintenance";
 import { LedgerScanService } from "../services/ai/ledger-scan-service";
 import { LedgerScanCommitService } from "../services/ai/ledger-scan-commit-service";
 import { InventoryScanService } from "../services/ai/inventory-scan-service";
@@ -34,6 +42,8 @@ export async function postLedgerScanText(req: Request, res: Response) {
     return;
   }
   try {
+    assertAiFeatureAvailable("ledger.scan.text");
+    await assertInteractiveAiQuota(businessId);
     const [customers, items] = await Promise.all([
       CustomerService.getCustomersByBusiness(businessId),
       InventoryService.listItems(businessId),
@@ -52,6 +62,8 @@ export async function postLedgerScanText(req: Request, res: Response) {
     });
     res.json({ data });
   } catch (e) {
+    if (sendAiUnderMaintenance(res, e)) return;
+    if (sendAiQuotaExceeded(res, e)) return;
     logger.error("postLedgerScanText", e);
     res.status(500).json({ error: "Ledger scan failed" });
   }
@@ -73,6 +85,8 @@ export async function postLedgerScanImage(req: Request, res: Response) {
     return;
   }
   try {
+    assertAiFeatureAvailable("ledger.scan.image");
+    await assertInteractiveAiQuota(businessId);
     const [customers, items] = await Promise.all([
       CustomerService.getCustomersByBusiness(businessId),
       InventoryService.listItems(businessId),
@@ -91,6 +105,8 @@ export async function postLedgerScanImage(req: Request, res: Response) {
     });
     res.json({ data });
   } catch (e) {
+    if (sendAiUnderMaintenance(res, e)) return;
+    if (sendAiQuotaExceeded(res, e)) return;
     logger.error("postLedgerScanImage", e);
     res.status(500).json({ error: "Ledger image scan failed" });
   }
@@ -161,6 +177,36 @@ export async function postDuplicatesDetect(req: Request, res: Response) {
       customers,
       dismissedCustomerIds,
     );
+    const duplicateGroups = detectDuplicateCustomerGroups(activeCustomers);
+    res.json({
+      data: {
+        duplicateGroups,
+        aiValidated: false,
+      },
+    });
+  } catch (e) {
+    logger.error("postDuplicatesDetect", e);
+    res.status(500).json({ error: "Duplicate detection failed" });
+  }
+}
+
+/** Opt-in Gemini validation after heuristic detect. */
+export async function postDuplicatesValidateAi(req: Request, res: Response) {
+  const { businessId } = req.params;
+  try {
+    assertAiFeatureAvailable("duplicates.validate");
+    await assertInteractiveAiQuota(businessId);
+    const [customers, businessDoc] = await Promise.all([
+      CustomerService.getCustomersByBusiness(businessId),
+      db.collection("businesses").doc(businessId).get(),
+    ]);
+    const dismissedCustomerIds = readDismissedDuplicateCustomerIds(
+      businessDoc.data()?.uiConfig as Record<string, unknown> | undefined,
+    );
+    const activeCustomers = excludeDismissedDuplicateCustomers(
+      customers,
+      dismissedCustomerIds,
+    );
     const heuristicGroups = detectDuplicateCustomerGroups(activeCustomers);
     const duplicateGroups = await validateDuplicateCustomerGroupsWithAi(
       heuristicGroups,
@@ -172,8 +218,10 @@ export async function postDuplicatesDetect(req: Request, res: Response) {
       },
     });
   } catch (e) {
-    logger.error("postDuplicatesDetect", e);
-    res.status(500).json({ error: "Duplicate detection failed" });
+    if (sendAiUnderMaintenance(res, e)) return;
+    if (sendAiQuotaExceeded(res, e)) return;
+    logger.error("postDuplicatesValidateAi", e);
+    res.status(500).json({ error: "Duplicate AI validation failed" });
   }
 }
 
@@ -243,6 +291,8 @@ export async function postInventoryScanText(req: Request, res: Response) {
     return;
   }
   try {
+    assertAiFeatureAvailable("inventory.scan.text");
+    await assertInteractiveAiQuota(businessId);
     const items = await InventoryService.listItems(businessId);
     const catalog = items.map((i) => ({
       id: i.id || "",
@@ -255,6 +305,8 @@ export async function postInventoryScanText(req: Request, res: Response) {
     });
     res.json({ data });
   } catch (e) {
+    if (sendAiUnderMaintenance(res, e)) return;
+    if (sendAiQuotaExceeded(res, e)) return;
     logger.error("postInventoryScanText", e);
     res.status(500).json({ error: "Inventory text scan failed" });
   }
@@ -271,6 +323,8 @@ export async function postInventoryScanImage(req: Request, res: Response) {
     return;
   }
   try {
+    assertAiFeatureAvailable("inventory.scan.image");
+    await assertInteractiveAiQuota(businessId);
     const items = await InventoryService.listItems(businessId);
     const catalog = items.map((i) => ({
       id: i.id || "",
@@ -283,6 +337,8 @@ export async function postInventoryScanImage(req: Request, res: Response) {
     });
     res.json({ data });
   } catch (e) {
+    if (sendAiUnderMaintenance(res, e)) return;
+    if (sendAiQuotaExceeded(res, e)) return;
     logger.error("postInventoryScanImage", e);
     res.status(500).json({ error: "Inventory image scan failed" });
   }

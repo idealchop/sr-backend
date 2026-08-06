@@ -68,6 +68,7 @@ export async function parseFreeTextOrder(params: {
     system,
     user,
     fallback: FALLBACK,
+    operation: "order.parse",
   });
 
   const confidence = Math.min(1, Math.max(0, Number(raw?.confidence) || 0));

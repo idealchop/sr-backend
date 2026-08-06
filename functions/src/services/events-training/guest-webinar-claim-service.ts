@@ -147,6 +147,24 @@ export async function claimGuestWebinarRegistration(input: {
     { merge: true },
   );
 
+  // Copy paid guest unlock into member workspace unlocks when present.
+  try {
+    const { hasGuestWebinarUnlock } = await import("./guest-webinar-unlock-service");
+    if (await hasGuestWebinarUnlock(eventId, email)) {
+      const { grantWebinarUnlock } = await import("./member-webinar-unlock-service");
+      await grantWebinarUnlock({
+        businessId,
+        eventId,
+        userId,
+        intentId: `guest_claim_${registrationId}`,
+        amount: 0,
+        provider: "guest_claim",
+      });
+    }
+  } catch {
+    // Claim succeeded; unlock copy is best-effort.
+  }
+
   return {
     registrationId,
     eventId,

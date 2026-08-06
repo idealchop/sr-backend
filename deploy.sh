@@ -141,7 +141,7 @@ if [[ "${DEPLOY_ENV}" == "dev" ]]; then
   # Codebase-qualified filters (firebase-tools requires v3-api:<name>)
   DEV_ONLY="functions:v3-api:smartrefillV3ApiDev"
   if [[ "${DEPLOY_DEV_JOBS:-0}" == "1" ]]; then
-    DEV_ONLY="${DEV_ONLY},functions:v3-api:purgeExpiredProactiveScheduleWeekSnapshotsDev,functions:v3-api:purgeExpiredTeamChatsDev,functions:v3-api:backfillCustomerLastFulfilledDev,functions:v3-api:reconcileAnalyticsSnapshotsDev,functions:v3-api:dormantDigestNotificationDev,functions:v3-api:morningOwnerIntelligenceDev,functions:v3-api:proactiveInsightPushNotificationDev,functions:v3-api:pmRecurrenceSchedulerDev,functions:v3-api:subscriptionAutoRenewSchedulerDev,functions:v3-api:communityDispatchExpireOffersDev,functions:v3-api:guestWebinarRemindersDev,functions:v3-api:ownerDataWarehouseExportDev,functions:v3-api:onSubscriptionUpdatedDev"
+    DEV_ONLY="${DEV_ONLY},functions:v3-api:purgeExpiredProactiveScheduleWeekSnapshotsDev,functions:v3-api:purgeExpiredTeamChatsDev,functions:v3-api:backfillCustomerLastFulfilledDev,functions:v3-api:reconcileAnalyticsSnapshotsDev,functions:v3-api:dormantDigestNotificationDev,functions:v3-api:morningOwnerIntelligenceDev,functions:v3-api:proactiveInsightPushNotificationDev,functions:v3-api:pmRecurrenceSchedulerDev,functions:v3-api:subscriptionAutoRenewSchedulerDev,functions:v3-api:guestWebinarRemindersDev,functions:v3-api:ownerDataWarehouseExportDev,functions:v3-api:onSubscriptionUpdatedDev"
     echo -e "${BLUE}🔥 Deploying Dev Cloud Functions (API + jobs/triggers) → riverdb-dev...${NC}"
   else
     echo -e "${BLUE}🔥 Deploying Dev Cloud Functions (API only) → riverdb-dev...${NC}"

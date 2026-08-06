@@ -3,10 +3,12 @@ import { logger } from "../services/observability/logging/logger";
 import { isSalesPortalOpsUser } from "../services/meta/community-dispatch-ops-notify-service";
 import { notifyOwnersTutorialPublished } from "../services/events-training/notify-tutorial-published-service";
 import { notifyOwnersWebinarPublished } from "../services/events-training/notify-webinar-published-service";
+import { notifyOwnersWebinarRegistrationOpen } from "../services/events-training/notify-webinar-registration-open-service";
 import { notifyOwnersResourcesVideoPublished } from "../services/events-training/notify-resources-video-published-service";
 import { answerVideoPost, listOpsEngagementQuestions } from "../services/events-training/member-engagement-service";
 import { opsSetWebinarAttendance } from "../services/events-training/member-registration-service";
 import { getWebinarOpsInsights } from "../services/events-training/member-webinar-insights-service";
+import { notifyRegistrationApproved } from "../services/events-training/webinar-transactional-email-service";
 
 function requireOpsUser(req: Request, res: Response): string | null {
   const user = (req as {user?: {uid?: string}}).user;
@@ -92,7 +94,19 @@ export async function postNotifyWebinarPublished(
       name,
       startsAt: body.startsAt,
     });
-    res.json({ data: result });
+    // When registration is already open (null/past opensAt), mark + fan-out open notice.
+    let registrationOpen: Awaited<
+      ReturnType<typeof notifyOwnersWebinarRegistrationOpen>
+    > | null = null;
+    try {
+      registrationOpen = await notifyOwnersWebinarRegistrationOpen(eventId);
+    } catch (err) {
+      logger.warn("registration-open notify after publish failed", {
+        eventId,
+        error: err,
+      });
+    }
+    res.json({ data: { ...result, registrationOpen } });
   } catch (error) {
     if (error instanceof Error && error.message === "EVENT_ID_REQUIRED") {
       res.status(400).json({ error: "eventId is required." });
@@ -348,3 +362,32 @@ export async function postOpsWebinarAttendance(
     res.status(500).json({ error: "Failed to update attendance." });
   }
 }
+
+/** Sales Portal → email registrant after ops accept. */
+export async function postOpsNotifyRegistrationApproved(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const uid = requireOpsUser(req, res);
+  if (!uid) return;
+
+  try {
+    if (!(await isSalesPortalOpsUser(uid))) {
+      res.status(403).json({ error: "FORBIDDEN" });
+      return;
+    }
+
+    const registrationId = String(req.params.registrationId || "").trim();
+    if (!registrationId) {
+      res.status(400).json({ error: "registrationId is required." });
+      return;
+    }
+
+    const result = await notifyRegistrationApproved(registrationId);
+    res.json({ data: result });
+  } catch (error) {
+    logger.error("postOpsNotifyRegistrationApproved failed", error);
+    res.status(500).json({ error: "Failed to send approval email." });
+  }
+}
+

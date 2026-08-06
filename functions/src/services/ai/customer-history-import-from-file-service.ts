@@ -186,6 +186,7 @@ export class CustomerHistoryImportFromFileService {
           user: `${customerCtx}\nFILE CONTENT:\n"""${text}"""`,
           fallback: { transactions: [], parseWarnings: [] },
           maxOutputTokens: 4096,
+          operation: "customer_history.import.text",
         });
         return CustomerHistoryImportFromFileService.normalizeExtract(
           raw,
@@ -207,6 +208,7 @@ export class CustomerHistoryImportFromFileService {
         parts,
         fallback: { transactions: [], parseWarnings: [] },
         maxOutputTokens: 4096,
+        operation: "customer_history.import.image",
       });
       return CustomerHistoryImportFromFileService.normalizeExtract(
         raw,

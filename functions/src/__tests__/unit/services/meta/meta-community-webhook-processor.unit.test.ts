@@ -3,18 +3,24 @@ import { processMetaCommunityWebhook } from "../../../../services/meta/meta-comm
 import * as intake from "../../../../services/meta/community-order-intake-service";
 import * as wizard from "../../../../services/meta/community-order-wizard-service";
 import * as sendService from "../../../../services/meta/meta-messenger-send-service";
+import * as riderRouting from "../../../../services/rider/rider-messenger-routing";
+import * as teamRouting from "../../../../services/team/team-messenger-routing";
 
 describe("processMetaCommunityWebhook", () => {
   const sendSpy = vi.spyOn(sendService, "sendMetaMessengerText");
   const inboundSpy = vi.spyOn(intake, "handleCommunityInboundText");
   const locationSpy = vi.spyOn(intake, "handleCommunityInboundLocation");
   const welcomeSpy = vi.spyOn(wizard, "replyCommunityWelcomeWithChoice");
+  const riderRouteSpy = vi.spyOn(riderRouting, "shouldRouteToRiderMessenger");
+  const teamRouteSpy = vi.spyOn(teamRouting, "shouldRouteToTeamMessenger");
 
   beforeEach(() => {
     sendSpy.mockResolvedValue({ ok: true });
     inboundSpy.mockResolvedValue(undefined);
     locationSpy.mockResolvedValue(undefined);
     welcomeSpy.mockResolvedValue(undefined);
+    riderRouteSpy.mockResolvedValue(false);
+    teamRouteSpy.mockResolvedValue(false);
     process.env.META_COMMUNITY_PAGE_ID = "page-123";
   });
 
@@ -23,6 +29,8 @@ describe("processMetaCommunityWebhook", () => {
     inboundSpy.mockReset();
     locationSpy.mockReset();
     welcomeSpy.mockReset();
+    riderRouteSpy.mockReset();
+    teamRouteSpy.mockReset();
     delete process.env.META_COMMUNITY_PAGE_ID;
   });
 

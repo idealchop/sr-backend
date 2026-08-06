@@ -68,6 +68,7 @@ export class InventoryScanService {
       user,
       fallback,
       maxOutputTokens: 2048,
+      operation: "inventory.scan.text",
     });
 
     const rows = Array.isArray(raw.extractedItems) ? raw.extractedItems : [];
@@ -113,6 +114,7 @@ export class InventoryScanService {
       parts,
       fallback,
       maxOutputTokens: 2048,
+      operation: "inventory.scan.image",
     });
 
     const rows = Array.isArray(raw.extractedItems) ? raw.extractedItems : [];

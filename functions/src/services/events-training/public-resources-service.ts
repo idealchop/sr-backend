@@ -17,7 +17,7 @@ export type PublicResourceVideo = {
   id: string;
   name: string;
   description: string;
-  category: "webinar" | "wrs_stories";
+  category: "webinar" | "wrs_stories" | "tutorial";
   recordedAt: string | null;
   /** First publish time — used for “New” within 24h. */
   publishedAt: string | null;
@@ -39,6 +39,8 @@ export type PublicResourceVideo = {
    */
   unlockAction: "pay" | "register" | null;
   tags: string[];
+  /** Tutorial app pages (empty for stories / webinar recordings). */
+  appPages?: string[];
 };
 
 export type PaginatedResult<T> = {
@@ -91,7 +93,7 @@ function normalizeVisibility(data: DocumentData): string {
 function mapPublicVideo(
   id: string,
   data: DocumentData,
-  expectedCategory: "webinar" | "wrs_stories",
+  expectedCategory: "webinar" | "wrs_stories" | "tutorial",
   options?: { allowArchived?: boolean },
 ): PublicResourceVideo | null {
   const status = String(data.status ?? "");
@@ -101,9 +103,16 @@ function mapPublicVideo(
   if (!statusOk) return null;
   if (String(data.category ?? "") !== expectedCategory) return null;
 
+  // Tutorials must opt into marketing Resources catalog.
+  if (expectedCategory === "tutorial" && data.showOnResources !== true) {
+    return null;
+  }
+
   const visibility = normalizeVisibility(data);
   // Marketing catalog: public playable + private/premium locked teasers.
+  // Tutorials are always treated as public watchable when listed.
   if (
+    expectedCategory !== "tutorial" &&
     visibility !== "public" &&
     visibility !== "private" &&
     visibility !== "premium"
@@ -124,20 +133,25 @@ function mapPublicVideo(
       typeof data.thumbnailUrl === "string" ? data.thumbnailUrl : null,
   });
 
-  const isPublic = visibility === "public";
+  const isPublic = expectedCategory === "tutorial" || visibility === "public";
   const embedUrl = isPublic ?
     buildEmbedUrl({ provider, playbackUrl, playbackId }) :
     null;
   if (isPublic && !embedUrl) return null;
 
   const premiumPrice =
-    visibility === "premium" ?
+    !isPublic && visibility === "premium" ?
       resolvePremiumUnlockPrice(data as Record<string, unknown>) :
       null;
 
   let unlockAction: "pay" | "register" | null = null;
-  if (visibility === "premium") unlockAction = "pay";
-  else if (visibility === "private") unlockAction = "register";
+  if (!isPublic && visibility === "premium") unlockAction = "pay";
+  else if (!isPublic && visibility === "private") unlockAction = "register";
+
+  const appPages =
+    expectedCategory === "tutorial" && Array.isArray(data.appPages) ?
+      data.appPages.map(String).filter(Boolean) :
+      [];
 
   return {
     id,
@@ -150,12 +164,13 @@ function mapPublicVideo(
     playbackProvider: provider,
     thumbnailUrl,
     featured: data.featured === true,
-    visibility,
+    visibility: isPublic ? "public" : visibility,
     canWatch: Boolean(isPublic && embedUrl),
     embedUrl,
     premiumPrice,
     unlockAction,
     tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
+    appPages,
   };
 }
 
@@ -182,7 +197,7 @@ function paginate<T>(
  * teasers (no embed URLs for gated content).
  */
 export async function listPublicResourceVideos(input: {
-  category: "webinar" | "wrs_stories";
+  category: "webinar" | "wrs_stories" | "tutorial";
   page?: number;
   pageSize?: number;
   featuredOnly?: boolean;
@@ -223,11 +238,17 @@ export async function getPublicResourceVideo(
   const snap = await trainingVideosCollection().doc(id).get();
   if (!snap.exists) return null;
   const category = String(snap.data()?.category ?? "");
-  if (category !== "webinar" && category !== "wrs_stories") return null;
+  if (
+    category !== "webinar" &&
+    category !== "wrs_stories" &&
+    category !== "tutorial"
+  ) {
+    return null;
+  }
   return mapPublicVideo(
     snap.id,
     snap.data() ?? {},
-    category as "webinar" | "wrs_stories",
+    category as "webinar" | "wrs_stories" | "tutorial",
     options,
   );
 }

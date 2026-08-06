@@ -122,6 +122,7 @@ export class CustomerImportFromFileService {
           user,
           fallback: { customers: [], parseWarnings: [] },
           maxOutputTokens: 8192,
+          operation: "customer.import.text",
         });
         return CustomerImportFromFileService.finalizeExtract(raw);
       }
@@ -138,6 +139,7 @@ export class CustomerImportFromFileService {
         parts,
         fallback: { customers: [], parseWarnings: [] },
         maxOutputTokens: 8192,
+        operation: "customer.import.image",
       });
       return CustomerImportFromFileService.finalizeExtract(raw);
     } catch (e) {

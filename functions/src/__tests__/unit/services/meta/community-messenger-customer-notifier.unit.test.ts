@@ -73,8 +73,10 @@ describe("community-messenger-customer-notifier", () => {
 
   it("builds order track URL for portal deep link", () => {
     const prevDev = process.env.SMARTREFILL_ENV_DEV;
+    const prevTier = process.env.SMARTREFILL_DEPLOY_TIER;
     const prevApp = process.env.APP_BASE_URL;
     delete process.env.SMARTREFILL_ENV_DEV;
+    delete process.env.SMARTREFILL_DEPLOY_TIER;
     delete process.env.APP_BASE_URL;
     try {
       const url = buildCommunityOrderTrackUrl({
@@ -89,6 +91,8 @@ describe("community-messenger-customer-notifier", () => {
     } finally {
       if (prevDev !== undefined) process.env.SMARTREFILL_ENV_DEV = prevDev;
       else delete process.env.SMARTREFILL_ENV_DEV;
+      if (prevTier !== undefined) process.env.SMARTREFILL_DEPLOY_TIER = prevTier;
+      else delete process.env.SMARTREFILL_DEPLOY_TIER;
       if (prevApp !== undefined) process.env.APP_BASE_URL = prevApp;
       else delete process.env.APP_BASE_URL;
     }

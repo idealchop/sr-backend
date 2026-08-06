@@ -11,6 +11,10 @@ import {
 import { InventoryImportProfileService } from
   "../services/inventory/inventory-import-profile-service";
 import { InventoryService } from "../services/inventory/inventory-service";
+import {
+  assertInteractiveAiQuota,
+  sendAiQuotaExceeded,
+} from "../services/ai/ai-tool-quota-service";
 
 function getUser(req: Request) {
   return (req as { user?: { uid: string } }).user;
@@ -104,6 +108,9 @@ export async function postInventoryImportAiParse(req: Request, res: Response) {
       return;
     }
     const freeUsedBefore = !!bizSnap.data()?.inventoryImportAiFreeUsed;
+    if (freeUsedBefore) {
+      await assertInteractiveAiQuota(businessId);
+    }
 
     const data =
       await InventoryImportFromFileService.extractFromDataUri(fileDataUri);
@@ -117,6 +124,7 @@ export async function postInventoryImportAiParse(req: Request, res: Response) {
 
     res.json({ data });
   } catch (e) {
+    if (sendAiQuotaExceeded(res, e)) return;
     logger.error("postInventoryImportAiParse", e);
     res.status(500).json({ error: "AI import preview failed" });
   }

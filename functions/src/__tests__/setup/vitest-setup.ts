@@ -7,8 +7,16 @@ if (!process.env.FUNCTIONS_EMULATOR) {
 }
 
 /**
+ * River AI kill switch defaults ON in process code (`!== "0"`).
+ * Tests expect tools/buddy available unless a case explicitly opts into maintenance.
+ */
+if (process.env.SMARTREFILL_AI_MAINTENANCE === undefined) {
+  process.env.SMARTREFILL_AI_MAINTENANCE = "0";
+}
+
+/**
  * Keep supertest in-memory requests off corporate/VPN HTTP proxies.
- * Proxies can return non-HTTP payloads (e.g. {"type":"Tier1","version":"1.0"}).
+ * Proxies can return non-HTTP payloads (e.g. {"type":"tier1","version":"1.0"}).
  */
 const proxyKeys = [
   "HTTP_PROXY",

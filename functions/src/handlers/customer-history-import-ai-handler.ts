@@ -13,6 +13,10 @@ import { CustomerHistoryImportProfileService } from
 import { CustomerHistoryImportCommitService } from
   "../services/ai/customer-history-import-commit-service";
 import type { Transaction } from "../services/transactions/transaction-service";
+import {
+  assertInteractiveAiQuota,
+  sendAiQuotaExceeded,
+} from "../services/ai/ai-tool-quota-service";
 
 function getUser(req: Request) {
   return (req as { user?: { uid: string } }).user;
@@ -78,6 +82,9 @@ export async function postCustomerHistoryImportAiParse(
     }
     const customer = snap.data() || {};
     const freeUsedBefore = !!customer.historyImportAiFreeUsed;
+    if (freeUsedBefore) {
+      await assertInteractiveAiQuota(businessId);
+    }
 
     const data = await CustomerHistoryImportFromFileService.extractFromDataUri({
       fileDataUri,
@@ -95,6 +102,7 @@ export async function postCustomerHistoryImportAiParse(
 
     res.json({ data });
   } catch (e) {
+    if (sendAiQuotaExceeded(res, e)) return;
     logger.error("postCustomerHistoryImportAiParse", e);
     res.status(500).json({ error: "AI history import preview failed" });
   }

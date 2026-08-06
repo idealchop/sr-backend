@@ -1,4 +1,4 @@
-import { db, FieldValue } from "../../config/firebase-admin";
+import { db, FieldValue, Timestamp } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
 import { InventoryService } from "../inventory/inventory-service";
 import {
@@ -265,14 +265,47 @@ export class RawSubmissionService {
     businessId: string,
     status: RawSubmissionStatus,
     limit = 50,
+    options?: { beforeMs?: number },
   ): Promise<RawSubmission[]> {
-    const snap = await col(businessId)
-      .where("status", "==", status)
-      .orderBy("submittedAt", "desc")
-      .limit(limit)
-      .get();
+    const page = await this.listByStatusPage(businessId, status, limit, options);
+    return page.items;
+  }
 
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as RawSubmission);
+  /**
+   * Newest-first pending (or other status) page. Pass `beforeMs` to load rows
+   * older than that submittedAt cursor (exclusive).
+   */
+  static async listByStatusPage(
+    businessId: string,
+    status: RawSubmissionStatus,
+    limit = 50,
+    options?: { beforeMs?: number },
+  ): Promise<{ items: RawSubmission[]; hasMore: boolean; nextBeforeMs: number | null }> {
+    const pageSize = Math.min(Math.max(1, limit), 150);
+    let q = col(businessId)
+      .where("status", "==", status)
+      .orderBy("submittedAt", "desc");
+
+    if (
+      typeof options?.beforeMs === "number" &&
+      Number.isFinite(options.beforeMs) &&
+      options.beforeMs > 0
+    ) {
+      q = q.startAfter(Timestamp.fromMillis(options.beforeMs));
+    }
+
+    const snap = await q.limit(pageSize + 1).get();
+    const hasMore = snap.docs.length > pageSize;
+    const pageDocs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs;
+    const items = pageDocs.map((d) => ({ id: d.id, ...d.data() }) as RawSubmission);
+    const last = pageDocs[pageDocs.length - 1];
+    const lastSubmitted = last?.get("submittedAt") as Timestamp | undefined;
+    const nextBeforeMs =
+      lastSubmitted && typeof lastSubmitted.toMillis === "function" ?
+        lastSubmitted.toMillis() :
+        null;
+
+    return { items, hasMore, nextBeforeMs };
   }
 
   static async getOne(

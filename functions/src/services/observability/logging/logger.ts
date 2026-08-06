@@ -50,7 +50,16 @@ export const logger = createLogger({
   ),
   defaultMeta: {
     service: "smartrefill-v3-api",
+    app: "smartrefill",
     environment: process.env.NODE_ENV || "development",
+    firestoreDatabaseId:
+      process.env.SMARTREFILL_FIRESTORE_DB ||
+      process.env.FIRESTORE_DB ||
+      "riverdb",
+    gcpProject:
+      process.env.GCLOUD_PROJECT ||
+      process.env.GCP_PROJECT ||
+      "aquaflow-management-suite",
   },
   transports: [
     // Standard Console Logging (for Firebase Functions Logs)

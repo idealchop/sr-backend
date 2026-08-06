@@ -29,7 +29,34 @@ vi.mock("../../../../config/firebase-admin", () => ({
 }));
 
 vi.mock("../../../../services/observability/logging/logger", () => ({
-  logger: { info: vi.fn(), error: vi.fn() },
+  logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
+}));
+
+vi.mock("../../../../services/ai/ai-tool-quota-service", () => ({
+  assertAiToolMonthlyQuota: vi.fn().mockResolvedValue(undefined),
+  AiToolQuotaExceededError: class AiToolQuotaExceededError extends Error {
+    code = "AI_QUOTA_EXCEEDED" as const;
+    constructor(
+      public used: number,
+      public max: number,
+    ) {
+      super(`AI tool monthly quota exceeded (${used}/${max})`);
+    }
+  },
+}));
+
+vi.mock("../../../../services/ai/ai-maintenance", () => ({
+  assertAiFeatureAvailable: vi.fn(),
+  AiUnderMaintenanceError: class AiUnderMaintenanceError extends Error {
+    code = "AI_UNDER_MAINTENANCE" as const;
+    constructor(message = "under maintenance") {
+      super(message);
+      this.name = "AiUnderMaintenanceError";
+    }
+  },
+  SMARTREFILL_AI_UNDER_MAINTENANCE: false,
+  isAiOperationAllowedDuringMaintenance: () => true,
+  sendAiUnderMaintenance: () => false,
 }));
 
 vi.mock("../../../../services/ai/gemini-client", () => ({

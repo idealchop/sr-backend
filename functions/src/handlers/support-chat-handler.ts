@@ -2,8 +2,13 @@ import { Request, Response } from "express";
 import { logger } from "../services/observability/logging/logger";
 import { SupportChatService } from "../services/support/support-chat-service";
 import { SupportAiLimitError } from "../services/support/support-ai-usage-service";
+import {
+  assertAiFeatureAvailable,
+  sendAiUnderMaintenance,
+} from "../services/ai/ai-maintenance";
 
 function mapError(res: Response, e: unknown): void {
+  if (sendAiUnderMaintenance(res, e)) return;
   if (e instanceof SupportAiLimitError) {
     res.status(429).json({ error: e.message, code: e.code });
     return;
@@ -120,6 +125,7 @@ export const postSupportMessage = async (req: Request, res: Response) => {
   }
 
   try {
+    assertAiFeatureAvailable("support.buddy");
     const result = await SupportChatService.sendUserMessage(
       businessId,
       sessionId,

@@ -10,6 +10,7 @@ import {
   postNotifyResourcesVideoPublished,
   postNotifyTutorialPublished,
   postNotifyWebinarPublished,
+  postOpsNotifyRegistrationApproved,
   postOpsWebinarAttendance,
 } from "../handlers/events-training-ops-handler";
 import {
@@ -115,6 +116,10 @@ router.post(
 router.post(
   "/ops/registrations/:registrationId/attendance",
   postOpsWebinarAttendance,
+);
+router.post(
+  "/ops/registrations/:registrationId/notify-approved",
+  postOpsNotifyRegistrationApproved,
 );
 
 export default router;

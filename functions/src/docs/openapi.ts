@@ -808,10 +808,26 @@ export const openApiSpec = {
         "tags": ["Inventory"],
         "summary": "List Inventory Items",
         "description":
-          "Station product catalog. Dashboard: one gated load via " +
-          "InventoryProvider (shared across page and dialogs).",
+          "Station product catalog (newest createdAt first). " +
+          "Pass `q` to search a capped scan when the live listener is truncated.",
         "x-frontend-read-model": "hybrid-gated",
-        "parameters": [{ $ref: "#/components/parameters/businessId" }],
+        "parameters": [
+          { $ref: "#/components/parameters/businessId" },
+          {
+            name: "q",
+            in: "query",
+            required: false,
+            description: "Case-insensitive substring search across catalog fields.",
+            schema: { type: "string" },
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            description: "Max search matches to return (1–100). Ignored when `q` is empty.",
+            schema: { type: "integer", minimum: 1, maximum: 100, default: 100 },
+          },
+        ],
         "responses": {
           200: {
             description: "Inventory items array.",
@@ -842,12 +858,31 @@ export const openApiSpec = {
         "tags": ["Submissions"],
         "summary": "List Pending Portal Submissions",
         "description":
-          "Pending_review queue. Dashboard reads Firestore; " +
-          "GET for Postman and integrations.",
+          "Pending_review queue (newest first). Dashboard live listener is capped; " +
+          "use `before` (submittedAt millis) + `limit` to page older rows.",
         "x-frontend-read-model": "firestore-primary",
-        "parameters": [{ $ref: "#/components/parameters/businessId" }],
+        "parameters": [
+          { $ref: "#/components/parameters/businessId" },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            schema: { type: "integer", minimum: 1, maximum: 150, default: 100 },
+          },
+          {
+            name: "before",
+            in: "query",
+            required: false,
+            description:
+              "Exclusive submittedAt cursor (epoch millis or ISO). Returns rows older than this.",
+            schema: { type: "string" },
+          },
+        ],
         "responses": {
-          200: { description: "Pending raw submissions." },
+          200: {
+            description:
+              "Pending raw submissions plus hasMore and nextBefore cursor.",
+          },
         },
       },
     },

@@ -45,8 +45,15 @@ export { morningOwnerIntelligence } from "./jobs/morning-owner-intelligence";
 export { proactiveInsightPushNotification } from "./jobs/proactive-insight-push-notification";
 export { pmRecurrenceScheduler } from "./jobs/pm-recurrence-scheduler";
 export { subscriptionAutoRenewScheduler } from "./jobs/subscription-auto-renew-scheduler";
-export { communityDispatchExpireOffers } from "./jobs/community-dispatch-expire-offers";
+// Community dispatch expire cron DISABLED (feature idle). Runner kept for re-enable:
+// export { communityDispatchExpireOffers } from "./jobs/community-dispatch-expire-offers";
+// Also set COMMUNITY_DISPATCH_EXPIRE_ENABLED=1 on the function when re-exporting.
+export {
+  runCommunityDispatchExpireOffers,
+  isCommunityDispatchExpireEnabled,
+} from "./jobs/community-dispatch-expire-offers";
 export { guestWebinarReminders } from "./jobs/guest-webinar-reminders";
+export { webinarRegistrationOpenNotices } from "./jobs/webinar-registration-open-notices";
 export { ownerDataWarehouseExport } from "./jobs/owner-data-warehouse-export";
 export { onSubscriptionUpdated } from "./triggers/subscription-triggers";
 

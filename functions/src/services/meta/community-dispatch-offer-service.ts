@@ -1,4 +1,5 @@
 import { db, FieldValue, Timestamp } from "../../config/firebase-admin";
+import type { QuerySnapshot } from "firebase-admin/firestore";
 import { logger } from "../observability/logging/logger";
 import { createCommunityDispatchSubmission } from "./community-dispatch-handoff-service";
 import {
@@ -287,12 +288,34 @@ async function maybeMarkRequestExhausted(requestId: string): Promise<void> {
 export async function expireStaleCommunityDispatchOffers(limit = 25): Promise<{
   expiredCount: number;
   exhaustedCount: number;
+  scannedCount: number;
+  usedExpiresAtQuery: boolean;
 }> {
-  const snap = await db
-    .collection(OFFERS_COLLECTION)
-    .where("status", "==", "pending")
-    .limit(limit)
-    .get();
+  const now = Timestamp.now();
+  let snap: QuerySnapshot;
+  let usedExpiresAtQuery = true;
+
+  try {
+    // Prefer only offers already past TTL (needs composite index status + expiresAt).
+    snap = await db
+      .collection(OFFERS_COLLECTION)
+      .where("status", "==", "pending")
+      .where("expiresAt", "<=", now)
+      .orderBy("expiresAt", "asc")
+      .limit(limit)
+      .get();
+  } catch (e) {
+    usedExpiresAtQuery = false;
+    logger.warn(
+      "expireStaleCommunityDispatchOffers falling back to pending scan",
+      { error: e },
+    );
+    snap = await db
+      .collection(OFFERS_COLLECTION)
+      .where("status", "==", "pending")
+      .limit(limit)
+      .get();
+  }
 
   let expiredCount = 0;
   let exhaustedCount = 0;
@@ -300,7 +323,7 @@ export async function expireStaleCommunityDispatchOffers(limit = 25): Promise<{
 
   for (const doc of snap.docs) {
     const offer = doc.data() as CommunityDispatchOfferDoc;
-    if (!isOfferExpired(offer)) continue;
+    if (!usedExpiresAtQuery && !isOfferExpired(offer)) continue;
 
     await markOfferStatus(doc.id, "expired");
     expiredCount += 1;
@@ -316,7 +339,12 @@ export async function expireStaleCommunityDispatchOffers(limit = 25): Promise<{
     }
   }
 
-  return { expiredCount, exhaustedCount };
+  return {
+    expiredCount,
+    exhaustedCount,
+    scannedCount: snap.size,
+    usedExpiresAtQuery,
+  };
 }
 
 export type AcceptCommunityDispatchOfferResult =

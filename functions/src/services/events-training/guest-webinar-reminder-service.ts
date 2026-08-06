@@ -110,6 +110,7 @@ async function sendReminderEmail(params: {
 
 /**
  * Sends T-~1h reminders for opted-in guest registrations on upcoming published events.
+ * Also reminds accepted members with emailReminderOptIn.
  */
 export async function sendDueGuestWebinarReminders(limit = 40): Promise<{
   eventsScanned: number;
@@ -126,7 +127,6 @@ export async function sendDueGuestWebinarReminders(limit = 40): Promise<{
     if (remindersSent >= limit) break;
     const eventData = (eventDoc.data() ?? {}) as Record<string, unknown>;
     if (String(eventData.status || "") !== "published") continue;
-    if (!isCmsGuestRegistrationAllowed(eventData)) continue;
 
     const startsAt = toIso(eventData.startsAt);
     if (!isWithinGuestReminderWindow(startsAt, nowMs)) continue;
@@ -134,19 +134,8 @@ export async function sendDueGuestWebinarReminders(limit = 40): Promise<{
 
     const regsSnap = await webinarRegistrationsCollection()
       .where("eventId", "==", eventDoc.id)
-      .where("kind", "==", "guest")
-      .limit(80)
-      .get()
-      .catch(async () => {
-        // Fallback without composite index: filter kind in memory.
-        const all = await webinarRegistrationsCollection()
-          .where("eventId", "==", eventDoc.id)
-          .limit(120)
-          .get();
-        return {
-          docs: all.docs.filter((d) => String(d.data()?.kind || "") === "guest"),
-        };
-      });
+      .limit(120)
+      .get();
 
     for (const regDoc of regsSnap.docs) {
       if (remindersSent >= limit) break;
@@ -171,32 +160,60 @@ export async function sendDueGuestWebinarReminders(limit = 40): Promise<{
         continue;
       }
 
-      const joinToken = mintJoinToken();
+      const kind = String(reg.kind || "member");
+      const timezone =
+        typeof eventData.timezone === "string" ?
+          eventData.timezone :
+          "Asia/Manila";
+      const eventName =
+        String(eventData.name || "").trim() || "Smart Refill webinar";
+
       try {
-        await sendReminderEmail({
-          email,
-          displayName: String(reg.displayName || "").trim() || email,
-          eventName: String(eventData.name || "").trim() || "Smart Refill webinar",
-          startsAt,
-          timezone:
-            typeof eventData.timezone === "string" ?
-              eventData.timezone :
-              "Asia/Manila",
-          joinToken,
-        });
-        await webinarRegistrationsCollection().doc(regDoc.id).set(
-          {
-            joinTokenHash: hashJoinToken(joinToken),
-            joinTokenCreatedAt: FieldValue.serverTimestamp(),
-            reminderSentAt: FieldValue.serverTimestamp(),
-            updatedAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
+        if (kind === "guest") {
+          if (!isCmsGuestRegistrationAllowed(eventData)) {
+            skipped += 1;
+            continue;
+          }
+          const joinToken = mintJoinToken();
+          await sendReminderEmail({
+            email,
+            displayName: String(reg.displayName || "").trim() || email,
+            eventName,
+            startsAt,
+            timezone,
+            joinToken,
+          });
+          await webinarRegistrationsCollection().doc(regDoc.id).set(
+            {
+              joinTokenHash: hashJoinToken(joinToken),
+              joinTokenCreatedAt: FieldValue.serverTimestamp(),
+              reminderSentAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+        } else {
+          if (status !== "accepted") {
+            skipped += 1;
+            continue;
+          }
+          const { sendMemberWebinarReminderEmail } = await import(
+            "./webinar-transactional-email-service"
+          );
+          await sendMemberWebinarReminderEmail({
+            registrationId: regDoc.id,
+            email,
+            displayName: String(reg.displayName || "").trim() || email,
+            eventName,
+            startsAt,
+            timezone,
+          });
+        }
         remindersSent += 1;
       } catch (error) {
-        logger.error("guest webinar reminder failed", {
+        logger.error("webinar reminder failed", {
           registrationId: regDoc.id,
+          kind,
           error,
         });
         skipped += 1;

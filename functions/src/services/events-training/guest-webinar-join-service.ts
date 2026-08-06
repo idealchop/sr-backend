@@ -11,9 +11,13 @@ import {
   type GuestRegistrationStatus,
 } from "./guest-webinar-registration-service";
 
-const DEFAULT_WEBINAR_DURATION_MS = 2 * 60 * 60 * 1000;
-/** Allow join 15 minutes before startsAt. */
-export const GUEST_JOIN_EARLY_MS = 15 * 60 * 1000;
+import {
+  isWebinarJoinWindowOpen,
+  WEBINAR_JOIN_EARLY_MS,
+} from "./webinar-registration-window";
+
+/** @deprecated Use WEBINAR_JOIN_EARLY_MS from webinar-registration-window. */
+export const GUEST_JOIN_EARLY_MS = WEBINAR_JOIN_EARLY_MS;
 
 export type GuestJoinPreview = {
   registrationId: string;
@@ -103,10 +107,7 @@ export function isGuestJoinWindowOpen(
   endsAt: string | null,
   nowMs: number = Date.now(),
 ): boolean {
-  const start = parseTime(startsAt);
-  if (start == null) return false;
-  const end = parseTime(endsAt) ?? start + DEFAULT_WEBINAR_DURATION_MS;
-  return nowMs >= start - GUEST_JOIN_EARLY_MS && nowMs < end;
+  return isWebinarJoinWindowOpen(startsAt, endsAt, nowMs);
 }
 
 async function loadRegistrationByToken(token: string): Promise<{

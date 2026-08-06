@@ -23,6 +23,7 @@ export async function scanExpenseReceipt(params: {
     system,
     user: `Receipt image data URI length: ${params.imageDataUri.length}`,
     fallback: { confidence: 0 },
+    operation: "expense.scan",
   });
   return {
     vendor: typeof raw?.vendor === "string" ? raw.vendor : undefined,

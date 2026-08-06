@@ -12,6 +12,11 @@ import {
   type PlaybackProvider,
 } from "./member-playback";
 import { resolvePremiumUnlockPrice } from "./member-video-unlock-service";
+import {
+  isRegistrationOpen,
+  isWebinarJoinWindowOpen,
+  toIsoTimestamp,
+} from "./webinar-registration-window";
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
@@ -78,6 +83,12 @@ export type MemberWebinar = {
   certificationEnabled: boolean;
   /** Idempotent certificate already claimed for this workspace. */
   certificateClaimed: boolean;
+  /** When registration becomes available (null = open on publish). */
+  registrationOpensAt: string | null;
+  /** True when published and registrationOpensAt has passed (or is null). */
+  registrationOpen: boolean;
+  /** True when accepted registration may join (within start window). */
+  joinWindowOpen: boolean;
 };
 
 export type MemberTrainingVideo = {
@@ -239,6 +250,7 @@ function mapWebinar(
   unlockedEventIds?: Set<string>,
   memberPlanCode?: string | null,
   claimedCertificateIds?: Set<string>,
+  nowMs: number = Date.now(),
 ): MemberWebinar {
   // Prefer the event (Sales) join URL so CMS updates show without waiting
   // for per-registration joinLink copies to be rewritten.
@@ -251,14 +263,22 @@ function mapWebinar(
   const visibility = resolveEventVisibility(data);
   const unlocked =
     visibility !== "premium" || Boolean(unlockedEventIds?.has(id));
+  const startsAt = toIsoTimestamp(data.startsAt);
+  const endsAt = toIsoTimestamp(data.endsAt);
+  const joinWindowOpen = isWebinarJoinWindowOpen(startsAt, endsAt, nowMs);
   const revealJoin =
     unlocked &&
     myRegistration?.status === "accepted" &&
-    webinarJoinLink.length > 0;
+    webinarJoinLink.length > 0 &&
+    joinWindowOpen;
   const premiumPrice =
     visibility === "premium" && !unlocked ?
       resolveEventPremiumPrice(data) :
       null;
+  const registrationOpensAt = toIsoTimestamp(data.registrationOpensAt);
+  const registrationOpen =
+    UPCOMING_STATUSES.has(String(data.status ?? "draft")) &&
+    isRegistrationOpen(data as Record<string, unknown>, nowMs);
 
   let requiresUpgrade = false;
   if (visibility === "private" && data.allowAllMembers !== true) {
@@ -276,8 +296,8 @@ function mapWebinar(
     id,
     name: String(data.name ?? "").trim() || "Untitled webinar",
     description: String(data.description ?? "").trim(),
-    startsAt: toIso(data.startsAt),
-    endsAt: toIso(data.endsAt),
+    startsAt,
+    endsAt,
     timezone:
       typeof data.timezone === "string" && data.timezone.trim() ?
         data.timezone.trim() :
@@ -304,6 +324,9 @@ function mapWebinar(
     requiresUpgrade,
     certificationEnabled: data.certificationEnabled === true,
     certificateClaimed: Boolean(claimedCertificateIds?.has(id)),
+    registrationOpensAt,
+    registrationOpen,
+    joinWindowOpen,
   };
 }
 

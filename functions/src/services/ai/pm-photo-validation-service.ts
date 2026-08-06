@@ -27,6 +27,7 @@ export async function validatePmChecklistPhoto(params: {
       "showsUvLamp, showsLogContext, confidence 0-1, notes.",
     user: `Image URI length ${params.imageDataUri.length}`,
     fallback,
+    operation: "pm.photo_validation",
   });
   return {
     showsFilterHousing: raw?.showsFilterHousing === true,

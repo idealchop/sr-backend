@@ -49,7 +49,10 @@ export const listInventory = async (req: Request, res: Response) => {
       return;
     }
 
-    const items = await InventoryService.listItems(businessId);
+    const q = typeof req.query.q === "string" ? req.query.q : undefined;
+    const limitRaw = parseInt(String(req.query.limit || ""), 10);
+    const limit = Number.isFinite(limitRaw) ? limitRaw : undefined;
+    const items = await InventoryService.listItems(businessId, { q, limit });
     res.json({ data: items });
   } catch (error: any) {
     logger.error(`Error listing inventory for ${businessId}`, error);

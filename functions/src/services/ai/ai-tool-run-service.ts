@@ -6,6 +6,8 @@ import {
   getGeminiModel,
 } from "./gemini-config";
 import { geminiGenerateJson } from "./gemini-client";
+import { assertAiToolMonthlyQuota } from "./ai-tool-quota-service";
+import { assertAiFeatureAvailable } from "./ai-maintenance";
 import {
   TransactionService,
   type Transaction,
@@ -774,6 +776,9 @@ export class AiToolRunService {
       throw new Error("INVALID_TOOL");
     }
 
+    assertAiFeatureAvailable(`ai_tool_run:${tool}`);
+    await assertAiToolMonthlyQuota(businessId, { scheduledAuto });
+
     const [transactions, customers, inventoryItems, businessSnap] =
       await Promise.all([
         TransactionService.getTransactionsByBusiness(businessId, {
@@ -850,6 +855,7 @@ export class AiToolRunService {
       system: systemPromptForTool(tool, usageGoals),
       user: `Tool: ${tool}\nFacts JSON:\n${JSON.stringify(snapshot, null, 2)}`,
       fallback: normalizeGeminiOutput(null, fallbackSummary),
+      operation: `ai_tool_run:${tool}`,
     });
 
     const normalized = normalizeGeminiOutput(ai, fallbackSummary);

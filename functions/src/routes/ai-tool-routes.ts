@@ -12,6 +12,7 @@ import {
   postDuplicatesDetect,
   postDuplicatesDismiss,
   postDuplicatesMerge,
+  postDuplicatesValidateAi,
   postInventoryScanApply,
   postInventoryScanImage,
   postInventoryScanText,
@@ -110,6 +111,13 @@ router.post(
   validateBusinessAccess,
   requireBusinessOwner,
   postDuplicatesDetect,
+);
+router.post(
+  "/duplicates/validate-ai",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  requireBusinessOwner,
+  postDuplicatesValidateAi,
 );
 router.post(
   "/duplicates/dismiss",

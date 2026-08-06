@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import { AiToolRunService } from "../services/ai/ai-tool-run-service";
+import { AiToolQuotaExceededError } from "../services/ai/ai-tool-quota-service";
+import { sendAiUnderMaintenance } from "../services/ai/ai-maintenance";
 import { logger } from "../services/observability/logging/logger";
 
 export async function listAiToolRuns(req: Request, res: Response) {
@@ -40,9 +42,19 @@ export async function createAiToolRun(req: Request, res: Response) {
     });
     res.status(201).json({ data: run });
   } catch (e: unknown) {
+    if (sendAiUnderMaintenance(res, e)) return;
     const msg = e instanceof Error ? e.message : String(e);
     if (msg === "INVALID_TOOL") {
       res.status(400).json({ error: "Unknown tool id" });
+      return;
+    }
+    if (e instanceof AiToolQuotaExceededError) {
+      res.status(429).json({
+        error: "AI tool monthly quota exceeded",
+        code: e.code,
+        used: e.used,
+        max: e.max,
+      });
       return;
     }
     logger.error("createAiToolRun failed", e);

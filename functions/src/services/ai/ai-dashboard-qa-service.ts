@@ -96,6 +96,7 @@ export async function answerDashboardQuestion(params: {
     system,
     user: `Question: ${question}\n\nFacts:\n${JSON.stringify(compactFacts, null, 2)}`,
     fallback: { answer: "Could not reach the model. Try again shortly.", highlights: [] },
+    operation: "dashboard.qa",
   });
 
   return {

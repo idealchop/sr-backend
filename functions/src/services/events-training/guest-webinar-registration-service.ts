@@ -10,6 +10,7 @@ import {
   isCmsGuestRegistrationAllowed,
   normalizeWebinarVisibility,
 } from "./guest-webinar-eligibility";
+import { assertRegistrationOpen } from "./webinar-registration-window";
 
 export type GuestRegistrationStatus =
   | "pending"
@@ -129,6 +130,8 @@ export async function registerGuestForWebinar(input: {
         code: "EVENT_NOT_OPEN",
       });
     }
+
+    assertRegistrationOpen(eventData);
 
     const visibility = normalizeWebinarVisibility(eventData.visibility);
     if (visibility !== "public") {

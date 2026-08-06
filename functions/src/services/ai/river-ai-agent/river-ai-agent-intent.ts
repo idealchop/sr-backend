@@ -373,6 +373,7 @@ export async function parseRiverAiAgentIntent(input: {
     fallback: FALLBACK,
     maxOutputTokens: 800,
     temperature: 0.2,
+    operation: "river_ai_agent.intent",
   });
 
   const tool = typeof raw?.tool === "string" && isToolId(raw.tool) ? raw.tool : "chat.answer";

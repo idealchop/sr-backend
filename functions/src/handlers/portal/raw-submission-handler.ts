@@ -237,19 +237,42 @@ function scoreCandidate(
   return score;
 }
 
+function parsePendingListLimit(raw: unknown): number {
+  const n = parseInt(String(raw ?? "100"), 10);
+  if (!Number.isFinite(n)) return 100;
+  return Math.min(Math.max(1, n), 150);
+}
+
+function parseBeforeMs(raw: unknown): number | undefined {
+  if (raw == null || raw === "") return undefined;
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) return raw;
+  const asNum = Number(raw);
+  if (Number.isFinite(asNum) && asNum > 0) return asNum;
+  const asDate = Date.parse(String(raw));
+  if (Number.isFinite(asDate) && asDate > 0) return asDate;
+  return undefined;
+}
+
 export const listPendingSubmissions = async (req: Request, res: Response) => {
   const { businessId } = req.params;
   try {
-    const items = await RawSubmissionService.listByStatus(
+    const limit = parsePendingListLimit(req.query.limit);
+    const beforeMs = parseBeforeMs(req.query.before);
+    const page = await RawSubmissionService.listByStatusPage(
       businessId,
       "pending_review",
-      100,
+      limit,
+      { beforeMs },
     );
     // Subcollection is already scoped by path; keep only rows stamped for this business.
-    const scoped = items.filter(
+    const scoped = page.items.filter(
       (s) => !s.businessId || s.businessId === businessId,
     );
-    res.json({ data: scoped });
+    res.json({
+      data: scoped,
+      hasMore: page.hasMore,
+      nextBefore: page.nextBeforeMs,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to list submissions" });

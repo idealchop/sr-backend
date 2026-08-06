@@ -58,14 +58,17 @@ describe("isWithinGuestReminderWindow", () => {
 });
 
 describe("isCmsGuestRegistrationAllowed", () => {
-  it("defaults to allowed when flag missing", () => {
-    expect(isCmsGuestRegistrationAllowed({})).toBe(true);
+  it("defaults public guests on when flag missing", () => {
+    expect(isCmsGuestRegistrationAllowed({ visibility: "public" })).toBe(true);
   });
 
-  it("respects explicit false", () => {
-    expect(isCmsGuestRegistrationAllowed({ guestRegistrationEnabled: false })).toBe(
-      false,
-    );
+  it("respects explicit false on public", () => {
+    expect(
+      isCmsGuestRegistrationAllowed({
+        visibility: "public",
+        guestRegistrationEnabled: false,
+      }),
+    ).toBe(false);
   });
 });
 

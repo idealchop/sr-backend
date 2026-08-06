@@ -45,11 +45,15 @@ import {
   getPublicWrsBlogById,
   getPublicWrsBlogs,
   getPublicWrsStories,
+  getPublicTutorials,
   getGuestWebinarJoin,
   postGuestWebinarCancel,
+  postGuestWebinarCertificate,
   postGuestWebinarJoinByEmail,
   postGuestWebinarJoinByToken,
   postGuestWebinarRegister,
+  postGuestWebinarReplay,
+  postGuestWebinarUnlockCheckout,
 } from "../handlers/public-resources-handler";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
 
@@ -147,12 +151,28 @@ router.get(
 
 /** Public Events & Training marketing catalogs (published + visibility:public). */
 router.get("/resources/wrs-stories", resourcesLimiter, getPublicWrsStories);
+router.get("/resources/tutorials", resourcesLimiter, getPublicTutorials);
 router.get("/resources/webinars", resourcesLimiter, getPublicWebinarRecordings);
 router.get("/resources/webinar-events", resourcesLimiter, getPublicWebinarEvents);
 router.post(
   "/resources/webinar-events/:eventId/register",
   marketingLimiter,
   postGuestWebinarRegister,
+);
+router.post(
+  "/resources/webinar-events/:eventId/unlock-checkout",
+  marketingLimiter,
+  postGuestWebinarUnlockCheckout,
+);
+router.post(
+  "/resources/webinar-events/:eventId/replay",
+  marketingLimiter,
+  postGuestWebinarReplay,
+);
+router.post(
+  "/resources/webinar-events/:eventId/certificate",
+  marketingLimiter,
+  postGuestWebinarCertificate,
 );
 router.post(
   "/resources/webinar-events/:eventId/join",

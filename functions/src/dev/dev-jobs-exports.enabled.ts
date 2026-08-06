@@ -10,7 +10,7 @@ export {
   proactiveInsightPushNotificationDev,
   pmRecurrenceSchedulerDev,
   subscriptionAutoRenewSchedulerDev,
-  communityDispatchExpireOffersDev,
+  // communityDispatchExpireOffersDev — disabled with prod (feature idle)
   guestWebinarRemindersDev,
   ownerDataWarehouseExportDev,
   onSubscriptionUpdatedDev,

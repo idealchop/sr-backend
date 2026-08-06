@@ -847,7 +847,7 @@ export async function handleCommunityInboundText(params: InboundTextParams): Pro
     errors: templateParse.errors,
   });
 
-  const nlu = await parseCommunityFreeTextOrder(trimmed);
+  const nlu = await parseCommunityFreeTextOrder(trimmed, { psid: key });
   if (await blockIfActiveCommunityOrder({ contact, session: existingSession })) {
     return;
   }

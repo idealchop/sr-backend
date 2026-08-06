@@ -13,6 +13,7 @@ export type PaymentIntentSource =
   | "subscription"
   | "resource_video"
   | "resource_webinar"
+  | "resource_webinar_guest"
   | "resource_blog";
 
 export type SubscriptionPaymentAction = "RENEW" | "UPGRADE" | "DOWNGRADE";
@@ -76,6 +77,17 @@ export type CreateResourceWebinarUnlockIntentInput = {
   userId: string;
   eventId: string;
   eventName: string;
+  amount: number;
+  apiBaseUrl: string;
+};
+
+export type CreateResourceWebinarGuestUnlockIntentInput = {
+  /** Sentinel business id for guest intents (e.g. __guest_webinars__). */
+  businessId: string;
+  eventId: string;
+  eventName: string;
+  email: string;
+  displayName: string;
   amount: number;
   apiBaseUrl: string;
 };

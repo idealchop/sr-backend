@@ -265,6 +265,7 @@ export async function buildCommunityTemplateRepairReply(params: {
     fallback: {},
     temperature: 0.4,
     maxOutputTokens: 512,
+    operation: "community.reply",
   });
 
   const message =

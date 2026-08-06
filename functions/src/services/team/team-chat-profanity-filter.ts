@@ -89,7 +89,9 @@ const SURFACE_SYSTEM: Record<MaskSurface, string> = {
 };
 
 /**
- * Local mask first, then Gemini obfuscation when available (falls back to local).
+ * Local mask first. Gemini escalation is opt-in via TEAM_CHAT_PROFANITY_AI_ESCALATE=1
+ * and only runs when the local heuristic found no known terms (novel slang path).
+ * Default: local-only — avoids a Gemini call on every team/webinar message.
  */
 export async function maskWorkplaceProfanity(
   text: string,
@@ -99,12 +101,29 @@ export async function maskWorkplaceProfanity(
   if (!trimmed) return text;
 
   const localMasked = maskTeamChatProfanityLocal(trimmed);
+  // Local list already handled known terms — heuristic is enough.
+  if (localMasked !== trimmed) {
+    return localMasked;
+  }
+
+  const escalate =
+    String(process.env.TEAM_CHAT_PROFANITY_AI_ESCALATE || "")
+      .trim()
+      .toLowerCase() === "1" ||
+    String(process.env.TEAM_CHAT_PROFANITY_AI_ESCALATE || "")
+      .trim()
+      .toLowerCase() === "true";
+  if (!escalate) {
+    return localMasked;
+  }
+
   const ai = await geminiGenerateJson<{ text?: string }>({
     system: SURFACE_SYSTEM[surface],
     user: `Mask all profanity and foul language in this text:\n${trimmed}`,
     fallback: { text: localMasked },
     temperature: 0,
     maxOutputTokens: 512,
+    operation: `profanity_mask:${surface}`,
   });
 
   const aiText = typeof ai.text === "string" ? ai.text.trim() : "";

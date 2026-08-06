@@ -1,6 +1,14 @@
 import { Request, Response } from "express";
 import { generateLlmProactiveWeek } from "../services/ai/proactive-week-ai-service";
 import {
+  assertInteractiveAiQuota,
+  sendAiQuotaExceeded,
+} from "../services/ai/ai-tool-quota-service";
+import {
+  assertAiFeatureAvailable,
+  sendAiUnderMaintenance,
+} from "../services/ai/ai-maintenance";
+import {
   ProactiveScheduleWeekSnapshotService,
   type ProactiveScheduleSuggestionInput,
 } from "../services/proactive-schedule/proactive-schedule-week-snapshot-service";
@@ -50,6 +58,8 @@ export async function postProactiveWeekAiGenerate(req: Request, res: Response) {
   ).filter(isValidSuggestionInput);
 
   try {
+    assertAiFeatureAvailable("proactive_week.generate");
+    await assertInteractiveAiQuota(businessId);
     const result = await generateLlmProactiveWeek({
       businessId,
       windowLabel,
@@ -78,6 +88,8 @@ export async function postProactiveWeekAiGenerate(req: Request, res: Response) {
       },
     });
   } catch (e: unknown) {
+    if (sendAiUnderMaintenance(res, e)) return;
+    if (sendAiQuotaExceeded(res, e)) return;
     const msg = e instanceof Error ? e.message : "Failed to generate proactive week";
     res.status(500).json({ error: "Internal Server Error", message: msg });
   }

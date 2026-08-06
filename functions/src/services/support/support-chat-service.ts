@@ -570,6 +570,7 @@ async function generateAiTurn(input: {
     contents,
     fallback,
     temperature: 0.72,
+    operation: "support.buddy",
   });
 
   const parsed = normalizeSupportAiTurn(rawTurn, fallback);

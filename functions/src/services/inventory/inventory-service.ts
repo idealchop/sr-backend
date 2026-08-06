@@ -113,32 +113,74 @@ export class InventoryService {
   }
 
   /**
-   * Lists all inventory items for a business.
+   * Lists inventory items for a business (newest createdAt first).
+   * Optional `q` filters name/category/id/etc. after a capped scan.
    * @param {string} businessId The business ID.
+   * @param {{ q?: string, limit?: number }} [options] Search / scan options.
    * @return {Promise<InventoryItem[]>}
    */
-  static async listItems(businessId: string): Promise<InventoryItem[]> {
+  static async listItems(
+    businessId: string,
+    options?: { q?: string; limit?: number },
+  ): Promise<InventoryItem[]> {
     try {
-      const snapshot = await db
+      const needle = String(options?.q || "")
+        .trim()
+        .toLowerCase();
+      const isSearch = needle.length > 0;
+      /** Cap scan when searching so catalog search stays bounded. */
+      const scanLimit = isSearch ? 2000 : undefined;
+      const resultLimit = isSearch ?
+        Math.min(Math.max(1, options?.limit ?? 100), 100) :
+        undefined;
+
+      let query = db
         .collection("businesses")
         .doc(businessId)
         .collection("inventory_items")
-        .orderBy("createdAt", "desc")
-        .get();
+        .orderBy("createdAt", "desc");
+      if (scanLimit) {
+        query = query.limit(scanLimit);
+      }
 
-      return snapshot.docs.map((doc: QueryDocumentSnapshot) => {
+      const snapshot = await query.get();
+
+      const items = snapshot.docs.map((doc: QueryDocumentSnapshot) => {
         const data = doc.data();
         return {
           ...data,
           id: doc.id,
         } as InventoryItem;
       });
+
+      if (!isSearch) return items;
+
+      const matched = items.filter((item) =>
+        InventoryService.matchesSearchQuery(item, needle),
+      );
+      return resultLimit ? matched.slice(0, resultLimit) : matched;
     } catch (error) {
       logger.error(`Failed to list inventory for business ${businessId}`, {
         error,
       });
       throw error;
     }
+  }
+
+  /** Case-insensitive substring match across common catalog fields. */
+  static matchesSearchQuery(item: InventoryItem, needleLower: string): boolean {
+    if (!needleLower) return true;
+    const fields = [
+      item.name,
+      item.categoryId,
+      (item as InventoryItem & { category?: string }).category,
+      (item as InventoryItem & { description?: string }).description,
+      (item as InventoryItem & { supplier?: string }).supplier,
+      (item as InventoryItem & { location?: string }).location,
+      item.id,
+      item.stock?.unit,
+    ];
+    return fields.some((f) => String(f ?? "").toLowerCase().includes(needleLower));
   }
 
   /**

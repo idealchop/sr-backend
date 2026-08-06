@@ -1,5 +1,9 @@
 import { Request, Response } from "express";
 import { runAiWorkflow } from "../services/ai/ai-workflow-runner-service";
+import {
+  assertAiFeatureAvailable,
+  sendAiUnderMaintenance,
+} from "../services/ai/ai-maintenance";
 import { logger } from "../services/observability/logging/logger";
 
 /** AI-49 — POST /business/:id/ai-tools/run-workflow */
@@ -14,6 +18,7 @@ export async function postRunWorkflow(req: Request, res: Response) {
     typeof req.body?.workflowId === "string" ? req.body.workflowId : undefined;
   const steps = Array.isArray(req.body?.steps) ? req.body.steps : undefined;
   try {
+    assertAiFeatureAvailable("ai_workflow");
     const data = await runAiWorkflow({
       businessId,
       uid: user.uid,
@@ -22,6 +27,7 @@ export async function postRunWorkflow(req: Request, res: Response) {
     });
     res.status(201).json({ data });
   } catch (e) {
+    if (sendAiUnderMaintenance(res, e)) return;
     logger.error("postRunWorkflow failed", e);
     res.status(500).json({ error: "Failed to run workflow" });
   }

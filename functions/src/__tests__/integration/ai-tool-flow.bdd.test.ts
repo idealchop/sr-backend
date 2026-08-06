@@ -62,6 +62,20 @@ vi.mock("../../services/ai/gemini-config", async (importOriginal) => {
   };
 });
 
+vi.mock("../../services/ai/ai-maintenance", () => ({
+  assertAiFeatureAvailable: vi.fn(),
+  AiUnderMaintenanceError: class AiUnderMaintenanceError extends Error {
+    code = "AI_UNDER_MAINTENANCE" as const;
+    constructor(message = "under maintenance") {
+      super(message);
+      this.name = "AiUnderMaintenanceError";
+    }
+  },
+  SMARTREFILL_AI_UNDER_MAINTENANCE: false,
+  isAiOperationAllowedDuringMaintenance: () => true,
+  sendAiUnderMaintenance: () => false,
+}));
+
 vi.mock("../../services/transactions/transaction-service", () => ({
   TransactionService: {
     getTransactionsByBusiness: vi.fn().mockResolvedValue([]),

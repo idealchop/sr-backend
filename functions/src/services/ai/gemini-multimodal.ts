@@ -1,5 +1,10 @@
 import { logger } from "../observability/logging/logger";
 import { getGeminiApiKey, getGeminiModel } from "./gemini-config";
+import {
+  extractGeminiUsageMetadata,
+  logAiUsage,
+} from "./ai-usage-log";
+import { isAiOperationAllowedDuringMaintenance } from "./ai-maintenance";
 
 export type GeminiContentPart =
   | { text: string }
@@ -22,7 +27,17 @@ export async function geminiGenerateJsonWithParts<T>(input: {
   temperature?: number;
   /** Multi-turn thread; when set, `parts` is ignored for contents (use final turn there). */
   contents?: GeminiChatTurn[];
+  operation?: string;
 }): Promise<T> {
+  const operation = input.operation || "generateJsonWithParts";
+  if (!isAiOperationAllowedDuringMaintenance(operation)) {
+    logger.warn("geminiGenerateJsonWithParts blocked — AI under maintenance", {
+      operation,
+      remark: "under_maintenance",
+    });
+    return input.fallback;
+  }
+
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
     logger.warn("geminiGenerateJsonWithParts: no API key");
@@ -53,6 +68,13 @@ export async function geminiGenerateJsonWithParts<T>(input: {
 
     if (!res.ok) {
       const errText = await res.text();
+      logAiUsage({
+        provider: "gemini",
+        operation,
+        model,
+        ok: false,
+        status: res.status,
+      });
       logger.error("geminiGenerateJsonWithParts HTTP error", {
         status: res.status,
         model,
@@ -63,12 +85,38 @@ export async function geminiGenerateJsonWithParts<T>(input: {
 
     const data = (await res.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      usageMetadata?: Record<string, unknown>;
     };
+    const usage = extractGeminiUsageMetadata(data);
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (!text) return input.fallback;
+    if (!text) {
+      logAiUsage({
+        provider: "gemini",
+        operation,
+        model,
+        ok: false,
+        usage,
+        extra: { reason: "empty_response" },
+      });
+      return input.fallback;
+    }
 
+    logAiUsage({
+      provider: "gemini",
+      operation,
+      model,
+      ok: true,
+      usage,
+    });
     return JSON.parse(text) as T;
   } catch (e) {
+    logAiUsage({
+      provider: "gemini",
+      operation,
+      model,
+      ok: false,
+      extra: { reason: "exception" },
+    });
     logger.error("geminiGenerateJsonWithParts failed", { model, error: e });
     return input.fallback;
   }

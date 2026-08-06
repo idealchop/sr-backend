@@ -17,6 +17,17 @@ import {
   joinGuestWebinarByToken,
   cancelGuestWebinarByToken,
 } from "../services/events-training/guest-webinar-join-service";
+import { createGuestWebinarUnlockCheckout, getGuestReplayAccess } from "../services/events-training/guest-webinar-unlock-service";
+import { claimGuestWebinarCertificate } from "../services/events-training/guest-webinar-certificate-service";
+
+function resolvePublicApiBase(req: Request): string {
+  const configured = process.env.SMARTREFILL_API_BASE_URL?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
+  const proto = req.get("x-forwarded-proto") || req.protocol || "https";
+  const host = req.get("x-forwarded-host") || req.get("host") || "";
+  if (host) return `${proto}://${host}`;
+  return "";
+}
 
 /** GET /public/resources/wrs-stories */
 export async function getPublicWrsStories(
@@ -34,6 +45,25 @@ export async function getPublicWrsStories(
   } catch (error) {
     logger.error("getPublicWrsStories failed", error);
     res.status(500).json({ error: "Failed to load WRS Stories." });
+  }
+}
+
+/** GET /public/resources/tutorials — published tutorials with showOnResources. */
+export async function getPublicTutorials(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const data = await listPublicResourceVideos({
+      category: "tutorial",
+      page: req.query.page ? Number(req.query.page) : 1,
+      pageSize: req.query.pageSize ? Number(req.query.pageSize) : undefined,
+      featuredOnly: String(req.query.featured || "") === "true",
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    logger.error("getPublicTutorials failed", error);
+    res.status(500).json({ error: "Failed to load tutorials." });
   }
 }
 
@@ -255,6 +285,79 @@ export async function postGuestWebinarJoinByEmail(
     res.json({ success: true, data });
   } catch (error) {
     respondGuestError(res, error, "postGuestWebinarJoinByEmail");
+  }
+}
+
+/**
+ * POST /public/resources/webinar-events/:eventId/unlock-checkout
+ * Guest PayMongo for premium webinars (email only).
+ */
+export async function postGuestWebinarUnlockCheckout(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const eventId = String(req.params.eventId || "").trim();
+    const body = req.body ?? {};
+    const data = await createGuestWebinarUnlockCheckout({
+      eventId,
+      email: body.email,
+      displayName: body.displayName ?? body.name,
+      apiBaseUrl: resolvePublicApiBase(req),
+    });
+    res.status(data.alreadyUnlocked ? 200 : 201).json({ success: true, data });
+  } catch (error) {
+    respondGuestError(res, error, "postGuestWebinarUnlockCheckout");
+  }
+}
+
+/**
+ * POST /public/resources/webinar-events/:eventId/replay
+ * Paid guest replay access by email.
+ */
+export async function postGuestWebinarReplay(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const eventId = String(req.params.eventId || "").trim();
+    const body = req.body ?? {};
+    const data = await getGuestReplayAccess({
+      eventId,
+      email: body.email,
+      token: body.token,
+    });
+    if (!data.allowed) {
+      res.status(403).json({
+        error: "Replay is available after premium guest payment.",
+        code: data.reason || "NOT_ALLOWED",
+      });
+      return;
+    }
+    res.json({ success: true, data });
+  } catch (error) {
+    respondGuestError(res, error, "postGuestWebinarReplay");
+  }
+}
+
+/**
+ * POST /public/resources/webinar-events/:eventId/certificate
+ * Paid guest certificate claim (attendance required).
+ */
+export async function postGuestWebinarCertificate(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const eventId = String(req.params.eventId || "").trim();
+    const body = req.body ?? {};
+    const data = await claimGuestWebinarCertificate({
+      eventId,
+      email: body.email,
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    respondGuestError(res, error, "postGuestWebinarCertificate");
   }
 }
 

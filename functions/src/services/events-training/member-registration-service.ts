@@ -8,6 +8,11 @@ import type {
   MemberWebinarRegistration,
   RegistrationStatus,
 } from "./member-catalog-service";
+import {
+  assertRegistrationOpen,
+  isWebinarJoinWindowOpen,
+  toIsoTimestamp,
+} from "./webinar-registration-window";
 
 export type RegisterWebinarResult = {
   registration: MemberWebinarRegistration;
@@ -182,8 +187,12 @@ function revealJoinLink(
   eventData: Record<string, unknown>,
   status: RegistrationStatus,
   registrationJoinLink?: string | null,
+  nowMs: number = Date.now(),
 ): string | null {
   if (status !== "accepted") return null;
+  const startsAt = toIsoTimestamp(eventData.startsAt);
+  const endsAt = toIsoTimestamp(eventData.endsAt);
+  if (!isWebinarJoinWindowOpen(startsAt, endsAt, nowMs)) return null;
   const link =
     resolveEventJoinLink(eventData) ||
     (typeof registrationJoinLink === "string" ? registrationJoinLink.trim() : "");
@@ -215,6 +224,8 @@ export async function registerForWebinar(input: {
   if (String(eventData.status ?? "") !== "published") {
     throw new Error("EVENT_NOT_OPEN");
   }
+
+  assertRegistrationOpen(eventData);
 
   await assertRegistrationVisibility({
     eventId,
@@ -265,10 +276,32 @@ export async function registerForWebinar(input: {
       { registrationCount: FieldValue.increment(1), updatedAt: now },
       { merge: true },
     );
-    return {
+    const reactivated = {
       registration: { id: existing.id, eventId, status: nextStatus },
       joinLink: revealJoinLink(eventData, nextStatus),
     };
+    const memberEmail = (input.email || "").trim();
+    if (memberEmail) {
+      try {
+        const { sendMemberWebinarConfirmationEmail } = await import(
+          "./webinar-transactional-email-service"
+        );
+        await sendMemberWebinarConfirmationEmail({
+          registrationId: existing.id,
+          email: memberEmail,
+          eventName: String(eventData.name ?? "").trim() || "Smart Refill webinar",
+          startsAt: toIsoTimestamp(eventData.startsAt),
+          timezone:
+            typeof eventData.timezone === "string" && eventData.timezone.trim() ?
+              eventData.timezone.trim() :
+              "Asia/Manila",
+          requiresApproval: nextStatus === "pending",
+        });
+      } catch {
+        // ignore email failures
+      }
+    }
+    return reactivated;
   }
 
   const ref = webinarRegistrationsCollection().doc();
@@ -289,10 +322,34 @@ export async function registerForWebinar(input: {
     { merge: true },
   );
 
-  return {
+  const result = {
     registration: { id: ref.id, eventId, status: nextStatus },
     joinLink: revealJoinLink(eventData, nextStatus),
   };
+
+  const memberEmail = (input.email || "").trim();
+  if (memberEmail) {
+    try {
+      const { sendMemberWebinarConfirmationEmail } = await import(
+        "./webinar-transactional-email-service"
+      );
+      await sendMemberWebinarConfirmationEmail({
+        registrationId: ref.id,
+        email: memberEmail,
+        eventName: String(eventData.name ?? "").trim() || "Smart Refill webinar",
+        startsAt: toIsoTimestamp(eventData.startsAt),
+        timezone:
+          typeof eventData.timezone === "string" && eventData.timezone.trim() ?
+            eventData.timezone.trim() :
+            "Asia/Manila",
+        requiresApproval: nextStatus === "pending",
+      });
+    } catch {
+      // Registration succeeded; confirmation can be resent later.
+    }
+  }
+
+  return result;
 }
 
 /** Cancels the member's active registration for an event. */

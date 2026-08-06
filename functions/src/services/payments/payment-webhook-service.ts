@@ -352,6 +352,99 @@ export class PaymentWebhookService {
       };
     }
 
+    if (intent.source === "resource_webinar_guest") {
+      const priorEvents = intent.providerEventIds || [];
+      if (priorEvents.includes(parsed.providerEventId)) {
+        return {
+          ok: true,
+          duplicate: true,
+          intentId: intent.id,
+          status: intent.status,
+        };
+      }
+
+      if (intent.status === "paid") {
+        await PaymentIntentService.patchIntent(businessId, intent.id, {
+          providerEventIds: [...priorEvents, parsed.providerEventId],
+        });
+        return {
+          ok: true,
+          duplicate: true,
+          intentId: intent.id,
+          status: intent.status,
+        };
+      }
+
+      const received = Math.max(0, Number(parsed.amount || 0));
+      const requested = Math.max(0, Number(intent.amount || 0));
+      if (received + 0.0001 < requested) {
+        await PaymentIntentService.patchIntent(businessId, intent.id, {
+          status: "unmatched",
+          paidAmount: received,
+          providerEventIds: [...priorEvents, parsed.providerEventId],
+          reconcileNote:
+            `Received ₱${received.toFixed(2)}; expected ₱${requested.toFixed(2)}`,
+        });
+        return {
+          ok: false,
+          error: "AMOUNT_MISMATCH",
+          intentId: intent.id,
+          status: "unmatched",
+        };
+      }
+
+      const eventId = String(intent.checkoutPayload?.eventId || "").trim();
+      const email = String(intent.checkoutPayload?.email || "")
+        .trim()
+        .toLowerCase();
+      const displayName = String(
+        intent.checkoutPayload?.displayName || "",
+      ).trim();
+      if (!eventId || !email) {
+        await PaymentIntentService.patchIntent(businessId, intent.id, {
+          status: "unmatched",
+          providerEventIds: [...priorEvents, parsed.providerEventId],
+          reconcileNote:
+            "Missing eventId/email on resource_webinar_guest intent",
+        });
+        return {
+          ok: false,
+          error: "MISSING_EVENT",
+          intentId: intent.id,
+          status: "unmatched",
+        };
+      }
+
+      const { grantGuestWebinarUnlock } = await import(
+        "../events-training/guest-webinar-unlock-service"
+      );
+      await grantGuestWebinarUnlock({
+        eventId,
+        email,
+        displayName,
+        intentId: intent.id,
+        amount: requested,
+        provider: intent.provider,
+      });
+      await PaymentIntentService.patchIntent(businessId, intent.id, {
+        status: "paid",
+        paidAmount: received,
+        providerEventIds: [...priorEvents, parsed.providerEventId],
+        reconcileNote: `Guest unlocked webinar event ${eventId}`,
+      });
+      logger.info("resource_webinar_guest unlock paid", {
+        businessId,
+        intentId: intent.id,
+        eventId,
+        email,
+      });
+      return {
+        ok: true,
+        intentId: intent.id,
+        status: "paid",
+      };
+    }
+
     if (intent.source === "resource_blog") {
       const priorEvents = intent.providerEventIds || [];
       if (priorEvents.includes(parsed.providerEventId)) {

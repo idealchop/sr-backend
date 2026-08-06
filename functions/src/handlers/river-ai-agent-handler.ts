@@ -1,6 +1,14 @@
 import { Request, Response } from "express";
 import { db } from "../config/firebase-admin";
 import { logger } from "../services/observability/logging/logger";
+import {
+  assertInteractiveAiQuota,
+  sendAiQuotaExceeded,
+} from "../services/ai/ai-tool-quota-service";
+import {
+  assertAiFeatureAvailable,
+  sendAiUnderMaintenance,
+} from "../services/ai/ai-maintenance";
 import { confirmRiverAiAgentAction } from "../services/ai/river-ai-agent/river-ai-agent-confirm";
 import { loadPendingAction } from "../services/ai/river-ai-agent/river-ai-agent-pending-store";
 import { runRiverAiAgentTurn } from "../services/ai/river-ai-agent/river-ai-agent-service";
@@ -23,6 +31,8 @@ export async function postRiverAiAgentTurn(req: Request, res: Response) {
     return;
   }
   try {
+    assertAiFeatureAvailable("river_ai_agent.intent");
+    await assertInteractiveAiQuota(businessId);
     const bizSnap = await db.collection("businesses").doc(businessId).get();
     const businessName = String(bizSnap.data()?.businessName || bizSnap.data()?.name || "Station");
     const data = await runRiverAiAgentTurn({
@@ -33,6 +43,8 @@ export async function postRiverAiAgentTurn(req: Request, res: Response) {
     });
     res.json({ data });
   } catch (e) {
+    if (sendAiUnderMaintenance(res, e)) return;
+    if (sendAiQuotaExceeded(res, e)) return;
     logger.error("postRiverAiAgentTurn failed", e);
     res.status(500).json({ error: "Agent turn failed" });
   }

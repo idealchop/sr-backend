@@ -256,6 +256,7 @@ export async function generateLlmProactiveWeek(params: {
     system,
     user,
     fallback: FALLBACK,
+    operation: "proactive_week.generate",
   });
 
   const llmRows = Array.isArray(raw?.suggestions) ? raw.suggestions : [];

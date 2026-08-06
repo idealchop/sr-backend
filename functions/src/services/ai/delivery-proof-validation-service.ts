@@ -29,6 +29,7 @@ export async function validateDeliveryProofPhoto(params: {
       "wrongSubject, confidence 0-1, notes.",
     user: `Image URI length ${params.imageDataUri.length}`,
     fallback,
+    operation: "delivery.proof_validation",
   });
   return {
     jugsVisible: raw?.jugsVisible === true,

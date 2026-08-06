@@ -102,6 +102,7 @@ async function validateDuplicateBatch(
     fallback,
     maxOutputTokens: 2048,
     temperature: 0.2,
+    operation: "duplicates.validate",
   });
 
   const assessments = new Map<number, DuplicateGroupAiValidation>();

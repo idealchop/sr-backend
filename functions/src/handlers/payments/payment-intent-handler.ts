@@ -171,12 +171,13 @@ export const getMockPaymentCheckout = async (req: Request, res: Response) => {
     const isResourceUnlock =
       source === "resource_video" ||
       source === "resource_webinar" ||
+      source === "resource_webinar_guest" ||
       source === "resource_blog";
 
     const resourceLabel =
       source === "resource_blog" ?
         "premium article" :
-        source === "resource_webinar" ?
+        source === "resource_webinar" || source === "resource_webinar_guest" ?
           "premium webinar" :
           source === "resource_video" ?
             "premium recording" :

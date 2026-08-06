@@ -105,6 +105,7 @@ export class InventoryImportFromFileService {
           user: `MIME:${mimeType}\n\nFILE_CONTENT:\n"""${text}"""`,
           fallback: { items: [], parseWarnings: [] },
           maxOutputTokens: 8192,
+          operation: "inventory.import.text",
         });
         return normalizeExtract(raw);
       }
@@ -123,6 +124,7 @@ export class InventoryImportFromFileService {
         parts,
         fallback: { items: [], parseWarnings: [] },
         maxOutputTokens: 8192,
+        operation: "inventory.import.image",
       });
       return normalizeExtract(raw);
     } catch (e) {

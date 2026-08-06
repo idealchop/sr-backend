@@ -12,6 +12,10 @@ import {
 } from "../services/ai/customer-import-from-file-service";
 import { CustomerImportProfileService } from
   "../services/customers/customer-import-profile-service";
+import {
+  assertInteractiveAiQuota,
+  sendAiQuotaExceeded,
+} from "../services/ai/ai-tool-quota-service";
 
 function getUser(req: Request) {
   return (req as { user?: { uid: string } }).user;
@@ -58,6 +62,9 @@ export async function postCustomerImportAiParse(req: Request, res: Response) {
       return;
     }
     const freeUsedBefore = !!bizSnap.data()?.customerImportAiFreeUsed;
+    if (freeUsedBefore) {
+      await assertInteractiveAiQuota(businessId);
+    }
 
     const data =
       await CustomerImportFromFileService.extractFromDataUri(fileDataUri);
@@ -71,6 +78,7 @@ export async function postCustomerImportAiParse(req: Request, res: Response) {
 
     res.json({ data });
   } catch (e) {
+    if (sendAiQuotaExceeded(res, e)) return;
     logger.error("postCustomerImportAiParse", e);
     res.status(500).json({ error: "AI import preview failed" });
   }

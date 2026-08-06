@@ -13,6 +13,7 @@ import {
   isCmsGuestRegistrationAllowed,
   normalizeWebinarVisibility,
 } from "./guest-webinar-eligibility";
+import { isRegistrationOpen, toIsoTimestamp } from "./webinar-registration-window";
 
 const DEFAULT_PAGE_SIZE = 9;
 const MAX_PAGE_SIZE = 24;
@@ -62,6 +63,15 @@ export type PublicWebinarEvent = {
   requiresSmartRefillForValue: boolean;
   /** Guest may attempt Join (public + within early/live window). */
   joinWindowOpen: boolean;
+  /** When registration becomes available (null = open on publish). */
+  registrationOpensAt: string | null;
+  /** Published and past registrationOpensAt (or opensAt null). */
+  registrationOpen: boolean;
+  /**
+   * Premium guest PayMongo is allowed without SmartRefill auth when
+   * visibility is premium, published, seats remain, and registration is open.
+   */
+  guestPayEnabled: boolean;
 };
 
 function toIso(value: unknown): string | null {
@@ -174,18 +184,36 @@ function mapPublicEvent(
 
   const certificationEnabled = data.certificationEnabled === true;
   const hasLinkedReplay = Boolean(linkedVideoId);
+  const registrationOpensAt = toIsoTimestamp(data.registrationOpensAt);
+  const registrationOpen =
+    LIVE_STATUSES.has(status) &&
+    isRegistrationOpen(data as Record<string, unknown>, nowMs);
   const guestRegistrationEnabled =
     LIVE_STATUSES.has(status) &&
     visibility === "public" &&
     isCmsGuestRegistrationAllowed(data) &&
     !seats.isFull &&
+    registrationOpen &&
+    (schedulePhase === "upcoming" ||
+      schedulePhase === "ongoing" ||
+      schedulePhase === "unknown");
+  const guestPayEnabled =
+    LIVE_STATUSES.has(status) &&
+    visibility === "premium" &&
+    isCmsGuestRegistrationAllowed(data) &&
+    !seats.isFull &&
+    registrationOpen &&
     (schedulePhase === "upcoming" ||
       schedulePhase === "ongoing" ||
       schedulePhase === "unknown");
   const joinWindowOpen =
     LIVE_STATUSES.has(status) &&
-    visibility === "public" &&
+    (visibility === "public" || visibility === "premium") &&
     isGuestJoinWindowOpen(startsAt, endsAt, nowMs);
+
+  // Paid guests get cert/replay without SR account; free guests still convert.
+  const requiresSmartRefillForValue =
+    visibility !== "premium" && (certificationEnabled || hasLinkedReplay);
 
   return {
     id,
@@ -217,8 +245,11 @@ function mapPublicEvent(
     guestRegistrationEnabled,
     certificationEnabled,
     hasLinkedReplay,
-    requiresSmartRefillForValue: certificationEnabled || hasLinkedReplay,
+    requiresSmartRefillForValue,
     joinWindowOpen,
+    registrationOpensAt,
+    registrationOpen,
+    guestPayEnabled,
   };
 }
 
