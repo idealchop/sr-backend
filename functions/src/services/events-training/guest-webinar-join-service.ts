@@ -61,12 +61,6 @@ function toIso(value: unknown): string | null {
   return null;
 }
 
-function parseTime(iso: string | null): number | null {
-  if (!iso) return null;
-  const t = Date.parse(iso);
-  return Number.isNaN(t) ? null : t;
-}
-
 function parseStatus(raw: unknown): GuestRegistrationStatus {
   if (
     raw === "pending" ||

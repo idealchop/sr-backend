@@ -147,9 +147,13 @@ function extractEmail(text: string): string | undefined {
 }
 
 function extractName(text: string): string | undefined {
+  const nameToken = "([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' .\\-]{1,60})";
   const patterns = [
-    /(?:ako\s+si|pangalan\s*(?:ko)?\s*(?:ay|:)?|name\s*(?:is|:)|i\s*am)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' .\-]{1,60})/i,
-    /(?:customer|suki)\s*[:=]\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' .\-]{1,60})/i,
+    new RegExp(
+      `(?:ako\\s+si|pangalan\\s*(?:ko)?\\s*(?:ay|:)?|name\\s*(?:is|:)|i\\s*am)\\s+${nameToken}`,
+      "i",
+    ),
+    new RegExp(`(?:customer|suki)\\s*[:=]\\s*${nameToken}`, "i"),
   ];
   for (const pattern of patterns) {
     const match = text.match(pattern);
@@ -198,9 +202,9 @@ export function parseCommunityFreeTextOrderLocal(
   const errors = validateCommunityOrderFields(fields);
   const confidence =
     errors.length === 0 ? 0.9 :
-    filled >= 3 ? 0.7 :
-    filled >= 1 ? 0.45 :
-    0.15;
+      filled >= 3 ? 0.7 :
+        filled >= 1 ? 0.45 :
+          0.15;
 
   return {
     fields,
