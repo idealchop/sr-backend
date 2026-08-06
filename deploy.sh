@@ -96,10 +96,14 @@ if [[ ! -d node_modules/firebase-admin ]]; then
   npm install
 fi
 
-npx -y firebase-tools@15 emulators:exec \
-  --project "${PROJECT_ID}" \
-  --only "functions,firestore,auth,storage" \
-  "node seed-emulator.js && cd functions && npm run test:bdd"
+if [[ "${SKIP_BDD:-0}" == "1" ]]; then
+  echo -e "${YELLOW}   SKIP_BDD=1 — skipping Playwright BDD emulator gate.${NC}"
+else
+  npx -y firebase-tools@15 emulators:exec \
+    --project "${PROJECT_ID}" \
+    --only "functions,firestore,auth,storage" \
+    "node seed-emulator.js && cd functions && npm run test:bdd"
+fi
 
 cd "${FUNCTIONS_DIR}"
 
