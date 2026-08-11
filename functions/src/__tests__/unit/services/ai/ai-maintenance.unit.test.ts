@@ -20,9 +20,15 @@ describe("ai-maintenance", () => {
     );
   });
 
+  it("allows River AI Buddy while tools stay in maintenance", () => {
+    expect(isAiOperationAllowedDuringMaintenance("support.buddy")).toBe(true);
+    expect(isAiOperationAllowedDuringMaintenance("river_ai_agent.intent")).toBe(
+      true,
+    );
+  });
+
   it("blocks non-import Gemini operations while maintenance is on", () => {
     if (!SMARTREFILL_AI_UNDER_MAINTENANCE) return;
-    expect(isAiOperationAllowedDuringMaintenance("support.buddy")).toBe(false);
     expect(isAiOperationAllowedDuringMaintenance("duplicates.validate")).toBe(
       false,
     );

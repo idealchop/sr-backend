@@ -1,20 +1,22 @@
 import { Response } from "express";
 
 /**
- * Temporary SmartRefill AI kill switch.
- * Flip to `false` (or set SMARTREFILL_AI_MAINTENANCE=0) when bringing AI back.
+ * Temporary SmartRefill AI kill switch for intel / scan tools.
+ * Flip to `false` (or set SMARTREFILL_AI_MAINTENANCE=0) when bringing tools back.
  *
- * Allowed while on: file imports only (customer / history / inventory).
+ * Allowed while on: River AI Buddy, Buddy ops agent, file imports.
  * Duplicate *detect* stays available (heuristics, no Gemini).
  */
 export const SMARTREFILL_AI_UNDER_MAINTENANCE =
   process.env.SMARTREFILL_AI_MAINTENANCE !== "0";
 
 export const AI_UNDER_MAINTENANCE_MESSAGE =
-  "River AI is under maintenance for now. Customer, history, and inventory imports still work. Duplicate detection is available without AI.";
+  "River AI tools are under maintenance. River AI Buddy still works. Customer, history, and inventory imports still work. Duplicate detection is available without AI.";
 
 /** Gemini `operation` values still allowed during maintenance. */
 export const AI_MAINTENANCE_ALLOWED_OPERATIONS = new Set([
+  "support.buddy",
+  "river_ai_agent.intent",
   "customer.import.text",
   "customer.import.image",
   "customer_history.import.text",

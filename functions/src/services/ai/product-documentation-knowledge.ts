@@ -43,9 +43,10 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
   Station, Catalog, Goals) → dashboard.
 - Invited staff: accept Team Hub invite link → verify email if needed → staff onboarding →
   **My Area** (riders) or **dashboard** (admins).
-- **Team Hub record-only**: owner can add personnel **without email or login** (toggle
-  "Access credential not needed") — name, optional photo/phone, role — for directory and dispatch
-  assignment only. These riders do **not** get My Area or live GPS.
+- **Team Hub directory records** (Scale / Enterprise only): owner can add personnel
+  **without email or login** — name, optional photo/phone, role — for directory and dispatch
+  assignment only. These rows do **not** use a staff seat, do **not** get Messenger link,
+  My Area, or live GPS. Starter / Grow / free mode cannot add directory records.
 - If you are sent back to onboarding after you already finished: try sign out and sign in;
   confirm you are on the correct station/workspace; use **Profile → Chat support** if it persists
   (account may show complete but station profile may still need a step).
@@ -116,6 +117,7 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 - **Profile → Chat support**: live Brevo helpdesk for billing and account issues (Grow+ when enabled)—
   completely separate from River AI Buddy (no handoff from Buddy into Brevo).
 - **Analytic Hub / owner AI tools**: separate aiTools quota—not the same as River AI support chat.
+  Intel tools and AI scans may be temporarily under maintenance; **River AI Buddy chat stays available**.
 `;
 
 /** FAQ-style entries derived from docs (indexed for retrieval in prompt). */
@@ -153,10 +155,12 @@ export const SUPPORT_PRODUCT_DOC_ENTRIES: Array<{
     id: "doc-team-hub-record-only",
     topic: "Team Hub: record-only personnel (walang login)",
     content:
-      "Sa **Team Hub → Invite**, i-on ang **Access credential not needed** para magdagdag ng personnel " +
-      "sa directory nang walang email invite o app login. Ilagay ang pangalan, optional photo/phone, at role " +
-      "(rider o admin contact). Makikita sa directory at pwedeng i-assign sa delivery, pero **walang My Area** " +
-      "at **walang live GPS**. Para sa riders na may phone at dapat mag-track, gamitin ang normal email invite.",
+      "Sa **Team Hub → Onboard New**, piliin **Directory record** (Scale / Enterprise lang; dating " +
+      "**Access credential not needed**) para magdagdag ng personnel sa directory nang walang email invite " +
+      "o app login. Hindi ito kumukuha ng staff seat at **walang Messenger link**. Ilagay ang pangalan, " +
+      "optional photo/phone, at role (rider o admin contact). Makikita sa directory at pwedeng i-assign " +
+      "sa delivery, pero **walang My Area** at **walang live GPS**. Starter / Grow / free mode ay walang " +
+      "Directory record. Para sa riders na kailangan ng app o Messenger, gamitin ang Create account o Send invitation.",
   },
   {
     id: "doc-ops-hub-kpis",
@@ -274,6 +278,7 @@ export const SUPPORT_PRODUCT_DOC_ENTRIES: Array<{
       "Header **River AI** (orb): tanong tungkol sa app at operasyon ng station—AI-only Buddy. " +
       "Profile menu → **Chat support**: live helpdesk para sa billing, account, at escalated issues. " +
       "Walang handoff mula Buddy papuntang Chat support — hiwalay na entry ang dalawa. " +
-      "Hiwalay ang Analytic Hub AI tools sa River AI support chat quota.",
+      "Hiwalay ang Analytic Hub AI tools sa River AI support chat quota. " +
+      "Puwede pa rin ang River AI Buddy kahit naka-maintenance ang ibang AI tools.",
   },
 ];

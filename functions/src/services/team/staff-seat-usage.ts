@@ -1,5 +1,4 @@
 import { db } from "../../config/firebase-admin";
-import { RiderService } from "../riders/rider-service";
 import { isActiveStaffMemberForLimit } from "./workspace-member-access";
 
 export const TEAM_DIRECTORY_RECORDS = "team_directory_records";
@@ -86,7 +85,8 @@ export function mergeStaffSeatUsage(...parts: StaffSeatUsage[]): StaffSeatUsage 
 }
 
 /**
- * All active staff seats: members + record-only riders + directory records.
+ * Active **login** staff seats only (owner excluded).
+ * Directory / record-only rows do **not** consume `staffLimit`.
  * @param {string} businessId Business id.
  * @return {Promise<StaffSeatUsage>} Occupied staff seats for plan metering.
  */
@@ -94,19 +94,11 @@ export async function countActiveStaffSeatsForBusiness(
   businessId: string,
 ): Promise<StaffSeatUsage> {
   const businessRef = db.collection("businesses").doc(businessId);
-  const [bizSnap, membersSnap, riders, directorySnap] = await Promise.all([
+  const [bizSnap, membersSnap] = await Promise.all([
     businessRef.get(),
     businessRef.collection("members").get(),
-    RiderService.getRidersByBusiness(businessId),
-    businessRef.collection(TEAM_DIRECTORY_RECORDS).get(),
   ]);
 
   const ownerId = String(bizSnap.data()?.ownerId || "");
-  const memberUsage = countMemberStaffSeats(membersSnap.docs, ownerId);
-  const recordOnlyUsage = countRecordOnlyStaffSeats(
-    riders,
-    directorySnap.docs.map((doc) => doc.data()),
-  );
-
-  return mergeStaffSeatUsage(memberUsage, recordOnlyUsage);
+  return countMemberStaffSeats(membersSnap.docs, ownerId);
 }

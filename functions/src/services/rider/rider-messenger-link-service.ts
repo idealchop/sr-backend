@@ -35,6 +35,9 @@ export class RiderMessengerLinkService {
     if (rider.status === "inactive") {
       throw new Error("Cannot link inactive rider");
     }
+    if (!String(rider.userId || "").trim()) {
+      throw new Error("Directory records cannot use Messenger link.");
+    }
 
     const code = generateLinkCodeValue();
     const expiresAt = Timestamp.fromMillis(Date.now() + LINK_CODE_TTL_MS);
@@ -141,6 +144,9 @@ export class RiderMessengerLinkService {
     const rider = await RiderService.getRider(businessId, codeData.riderId);
     if (!rider?.id) {
       throw new Error("Rider no longer exists. Ask your owner.");
+    }
+    if (!String(rider.userId || "").trim()) {
+      throw new Error("Directory records cannot use Messenger link.");
     }
 
     const stationLabel = await readBusinessStationLabel(businessId);

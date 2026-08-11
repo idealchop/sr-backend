@@ -14,6 +14,7 @@ import {
   type AddonLimitBoosts,
 } from "../../utils/subscription-addon-limit-boosts";
 import { SubscriptionService } from "../subscriptions/subscription-service";
+import { resolveScalePlatformAccess } from "../../utils/scale-plan-access";
 import { RiderService } from "../riders/rider-service";
 import { purgeRemovedMemberWorkspaceData } from "./team-member-removal-cleanup";
 import { normalizeSeatRole, type TeamSeatRole } from "./team-seat-roles";
@@ -447,6 +448,8 @@ export interface TeamHubOverview {
   assignableRoles: AssignableRoleDto[];
   staffLimit: number;
   currentStaffCount: number;
+  /** Scale / Enterprise (incl. Scale trial) — directory records do not consume staff seats. */
+  canUseDirectoryRecords: boolean;
 }
 
 export async function getTeamHubOverview(
@@ -511,6 +514,7 @@ export async function getTeamHubOverview(
     assignableRoles,
     staffLimit: limitations.staffLimit,
     currentStaffCount: limitations.currentStaffCount,
+    canUseDirectoryRecords: resolveScalePlatformAccess(sub),
   };
 }
 
@@ -539,15 +543,13 @@ export async function createRecordOnlyRiderForHub(params: {
   const photoUrl =
     typeof params.photoUrl === "string" ? params.photoUrl.trim() : "";
 
-  const eligibility = await evaluateMemberActivationEligibility(
-    params.businessId,
-    role,
-  );
-  if (!eligibility.canActivate) {
+  const sub = await SubscriptionService.getSubscriptionStatus(params.businessId);
+  if (!resolveScalePlatformAccess(sub)) {
     return {
       ok: false,
-      message: eligibility.reason || "Staff seat limit reached.",
-      status: 400,
+      message:
+        "Directory records are available on Scale and Enterprise plans.",
+      status: 403,
     };
   }
 

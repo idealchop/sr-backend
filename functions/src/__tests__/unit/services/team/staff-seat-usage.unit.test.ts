@@ -54,7 +54,7 @@ describe("countMemberStaffSeats", () => {
 });
 
 describe("mergeStaffSeatUsage", () => {
-  it("sums members and record-only buckets for plan metering", () => {
+  it("can still sum member and record-only buckets when a caller needs both", () => {
     const merged = mergeStaffSeatUsage(
       { total: 2, admins: 1, riders: 1 },
       { total: 2, admins: 1, riders: 1 },

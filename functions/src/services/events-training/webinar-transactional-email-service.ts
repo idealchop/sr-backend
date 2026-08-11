@@ -7,11 +7,10 @@ import {
   buildMemberWebinarReminderEmail,
   buildWebinarApprovedEmail,
 } from "../../utils/webinar-transactional-email-templates";
-import { webinarRegistrationsCollection } from "./events-training-collections";
+import { webinarRegistrationsCollection, webinarsCollection } from "./events-training-collections";
 import { mintJoinToken, hashJoinToken } from "./guest-webinar-registration-service";
 import { sendGuestWebinarInviteEmail } from "./guest-webinar-invite-email-service";
 import { toIsoTimestamp } from "./webinar-registration-window";
-import { webinarsCollection } from "./events-training-collections";
 
 function formatStartsAtLabel(startsAt: string | null, timeZone: string): string {
   if (!startsAt) return "Schedule TBD";

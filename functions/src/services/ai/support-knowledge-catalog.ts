@@ -192,6 +192,15 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
       "Critical actions need connectivity.",
   },
   {
+    id: "river-ai-tools-maintenance",
+    topic: "River AI tools under maintenance / bakit hindi gumagana ang AI tools?",
+    content:
+      "River AI Buddy chat is available. Owner intel tools (morning brief, collections pulse, " +
+      "dispatch health, warehouse risk, retention, plant health) and AI scans are temporarily " +
+      "under maintenance. File imports and duplicate detection without AI still work. " +
+      "Use the header River AI orb or the mobile Buddy button for help.",
+  },
+  {
     id: "human-support",
     topic: "Talk to a human / live helpdesk",
     content:
