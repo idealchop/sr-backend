@@ -114,7 +114,11 @@ export async function updateTransaction(
       }
     }
 
-    await syncTransactionRiderRef(businessId, updates);
+    await syncTransactionRiderRef(businessId, updates, {
+      currentAssignedRiders: Array.isArray(current.assignedRiders) ?
+        (current.assignedRiders as import("./transaction-rider-helpers").AssignedRider[]) :
+        undefined,
+    });
 
     if (Object.prototype.hasOwnProperty.call(updates, "cashHandover")) {
       const raw = (updates as { cashHandover?: unknown }).cashHandover;

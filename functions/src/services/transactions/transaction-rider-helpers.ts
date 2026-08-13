@@ -111,6 +111,9 @@ async function resolveAssignedEntry(
 /**
  * Normalize riderId / riderName / assignedRiders on create/update payloads.
  * When multi-assign is off, only a single primary is kept.
+ * @param {string} businessId Business id.
+ * @param {Object} updates Mutable transaction patch.
+ * @param {Object} [options] Optional multi flag + current assignees (update path).
  */
 export async function syncTransactionRiderRef(
   businessId: string,
@@ -119,7 +122,11 @@ export async function syncTransactionRiderRef(
     riderName?: unknown;
     assignedRiders?: unknown;
   },
-  options?: { multiRiderAssignEnabled?: boolean },
+  options?: {
+    multiRiderAssignEnabled?: boolean;
+    /** Existing assignees — preserves multi when patch only sends riderId. */
+    currentAssignedRiders?: AssignedRider[] | null;
+  },
 ): Promise<void> {
   const hasRiderId = Object.prototype.hasOwnProperty.call(updates, "riderId");
   const hasAssigned = Object.prototype.hasOwnProperty.call(
@@ -237,6 +244,31 @@ export async function syncTransactionRiderRef(
     throw new Error(
       "Rider assignment must reference a profile in the riders collection.",
     );
+  }
+
+  // Multi-assign on + patch only sent riderId: keep the existing crew when the
+  // primary stays on the job (avoids collapsing multi → one on unrelated edits).
+  if (multiEnabled) {
+    const currentList = Array.isArray(options?.currentAssignedRiders) ?
+      options!.currentAssignedRiders! :
+      [];
+    if (currentList.length > 1) {
+      const stillIncludes = currentList.some(
+        (r) => r.riderId === linked.riderId,
+      );
+      if (stillIncludes) {
+        const assignedRiders = currentList.map((r) => ({
+          ...r,
+          isPrimary: r.riderId === linked.riderId,
+        }));
+        const primary =
+          assignedRiders.find((r) => r.isPrimary) ?? assignedRiders[0];
+        updates.riderId = primary.riderId;
+        updates.riderName = primary.riderName;
+        updates.assignedRiders = assignedRiders;
+        return;
+      }
+    }
   }
 
   updates.riderId = linked.riderId;
