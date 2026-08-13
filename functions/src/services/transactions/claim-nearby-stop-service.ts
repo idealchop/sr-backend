@@ -156,12 +156,37 @@ export async function claimNearbyStopForRider(params: {
     return { ok: true, previousRiderId: previousRiderId ?? null };
   }
 
-  await TransactionService.updateTransaction(
-    businessId,
-    transactionId,
-    { riderId: claimerRider.id },
-    claimerUid,
-  );
+  const { isMultiRiderAssignEnabled, buildJoinAssignedRidersPatch } =
+    await import("./transaction-rider-helpers");
+  const multiEnabled = await isMultiRiderAssignEnabled(businessId);
+
+  if (multiEnabled && previousRiderId) {
+    const patch = await buildJoinAssignedRidersPatch({
+      businessId,
+      current: {
+        riderId: typeof tx.riderId === "string" ? tx.riderId : undefined,
+        riderName: typeof tx.riderName === "string" ? tx.riderName : undefined,
+        assignedRiders: Array.isArray(tx.assignedRiders) ?
+          (tx.assignedRiders as import("./transaction-rider-helpers").AssignedRider[]) :
+          undefined,
+      },
+      joinRiderId: claimerRider.id,
+      joinedByUserId: claimerUid,
+    });
+    await TransactionService.updateTransaction(
+      businessId,
+      transactionId,
+      patch,
+      claimerUid,
+    );
+  } else {
+    await TransactionService.updateTransaction(
+      businessId,
+      transactionId,
+      { riderId: claimerRider.id },
+      claimerUid,
+    );
+  }
 
   const customerName =
     (tx.customerName as string) || customer.name || "Customer";

@@ -147,6 +147,13 @@ export interface RawSubmissionPayload {
     | "completed";
   riderId?: string;
   riderName?: string;
+  assignedRiders?: Array<{
+    riderId: string;
+    riderName: string;
+    isPrimary?: boolean;
+    joinedAt?: string;
+    joinedByUserId?: string;
+  }>;
   linkedTransactionId?: string;
   scheduledAt?: any;
   deliveredAt?: any;

@@ -257,46 +257,89 @@ export const trackOrder = async (req: Request, res: Response) => {
       let riderPhone: string | undefined;
       let riderAvgRating: number | null = null;
       let riderIsRecordOnly = false;
-      if (tx.riderId) {
-        const riderSnap = await db
-          .collection("businesses")
-          .doc(businessId)
-          .collection("riders")
-          .doc(tx.riderId)
-          .get();
-        const rider = riderSnap.data();
-        const profile = await resolvePortalRiderTrackProfile(
-          businessId,
-          tx.riderId,
-          rider,
-          typeof tx.riderName === "string" ? tx.riderName : undefined,
-        );
-        riderName = profile.riderName;
-        riderPhotoUrl = profile.riderPhotoUrl;
-        riderPhone = profile.riderPhone;
-        riderAvgRating = profile.riderAvgRating;
-        riderIsRecordOnly = profile.riderIsRecordOnly;
+      const { getAssignedRidersFromTransaction } = await import(
+        "../../services/transactions/transaction-rider-helpers"
+      );
+      const assignedBase = getAssignedRidersFromTransaction({
+        riderId: typeof tx.riderId === "string" ? tx.riderId : undefined,
+        riderName: typeof tx.riderName === "string" ? tx.riderName : undefined,
+        assignedRiders: Array.isArray(tx.assignedRiders) ?
+          tx.assignedRiders :
+          undefined,
+      });
+
+      const ridersCol = db
+        .collection("businesses")
+        .doc(businessId)
+        .collection("riders");
+
+      const assignedRiders = await Promise.all(
+        assignedBase.map(async (r) => {
+          const riderSnap = await ridersCol.doc(r.riderId).get();
+          const rider = riderSnap.data() as Record<string, unknown> | undefined;
+          const profile = await resolvePortalRiderTrackProfile(
+            businessId,
+            r.riderId,
+            rider,
+            r.riderName,
+          );
+          return {
+            riderId: r.riderId,
+            riderName: profile.riderName,
+            isPrimary: r.isPrimary,
+            riderPhone: profile.riderPhone,
+            riderPhotoUrl: profile.riderPhotoUrl,
+            riderAvgRating: profile.riderAvgRating,
+            riderIsRecordOnly: profile.riderIsRecordOnly,
+            _riderDoc: rider,
+          };
+        }),
+      );
+
+      const primaryAssigned =
+        assignedRiders.find((r) => r.isPrimary) ?? assignedRiders[0];
+      if (primaryAssigned) {
+        riderName = primaryAssigned.riderName;
+        riderPhotoUrl = primaryAssigned.riderPhotoUrl;
+        riderPhone = primaryAssigned.riderPhone;
+        riderAvgRating = primaryAssigned.riderAvgRating;
+        riderIsRecordOnly = primaryAssigned.riderIsRecordOnly;
         if (!riderIsRecordOnly) {
           const loc =
             tx.deliveryStatus === "in-transit" ?
               await RiderTrackingService.getRiderLastLocation(
                 businessId,
-                tx.riderId,
+                primaryAssigned.riderId,
               ) :
-              rider?.lastLocation;
+              primaryAssigned._riderDoc?.lastLocation;
           if (
             loc &&
-            typeof loc.latitude === "number" &&
-            typeof loc.longitude === "number"
+            typeof (loc as { latitude?: unknown }).latitude === "number" &&
+            typeof (loc as { longitude?: unknown }).longitude === "number"
           ) {
+            const typed = loc as {
+              latitude: number;
+              longitude: number;
+              updatedAt?: unknown;
+            };
             riderLocation = {
-              latitude: loc.latitude,
-              longitude: loc.longitude,
-              updatedAt: serializePortalTimestamp(loc.updatedAt),
+              latitude: typed.latitude,
+              longitude: typed.longitude,
+              updatedAt: serializePortalTimestamp(typed.updatedAt),
             };
           }
         }
       }
+
+      const assignedRidersPublic = assignedRiders.map((r) => ({
+        riderId: r.riderId,
+        riderName: r.riderName,
+        isPrimary: r.isPrimary,
+        riderPhone: r.riderPhone,
+        riderPhotoUrl: r.riderPhotoUrl,
+        riderAvgRating: r.riderAvgRating,
+        riderIsRecordOnly: r.riderIsRecordOnly,
+      }));
 
       let destination: {
         latitude: number;
@@ -337,8 +380,12 @@ export const trackOrder = async (req: Request, res: Response) => {
       }
 
       const riderOtherActiveStops =
-        tx.riderId ?
-          await countRiderOtherActiveStops(businessId, tx.riderId, txDocId) :
+        primaryAssigned?.riderId ?
+          await countRiderOtherActiveStops(
+            businessId,
+            primaryAssigned.riderId,
+            txDocId,
+          ) :
           0;
 
       return res.json({
@@ -356,6 +403,7 @@ export const trackOrder = async (req: Request, res: Response) => {
           notes: tx.notes,
           riderLocation,
           riderName,
+          assignedRiders: assignedRidersPublic,
           riderPhotoUrl,
           riderPhone,
           riderAvgRating,

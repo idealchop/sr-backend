@@ -650,7 +650,9 @@ export class SubscriptionService {
 
     await subRef.set(newData);
 
-    if (upgradingFromStarter) {
+    const activatesImmediately =
+      !deferUntil && status === "active" && !paymentPending;
+    if (upgradingFromStarter || activatesImmediately) {
       const allRows = await fetchRecentSubscriptionRows(businessId);
       await supersedeOtherEntitlingRows(businessId, subRef, allRows, now);
     }
@@ -957,6 +959,14 @@ export class SubscriptionService {
         planLimitations: planRow?.limitations,
       }),
       pendingRenewal,
+      pendingUpgrade: pendingPaidUpgrade ?
+        {
+          planCode: String(pendingPaidUpgrade.data.planCode || ""),
+          planName: String(pendingPaidUpgrade.data.planName || ""),
+          paymentStatus: pendingPaidUpgrade.data.paymentStatus,
+          billingCycle: pendingPaidUpgrade.data.billingCycle,
+        } :
+        undefined,
     };
   }
 

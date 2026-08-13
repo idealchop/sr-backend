@@ -11,6 +11,12 @@ import {
   claimNearbyStopForRider,
   ClaimNearbyStopError,
 } from "../../services/transactions/claim-nearby-stop-service";
+import {
+  joinTransactionAsRider,
+  leaveTransactionAsRider,
+  recordTransactionCashHandover,
+  MultiRiderActionError,
+} from "../../services/transactions/multi-rider-actions";
 
 export const transactionHandler = {
   async listTransactions(req: Request, res: Response) {
@@ -124,6 +130,115 @@ export const transactionHandler = {
       }
       logger.error("Error claiming nearby stop", error);
       res.status(500).json({ error: "Failed to claim nearby stop" });
+    }
+  },
+
+  async joinAsRider(req: Request, res: Response) {
+    const { businessId, id } = req.params;
+    const user = (req as {
+      user?: { uid: string; name?: string; displayName?: string };
+    }).user;
+    const businessRole = (req as { businessRole?: string }).businessRole;
+    if (!user?.uid) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    try {
+      const data = await joinTransactionAsRider({
+        businessId,
+        transactionId: id,
+        actorUid: user.uid,
+        actorName:
+          typeof user.name === "string" ?
+            user.name :
+            typeof user.displayName === "string" ?
+              user.displayName :
+              undefined,
+        businessRole: businessRole || "member",
+        riderId:
+          typeof req.body?.riderId === "string" ? req.body.riderId : undefined,
+      });
+      res.json({ data });
+    } catch (error: unknown) {
+      if (error instanceof MultiRiderActionError) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+      logger.error("Error joining transaction as rider", error);
+      const message =
+        error instanceof Error ? error.message : "Failed to join as rider";
+      res.status(500).json({ error: message });
+    }
+  },
+
+  async leaveAsRider(req: Request, res: Response) {
+    const { businessId, id } = req.params;
+    const user = (req as {
+      user?: { uid: string; name?: string; displayName?: string };
+    }).user;
+    const businessRole = (req as { businessRole?: string }).businessRole;
+    if (!user?.uid) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    try {
+      const data = await leaveTransactionAsRider({
+        businessId,
+        transactionId: id,
+        actorUid: user.uid,
+        actorName:
+          typeof user.name === "string" ?
+            user.name :
+            typeof user.displayName === "string" ?
+              user.displayName :
+              undefined,
+        businessRole: businessRole || "member",
+        riderId:
+          typeof req.body?.riderId === "string" ? req.body.riderId : undefined,
+      });
+      res.json({ data });
+    } catch (error: unknown) {
+      if (error instanceof MultiRiderActionError) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+      logger.error("Error leaving transaction as rider", error);
+      const message =
+        error instanceof Error ? error.message : "Failed to leave as rider";
+      res.status(500).json({ error: message });
+    }
+  },
+
+  async cashHandover(req: Request, res: Response) {
+    const { businessId, id } = req.params;
+    const user = (req as {
+      user?: { uid: string; name?: string; displayName?: string };
+    }).user;
+    const businessRole = (req as { businessRole?: string }).businessRole;
+    if (!user?.uid) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    try {
+      const data = await recordTransactionCashHandover({
+        businessId,
+        transactionId: id,
+        actorUid: user.uid,
+        actorName:
+          typeof user.name === "string" ?
+            user.name :
+            typeof user.displayName === "string" ?
+              user.displayName :
+              undefined,
+        businessRole: businessRole || "member",
+        handedOverByRiderId: String(req.body?.handedOverByRiderId ?? ""),
+        amount: Number(req.body?.amount),
+        note: typeof req.body?.note === "string" ? req.body.note : undefined,
+      });
+      res.json({ data });
+    } catch (error: unknown) {
+      if (error instanceof MultiRiderActionError) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+      logger.error("Error recording cash handover", error);
+      const message =
+        error instanceof Error ? error.message : "Failed to record cash handover";
+      res.status(500).json({ error: message });
     }
   },
 

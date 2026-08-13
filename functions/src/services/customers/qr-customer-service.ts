@@ -3,6 +3,7 @@ import type { Request } from "express";
 import QRCode from "qrcode";
 import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
+import { resolveSmartrefillPublicBaseUrl } from "../../utils/smartrefill-env-mode";
 import { CustomerService, Customer } from "./customer-service";
 
 /**
@@ -21,13 +22,14 @@ export function getApiPublicBase(req: Request): string {
 
 /**
  * Deep link encoded inside customer QR codes (login-free portal).
+ * Prefers `PORTAL_APP_BASE_URL`, then shared smartrefill public base (local/dev
+ * uses `APP_BASE_URL` → localhost product app / hosted Dev — never silent prod).
  * @return {string} The portal app base URL
  */
 export function getPortalAppBase(): string {
-  return (process.env.PORTAL_APP_BASE_URL || "http://localhost:3000").replace(
-    /\/$/,
-    "",
-  );
+  const portalOnly = process.env.PORTAL_APP_BASE_URL?.trim();
+  if (portalOnly) return portalOnly.replace(/\/$/, "");
+  return resolveSmartrefillPublicBaseUrl();
 }
 
 export function buildPortalDeepLink(

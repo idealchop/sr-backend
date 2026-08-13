@@ -105,6 +105,7 @@ export async function updateTransaction(
     if (
       (effectiveType === "delivery" || effectiveType === "collection") &&
       !Object.prototype.hasOwnProperty.call(updates, "riderId") &&
+      !Object.prototype.hasOwnProperty.call(updates, "assignedRiders") &&
       !current.riderId
     ) {
       const sole = await getSoleActiveRiderId(businessId);
@@ -114,6 +115,13 @@ export async function updateTransaction(
     }
 
     await syncTransactionRiderRef(businessId, updates);
+
+    if (Object.prototype.hasOwnProperty.call(updates, "cashHandover")) {
+      const raw = (updates as { cashHandover?: unknown }).cashHandover;
+      if (raw === null || raw === undefined) {
+        (updates as Record<string, unknown>).cashHandover = FieldValue.delete();
+      }
+    }
 
     if (Object.prototype.hasOwnProperty.call(updates, "expenseStaffId")) {
       const rawStaffId = (updates as { expenseStaffId?: unknown }).expenseStaffId;

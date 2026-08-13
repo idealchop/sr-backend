@@ -183,8 +183,37 @@ export async function claimRiderMessengerJob(params: {
     params.transactionId,
   );
   if (!tx) throw new RiderMessengerTransactionError("Job not found.");
-  if (tx.riderId?.trim()) {
+
+  const {
+    isMultiRiderAssignEnabled,
+    buildJoinAssignedRidersPatch,
+    getAssignedRidersFromTransaction,
+  } = await import("../transactions/transaction-rider-helpers");
+
+  const assigned = getAssignedRidersFromTransaction(tx);
+  if (assigned.some((r) => r.riderId === params.riderId)) {
+    return;
+  }
+
+  const multiEnabled = await isMultiRiderAssignEnabled(params.businessId);
+  if (assigned.length > 0 && !multiEnabled) {
     throw new RiderMessengerTransactionError("Job already assigned.");
+  }
+
+  if (multiEnabled && assigned.length > 0) {
+    const patch = await buildJoinAssignedRidersPatch({
+      businessId: params.businessId,
+      current: tx,
+      joinRiderId: params.riderId,
+      joinedByUserId: params.riderId,
+    });
+    await patchRiderMessengerTransaction({
+      ...params,
+      updates: patch,
+      action: "claim",
+      allowUnassignedClaim: true,
+    });
+    return;
   }
 
   await patchRiderMessengerTransaction({

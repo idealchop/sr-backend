@@ -137,7 +137,16 @@ export const completeOnboarding = async (req: Request, res: Response) => {
     );
 
     await batch.commit();
-    await ensureScaleTrialSubscription(businessRef);
+    try {
+      await ensureScaleTrialSubscription(businessRef);
+    } catch (trialErr) {
+      // Do not block station setup if trial plan seed fails (e.g. empty plans on riverdb-dev).
+      logger.warn("ensureScaleTrialSubscription failed after onboarding", {
+        businessId: businessRef.id,
+        userId: user.uid,
+        err: trialErr instanceof Error ? trialErr.message : String(trialErr),
+      });
+    }
     await markUserOnboardingComplete(
       user.uid,
       user.email,

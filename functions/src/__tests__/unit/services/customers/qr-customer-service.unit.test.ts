@@ -17,12 +17,18 @@ function makeReq(headers: Record<string, string | undefined>): Request {
 describe("qr-customer-service URL helpers", () => {
   const prevApi = process.env.API_PUBLIC_BASE_URL;
   const prevPortal = process.env.PORTAL_APP_BASE_URL;
+  const prevApp = process.env.APP_BASE_URL;
+  const prevDev = process.env.SMARTREFILL_ENV_DEV;
 
   afterEach(() => {
     if (prevApi === undefined) delete process.env.API_PUBLIC_BASE_URL;
     else process.env.API_PUBLIC_BASE_URL = prevApi;
     if (prevPortal === undefined) delete process.env.PORTAL_APP_BASE_URL;
     else process.env.PORTAL_APP_BASE_URL = prevPortal;
+    if (prevApp === undefined) delete process.env.APP_BASE_URL;
+    else process.env.APP_BASE_URL = prevApp;
+    if (prevDev === undefined) delete process.env.SMARTREFILL_ENV_DEV;
+    else process.env.SMARTREFILL_ENV_DEV = prevDev;
   });
 
   it("getApiPublicBase prefers API_PUBLIC_BASE_URL", () => {
@@ -49,6 +55,13 @@ describe("qr-customer-service URL helpers", () => {
   it("getPortalAppBase strips trailing slash", () => {
     process.env.PORTAL_APP_BASE_URL = "http://localhost:3000/";
     expect(getPortalAppBase()).toBe("http://localhost:3000");
+  });
+
+  it("getPortalAppBase falls back to APP_BASE_URL in local DEV", () => {
+    delete process.env.PORTAL_APP_BASE_URL;
+    process.env.SMARTREFILL_ENV_DEV = "true";
+    process.env.APP_BASE_URL = "http://localhost:3001";
+    expect(getPortalAppBase()).toBe("http://localhost:3001");
   });
 
   it("buildQrImageUrl encodes query params", () => {

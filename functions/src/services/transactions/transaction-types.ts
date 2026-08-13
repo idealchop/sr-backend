@@ -89,6 +89,10 @@ export interface Transaction {
   riderId?: string;
   /** Denormalized rider display name (set when `riderId` is assigned). */
   riderName?: string;
+  /** Multi-rider assignees (primary matches riderId/riderName). */
+  assignedRiders?: import("./transaction-rider-helpers").AssignedRider[];
+  /** Shared cash handover note for multi-rider cash jobs. */
+  cashHandover?: import("./transaction-rider-helpers").TransactionCashHandover;
   linkedTransactionId?: string;
   notes?: string;
   scheduledAt?: any;

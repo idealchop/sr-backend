@@ -256,6 +256,24 @@ export const openApiSpec = {
           referenceId: { type: "string" },
           status: { type: "string" },
           riderName: { type: "string" },
+          assignedRiders: {
+            type: "array",
+            description:
+              "Delivery team when multi-rider assign is enabled. " +
+              "isPrimary marks the station-chosen lead (live map / primary contact).",
+            items: {
+              type: "object",
+              properties: {
+                riderId: { type: "string" },
+                riderName: { type: "string" },
+                isPrimary: { type: "boolean" },
+                riderPhone: { type: "string" },
+                riderPhotoUrl: { type: "string" },
+                riderAvgRating: { type: "number", nullable: true },
+                riderIsRecordOnly: { type: "boolean" },
+              },
+            },
+          },
           riderPhotoUrl: { type: "string" },
           riderPhone: { type: "string" },
           riderAvgRating: {

@@ -111,6 +111,17 @@ vi.mock("../../services/inventory/inventory-service", async (importOriginal) => 
   };
 });
 
+// Shared Firestore mock returns one doc for every query (including riders).
+// Stub riders so sole-rider auto-assign does not 500 collection creates.
+vi.mock("../../services/riders/rider-service", () => ({
+  RiderService: {
+    getRidersByBusiness: vi.fn().mockResolvedValue([]),
+    getRider: vi.fn().mockResolvedValue(null),
+    getRiderByUserId: vi.fn().mockResolvedValue(null),
+    resolveRiderDocumentId: vi.fn().mockResolvedValue(null),
+  },
+}));
+
 describe("Feature: Collection Management Flow", () => {
   const businessId = "test-biz-123";
   const customerId = "cust-456";

@@ -118,6 +118,18 @@ vi.mock("../../services/inventory/inventory-service", async (importOriginal) => 
   };
 });
 
+// Shared Firestore mock returns one doc for every query (including riders).
+// Without this stub, sole-rider auto-assign treats that doc as a rider and
+// syncTransactionRiderRef 500s create flows that omit riderId.
+vi.mock("../../services/riders/rider-service", () => ({
+  RiderService: {
+    getRidersByBusiness: vi.fn().mockResolvedValue([]),
+    getRider: vi.fn().mockResolvedValue(null),
+    getRiderByUserId: vi.fn().mockResolvedValue(null),
+    resolveRiderDocumentId: vi.fn().mockResolvedValue(null),
+  },
+}));
+
 vi.mock("../../services/observability/logging/logger", () => ({
   logger: {
     info: vi.fn(),

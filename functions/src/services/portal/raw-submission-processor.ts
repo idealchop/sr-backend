@@ -350,6 +350,19 @@ const submissionHandlers: Record<string, SubmissionHandler> = {
           (isWalkin ? "pending" : "placed"),
         riderId: isWalkin ? undefined : submission.payload.riderId,
         riderName: isWalkin ? undefined : submission.payload.riderName,
+        ...(!isWalkin &&
+        Array.isArray(submission.payload.assignedRiders) &&
+        submission.payload.assignedRiders.length > 0 ?
+          {
+            assignedRiders: submission.payload.assignedRiders.map((r, index) => ({
+              riderId: r.riderId,
+              riderName: r.riderName,
+              isPrimary: r.isPrimary === true || index === 0,
+              ...(r.joinedAt ? { joinedAt: r.joinedAt } : {}),
+              ...(r.joinedByUserId ? { joinedByUserId: r.joinedByUserId } : {}),
+            })),
+          } :
+          {}),
         attachmentUrl: pay?.proofUrl,
         signatureUrl: submission.payload.signatureDataUrl,
         notes:

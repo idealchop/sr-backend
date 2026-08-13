@@ -217,6 +217,31 @@ describe("RawSubmissionProcessor PLACE_ORDER", () => {
     expect(txPayload.waterRefills[0].unitPrice).toBe(25);
   });
 
+  it("passes assignedRiders through to the created transaction", async () => {
+    const assignedRiders = [
+      { riderId: "rider-1", riderName: "Juan", isPrimary: true },
+      { riderId: "rider-2", riderName: "AJ", isPrimary: false },
+    ];
+    await RawSubmissionProcessor.accept(
+      "biz-1",
+      buildPlaceOrderSubmission({
+        payload: {
+          refillItems: [{ type: "Mineral", qty: 1, unitPrice: 25 }],
+          inventoryItems: [{ inventoryId: "round-1", qty: 1 }],
+          deliveryStatus: "placed",
+          riderId: "rider-1",
+          riderName: "Juan",
+          assignedRiders,
+        },
+      }),
+      "staff-1",
+    );
+
+    const txPayload = addTransactionMock.mock.calls[0][1];
+    expect(txPayload.riderId).toBe("rider-1");
+    expect(txPayload.assignedRiders).toEqual(assignedRiders);
+  });
+
   it("copies walk-in queue number onto walk-in transactions", async () => {
     await RawSubmissionProcessor.accept(
       "biz-1",

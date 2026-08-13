@@ -18,6 +18,24 @@ router.post(
   validateBusinessAccess,
   transactionHandler.claimNearbyStop,
 );
+router.post(
+  "/:id/join-as-rider",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  transactionHandler.joinAsRider,
+);
+router.post(
+  "/:id/leave-as-rider",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  transactionHandler.leaveAsRider,
+);
+router.post(
+  "/:id/cash-handover",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  transactionHandler.cashHandover,
+);
 router.get(
   "/:id",
   validateFirebaseIdToken,

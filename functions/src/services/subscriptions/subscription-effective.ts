@@ -94,7 +94,9 @@ export function computeDatesView(
   if (persisted === "superseded" || persisted === "scheduled") {
     status = persisted;
   } else if (persisted === "expired" || persisted === "grace_period") {
-    status = persisted;
+    // A paid renewal may extend dates on the same row. Don't keep nagging
+    // grace/expired once the current period is active again.
+    status = now <= expiresAt ? "active" : persisted;
   } else if (cycle === "trial") {
     status = now > expiresAt ? "expired" : "active";
   } else if (persisted === "active" || persisted === "approved") {

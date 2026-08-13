@@ -1,7 +1,6 @@
 import { db, FieldValue } from "../../config/firebase-admin";
 import { logger, logAuditEvent } from "../observability/logging/logger";
 import { buildAuditActorFields } from "../../utils/audit-actor";
-import { RiderService } from "../riders/rider-service";
 import {
   InventoryService,
   InventoryItem,
@@ -38,7 +37,10 @@ import {
   shouldSyncWrContainerPossession,
   syncCustomerAssetPossession,
 } from "./sync-customer-asset-possession";
-import { getSoleActiveRiderId } from "./transaction-rider-helpers";
+import {
+  getSoleActiveRiderId,
+  syncTransactionRiderRef,
+} from "./transaction-rider-helpers";
 import { logTransactionStockAuditRows } from "./log-transaction-stock-audit";
 import type {
   AddTransactionResult,
@@ -82,24 +84,40 @@ export async function addTransaction(
     let resolvedRiderId = transaction.riderId;
     if (
       (txType === "delivery" || txType === "collection") &&
-      !resolvedRiderId
+      !resolvedRiderId &&
+      !(
+        Array.isArray(transaction.assignedRiders) &&
+        transaction.assignedRiders.length > 0
+      )
     ) {
       resolvedRiderId = await getSoleActiveRiderId(businessId);
     }
 
-    let resolvedRiderName: string | undefined;
-    if (resolvedRiderId) {
-      const linked = await RiderService.resolveRiderDocumentId(
-        businessId,
-        resolvedRiderId,
-      );
-      if (linked) {
-        resolvedRiderId = linked.riderId;
-        resolvedRiderName = linked.riderName;
-      } else {
-        resolvedRiderId = undefined;
-      }
+    const riderSync: Partial<Transaction> & {
+      riderId?: unknown;
+      assignedRiders?: unknown;
+    } = {};
+    if (
+      Array.isArray(transaction.assignedRiders) &&
+      transaction.assignedRiders.length > 0
+    ) {
+      riderSync.assignedRiders = transaction.assignedRiders;
+      if (resolvedRiderId) riderSync.riderId = resolvedRiderId;
+    } else if (resolvedRiderId) {
+      riderSync.riderId = resolvedRiderId;
     }
+    if (Object.keys(riderSync).length > 0) {
+      await syncTransactionRiderRef(businessId, riderSync);
+    }
+
+    const syncedRiderId =
+      typeof riderSync.riderId === "string" ? riderSync.riderId : undefined;
+    const syncedRiderName =
+      typeof riderSync.riderName === "string" ? riderSync.riderName : undefined;
+    const syncedAssigned =
+      Array.isArray(riderSync.assignedRiders) ?
+        riderSync.assignedRiders :
+        undefined;
 
     const amountPaid = transaction.amountPaid || 0;
     const totalAmount = transaction.totalAmount || 0;
@@ -121,14 +139,14 @@ export async function addTransaction(
       const payMethod = transaction.paymentMethod || "cash";
       const confirmedByRider = initialPaymentConfirmedByRider(
         payMethod,
-        resolvedRiderId,
+        syncedRiderId,
       );
       payments.push({
         id: `pay-${timestamp}-${random}`,
         amount: amountPaid,
         date: scheduledAt,
         method: payMethod,
-        notes: initialPaymentNotesForCreate(payMethod, resolvedRiderId),
+        notes: initialPaymentNotesForCreate(payMethod, syncedRiderId),
         ...(confirmedByRider ? { confirmedByRider } : {}),
       });
     } else if ((transaction.type || "delivery") === "expense" && payments.length > 0) {
@@ -163,8 +181,9 @@ export async function addTransaction(
       paymentMethod: transaction.paymentMethod || "cash",
       payments: payments,
       deliveryStatus: transaction.deliveryStatus || "pending",
-      riderId: resolvedRiderId,
-      riderName: resolvedRiderName,
+      riderId: syncedRiderId,
+      riderName: syncedRiderName,
+      ...(syncedAssigned ? { assignedRiders: syncedAssigned } : {}),
       ...(transaction.walkInQueueNumber != null ?
         { walkInQueueNumber: transaction.walkInQueueNumber } :
         {}),

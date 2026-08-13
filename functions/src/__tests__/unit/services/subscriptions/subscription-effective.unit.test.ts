@@ -36,6 +36,23 @@ describe("subscription-effective", () => {
       expect(view.isGracePeriod).toBe(false);
     });
 
+    it("recovers persisted grace when expiresAt is still in the future", () => {
+      const expires = new Date("2026-06-20T00:00:00Z");
+      const view = computeDatesView(
+        {
+          billingCycle: "monthly",
+          status: "grace_period",
+          dates: {
+            expiresAt: expires,
+            gracePeriodExpiresAt: new Date("2026-06-27T00:00:00Z"),
+          },
+        },
+        new Date("2026-05-26T00:00:00Z"),
+      );
+      expect(view.status).toBe("active");
+      expect(view.isGracePeriod).toBe(false);
+    });
+
     it("paid plan enters grace after expiresAt", () => {
       const expires = new Date("2026-05-10T00:00:00Z");
       const grace = new Date("2026-05-17T00:00:00Z");
