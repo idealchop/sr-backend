@@ -250,7 +250,7 @@ export async function syncTransactionRiderRef(
   // primary stays on the job (avoids collapsing multi → one on unrelated edits).
   if (multiEnabled) {
     const currentList = Array.isArray(options?.currentAssignedRiders) ?
-      options!.currentAssignedRiders! :
+      options.currentAssignedRiders :
       [];
     if (currentList.length > 1) {
       const stillIncludes = currentList.some(

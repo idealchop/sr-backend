@@ -72,7 +72,12 @@ export function buildFirebaseAdminInit(): FirebaseAdminInitMeta {
     projectId: SMARTREFILL_PROJECT_ID,
     credentialMode,
     options: {
+      projectId: SMARTREFILL_PROJECT_ID,
       ...(storageBucket ? { storageBucket } : {}),
+      // Gen2 ADC: help mint custom tokens via IAM signBlob when email is known.
+      ...(process.env.SMARTREFILL_FIREBASE_CLIENT_EMAIL ?
+        { serviceAccountId: process.env.SMARTREFILL_FIREBASE_CLIENT_EMAIL } :
+        {}),
     },
   };
 }

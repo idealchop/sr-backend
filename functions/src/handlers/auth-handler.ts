@@ -682,12 +682,32 @@ export const postCustomToken = async (req: Request, res: Response) => {
     return;
   }
 
+  const trimmed = idToken.trim();
+  if (trimmed.split(".").length !== 3) {
+    res.status(400).json({ error: "idToken is malformed" });
+    return;
+  }
+
+  let uid: string;
   try {
-    const decoded = await auth.verifyIdToken(idToken);
-    const customToken = await auth.createCustomToken(decoded.uid);
+    const decoded = await auth.verifyIdToken(trimmed);
+    uid = decoded.uid;
+  } catch (error) {
+    logger.warn("postCustomToken verifyIdToken failed", { error });
+    res.status(401).json({ error: "Invalid or expired token" });
+    return;
+  }
+
+  try {
+    const customToken = await auth.createCustomToken(uid);
     res.json({ data: { customToken } });
   } catch (error) {
-    logger.warn("postCustomToken failed", { error });
-    res.status(401).json({ error: "Invalid or expired token" });
+    // Gen2 compute SA needs roles/iam.serviceAccountTokenCreator (signBlob).
+    logger.error("postCustomToken createCustomToken failed", { error, uid });
+    res.status(500).json({
+      error: "Could not mint session token",
+      message:
+        error instanceof Error ? error.message : "createCustomToken failed",
+    });
   }
 };
