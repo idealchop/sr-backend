@@ -16,9 +16,17 @@ export interface Rider {
     maxCollections?: number;
     maxContainers: number;
   };
+  rate?: {
+    amount: number;
+    basis: "per_day";
+    kind?: "flat" | "variable";
+    tiers?: Array<{ upTo: number | null; amount: number }>;
+  };
   commission?: {
     amount: number;
     basis: "per_order" | "per_volume";
+    kind?: "flat" | "variable";
+    tiers?: Array<{ upTo: number | null; amount: number }>;
   };
   currentStats?: {
     deliveriesToday: number;
