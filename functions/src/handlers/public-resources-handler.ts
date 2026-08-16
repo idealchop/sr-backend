@@ -9,7 +9,7 @@ import {
   getWrsBlogByIdOrSlug,
   listPublicWrsBlogs,
 } from "../services/events-training/public-blogs-service";
-import { listPublicWebinarEvents } from "../services/events-training/public-webinar-events-service";
+import { listPublicWebinarEvents, getPublicWebinarEventById } from "../services/events-training/public-webinar-events-service";
 import { registerGuestForWebinar } from "../services/events-training/guest-webinar-registration-service";
 import {
   getGuestWebinarJoinByToken,
@@ -112,6 +112,28 @@ export async function getPublicWebinarEvents(
   } catch (error) {
     logger.error("getPublicWebinarEvents failed", error);
     res.status(500).json({ error: "Failed to load webinar events." });
+  }
+}
+
+/**
+ * GET /public/resources/webinar-events/:eventId
+ * Single public webinar for detail pages / SEO (works when list paging misses the id).
+ */
+export async function getPublicWebinarEvent(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const event = await getPublicWebinarEventById(String(req.params.eventId || ""));
+    if (!event) {
+      res.status(404).json({ error: "Webinar not found." });
+      return;
+    }
+    const [withEngagement] = await attachWebinarEventListEngagement([event]);
+    res.json({ success: true, data: withEngagement });
+  } catch (error) {
+    logger.error("getPublicWebinarEvent failed", error);
+    res.status(500).json({ error: "Failed to load webinar event." });
   }
 }
 

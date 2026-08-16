@@ -40,6 +40,7 @@ import {
 import {
   getPublicBlogEngagement,
   getPublicResourceVideoById,
+  getPublicWebinarEvent,
   getPublicWebinarEventComments,
   getPublicWebinarEvents,
   getPublicWebinarRecordings,
@@ -158,6 +159,11 @@ router.get("/resources/wrs-stories", resourcesLimiter, getPublicWrsStories);
 router.get("/resources/tutorials", resourcesLimiter, getPublicTutorials);
 router.get("/resources/webinars", resourcesLimiter, getPublicWebinarRecordings);
 router.get("/resources/webinar-events", resourcesLimiter, getPublicWebinarEvents);
+router.get(
+  "/resources/webinar-events/:eventId",
+  resourcesLimiter,
+  getPublicWebinarEvent,
+);
 router.get(
   "/resources/webinar-events/:eventId/comments",
   resourcesLimiter,

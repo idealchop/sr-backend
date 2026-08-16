@@ -30,15 +30,15 @@ describe("webinar-registration-window", () => {
     expect(isRegistrationOpen({ registrationOpensAt: opensAt })).toBe(true);
   });
 
-  it("opens join window 15 minutes before start", () => {
-    const start = Date.now() + 10 * 60 * 1000;
+  it("opens join window 30 minutes before start", () => {
+    const start = Date.now() + 20 * 60 * 1000;
     const startsAt = new Date(start).toISOString();
     const endsAt = new Date(start + 2 * 60 * 60 * 1000).toISOString();
     expect(isWebinarJoinWindowOpen(startsAt, endsAt)).toBe(true);
   });
 
-  it("keeps join closed more than 15 minutes before start", () => {
-    const start = Date.now() + 30 * 60 * 1000;
+  it("keeps join closed more than 30 minutes before start", () => {
+    const start = Date.now() + 45 * 60 * 1000;
     const startsAt = new Date(start).toISOString();
     expect(isWebinarJoinWindowOpen(startsAt, null)).toBe(false);
   });

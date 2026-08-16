@@ -41,7 +41,7 @@ export function buildGuestWebinarInviteEmail(
     </div>
     <a href="${escapeHtmlForEmail(input.joinUrl)}" style="display:inline-block;background:#44c1ba;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 20px;border-radius:12px;">Join webinar</a>
     <p style="margin:20px 0 0;font-size:12px;line-height:1.5;color:#94a3b8;">
-      Join opens about 15 minutes before start. Keep this email — the link is personal to your registration.
+      Join opens about 30 minutes before start. Keep this email — the link is personal to your registration.
     </p>
     <p style="margin:12px 0 0;font-size:12px;line-height:1.5;color:#94a3b8;">
       Need to cancel? <a href="${escapeHtmlForEmail(input.cancelUrl)}" style="color:#64748b;">Cancel registration</a>

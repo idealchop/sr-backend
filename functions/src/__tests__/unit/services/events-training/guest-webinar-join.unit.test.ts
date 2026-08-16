@@ -33,7 +33,7 @@ describe("isGuestJoinWindowOpen", () => {
     ).toBe(false);
   });
 
-  it("opens 15 minutes before start", () => {
+  it("opens 30 minutes before start", () => {
     expect(
       isGuestJoinWindowOpen(start, end, startMs - GUEST_JOIN_EARLY_MS),
     ).toBe(true);

@@ -278,6 +278,33 @@ function isArchiveEvent(event: PublicWebinarEvent): boolean {
 }
 
 /**
+ * Single published webinar event for marketing detail / SEO.
+ * Returns null when missing, draft, or cancelled.
+ */
+export async function getPublicWebinarEventById(
+  eventIdRaw: string,
+): Promise<PublicWebinarEvent | null> {
+  const eventId = String(eventIdRaw || "").trim();
+  if (!eventId) return null;
+
+  const snap = await webinarsCollection().doc(eventId).get();
+  if (!snap.exists) return null;
+  const data = snap.data() ?? {};
+  const status = String(data.status ?? "draft");
+  if (status === "draft" || status === "cancelled") return null;
+
+  const linkedVideoId =
+    typeof data.linkedVideoId === "string" && data.linkedVideoId.trim() ?
+      data.linkedVideoId.trim() :
+      "";
+  const linkedReplay = linkedVideoId ?
+    await getPublicResourceVideo(linkedVideoId, { allowArchived: true }) :
+    null;
+
+  return mapPublicEvent(snap.id, data, Date.now(), linkedReplay);
+}
+
+/**
  * Public marketing catalog of live webinar events.
  * Latest = not yet finished by schedule; Archives = finished + linked replay teasers.
  */

@@ -95,7 +95,7 @@ function normalizeVisibility(raw: unknown): string {
   return v;
 }
 
-/** Join window: [startsAt − 15m, endsAt) with default 2h duration. */
+/** Join window: [startsAt − 30m, endsAt) with default 2h duration. */
 export function isGuestJoinWindowOpen(
   startsAt: string | null,
   endsAt: string | null,

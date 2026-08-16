@@ -3,8 +3,8 @@
  */
 
 const DEFAULT_WEBINAR_DURATION_MS = 2 * 60 * 60 * 1000;
-/** Allow join 15 minutes before startsAt. */
-export const WEBINAR_JOIN_EARLY_MS = 15 * 60 * 1000;
+/** Allow join 30 minutes before startsAt (guest + member live window). */
+export const WEBINAR_JOIN_EARLY_MS = 30 * 60 * 1000;
 
 export function toIsoTimestamp(value: unknown): string | null {
   if (!value) return null;
@@ -64,7 +64,7 @@ export function assertRegistrationOpen(
   );
 }
 
-/** Join window: [startsAt − 15m, endsAt) with default 2h duration. */
+/** Join window: [startsAt − 30m, endsAt) with default 2h duration. */
 export function isWebinarJoinWindowOpen(
   startsAt: string | null,
   endsAt: string | null,
