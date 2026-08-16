@@ -12,6 +12,8 @@ export const EVENTS_TRAINING_COLLECTIONS = {
   trainingVideoEngagement: "training_video_engagement",
   /** Member likes / comments on WRS Blog articles (keyed by blog doc id). */
   blogEngagement: "blog_engagement",
+  /** Guest + member likes / comments on live webinar events. */
+  webinarEventEngagement: "webinar_event_engagement",
 } as const;
 
 export function eventsTrainingRoot() {

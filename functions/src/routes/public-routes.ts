@@ -40,6 +40,7 @@ import {
 import {
   getPublicBlogEngagement,
   getPublicResourceVideoById,
+  getPublicWebinarEventComments,
   getPublicWebinarEvents,
   getPublicWebinarRecordings,
   getPublicWrsBlogById,
@@ -54,6 +55,9 @@ import {
   postGuestWebinarRegister,
   postGuestWebinarReplay,
   postGuestWebinarUnlockCheckout,
+  postPublicWebinarEventComment,
+  postPublicWebinarEventLike,
+  deletePublicWebinarEventLike,
 } from "../handlers/public-resources-handler";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
 
@@ -154,6 +158,26 @@ router.get("/resources/wrs-stories", resourcesLimiter, getPublicWrsStories);
 router.get("/resources/tutorials", resourcesLimiter, getPublicTutorials);
 router.get("/resources/webinars", resourcesLimiter, getPublicWebinarRecordings);
 router.get("/resources/webinar-events", resourcesLimiter, getPublicWebinarEvents);
+router.get(
+  "/resources/webinar-events/:eventId/comments",
+  resourcesLimiter,
+  getPublicWebinarEventComments,
+);
+router.post(
+  "/resources/webinar-events/:eventId/comments",
+  marketingLimiter,
+  postPublicWebinarEventComment,
+);
+router.post(
+  "/resources/webinar-events/:eventId/like",
+  marketingLimiter,
+  postPublicWebinarEventLike,
+);
+router.delete(
+  "/resources/webinar-events/:eventId/like",
+  marketingLimiter,
+  deletePublicWebinarEventLike,
+);
 router.post(
   "/resources/webinar-events/:eventId/register",
   marketingLimiter,

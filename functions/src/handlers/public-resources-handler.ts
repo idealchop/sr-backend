@@ -19,6 +19,13 @@ import {
 } from "../services/events-training/guest-webinar-join-service";
 import { createGuestWebinarUnlockCheckout, getGuestReplayAccess } from "../services/events-training/guest-webinar-unlock-service";
 import { claimGuestWebinarCertificate } from "../services/events-training/guest-webinar-certificate-service";
+import {
+  attachWebinarEventListEngagement,
+  createPublicWebinarEventComment,
+  listPublicWebinarEventComments,
+  resolveGuestLikeId,
+  setPublicWebinarEventLike,
+} from "../services/events-training/webinar-event-engagement-service";
 
 function resolvePublicApiBase(req: Request): string {
   const configured = process.env.SMARTREFILL_API_BASE_URL?.trim();
@@ -95,15 +102,121 @@ export async function getPublicWebinarEvents(
   res: Response,
 ): Promise<void> {
   try {
-    const data = await listPublicWebinarEvents({
+    const page = await listPublicWebinarEvents({
       archives: String(req.query.archives || "") === "true",
+      page: req.query.page ? Number(req.query.page) : 1,
+      pageSize: req.query.pageSize ? Number(req.query.pageSize) : undefined,
+    });
+    const items = await attachWebinarEventListEngagement(page.items);
+    res.json({ success: true, data: { ...page, items } });
+  } catch (error) {
+    logger.error("getPublicWebinarEvents failed", error);
+    res.status(500).json({ error: "Failed to load webinar events." });
+  }
+}
+
+/** GET /public/resources/webinar-events/:eventId/comments */
+export async function getPublicWebinarEventComments(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const data = await listPublicWebinarEventComments({
+      eventId: String(req.params.eventId || ""),
       page: req.query.page ? Number(req.query.page) : 1,
       pageSize: req.query.pageSize ? Number(req.query.pageSize) : undefined,
     });
     res.json({ success: true, data });
   } catch (error) {
-    logger.error("getPublicWebinarEvents failed", error);
-    res.status(500).json({ error: "Failed to load webinar events." });
+    const status = Number((error as { status?: number })?.status) || 500;
+    if (status === 404) {
+      res.status(404).json({ error: "Webinar not found." });
+      return;
+    }
+    logger.error("getPublicWebinarEventComments failed", error);
+    res.status(500).json({ error: "Failed to load comments." });
+  }
+}
+
+/** POST /public/resources/webinar-events/:eventId/comments */
+export async function postPublicWebinarEventComment(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const body = (req.body || {}) as { text?: string; displayName?: string };
+    const data = await createPublicWebinarEventComment({
+      eventId: String(req.params.eventId || ""),
+      text: String(body.text || ""),
+      displayName: body.displayName,
+    });
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    const status = Number((error as { status?: number })?.status) || 500;
+    const message =
+      error instanceof Error ? error.message : "Failed to post comment.";
+    if (status === 400 || status === 404) {
+      res.status(status).json({ error: message });
+      return;
+    }
+    logger.error("postPublicWebinarEventComment failed", error);
+    res.status(500).json({ error: "Failed to post comment." });
+  }
+}
+
+/** POST /public/resources/webinar-events/:eventId/like */
+export async function postPublicWebinarEventLike(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const body = (req.body || {}) as { guestId?: string };
+    const guestId = resolveGuestLikeId(
+      body.guestId || req.get("x-guest-id"),
+      `${req.ip || ""}:${req.get("user-agent") || ""}`,
+    );
+    const data = await setPublicWebinarEventLike({
+      eventId: String(req.params.eventId || ""),
+      guestId,
+      liked: true,
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    const status = Number((error as { status?: number })?.status) || 500;
+    if (status === 404) {
+      res.status(404).json({ error: "Webinar not found." });
+      return;
+    }
+    logger.error("postPublicWebinarEventLike failed", error);
+    res.status(500).json({ error: "Failed to like webinar." });
+  }
+}
+
+/** DELETE /public/resources/webinar-events/:eventId/like */
+export async function deletePublicWebinarEventLike(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const body = (req.body || {}) as { guestId?: string };
+    const guestId = resolveGuestLikeId(
+      body.guestId || req.query.guestId || req.get("x-guest-id"),
+      `${req.ip || ""}:${req.get("user-agent") || ""}`,
+    );
+    const data = await setPublicWebinarEventLike({
+      eventId: String(req.params.eventId || ""),
+      guestId,
+      liked: false,
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    const status = Number((error as { status?: number })?.status) || 500;
+    if (status === 404) {
+      res.status(404).json({ error: "Webinar not found." });
+      return;
+    }
+    logger.error("deletePublicWebinarEventLike failed", error);
+    res.status(500).json({ error: "Failed to unlike webinar." });
   }
 }
 

@@ -72,6 +72,8 @@ export type PublicWebinarEvent = {
    * visibility is premium, published, seats remain, and registration is open.
    */
   guestPayEnabled: boolean;
+  likeCount: number;
+  commentCount: number;
 };
 
 function toIso(value: unknown): string | null {
@@ -250,6 +252,8 @@ function mapPublicEvent(
     registrationOpensAt,
     registrationOpen,
     guestPayEnabled,
+    likeCount: 0,
+    commentCount: 0,
   };
 }
 
