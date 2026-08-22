@@ -13,7 +13,7 @@ test.describe("Delivery products catalog (BDD)", () => {
         unitPrice: 35,
         active: true,
         showInCustomerOrder: true,
-        iconId: "droplets",
+        iconId: "round-gallon",
         components: [],
       },
     });

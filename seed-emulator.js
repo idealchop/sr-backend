@@ -8,10 +8,16 @@ const app = admin.initializeApp({
     projectId: "aquaflow-management-suite",
 });
 
-const targetDb = "riverdb";
-const firestore = getFirestore(app, targetDb);
+const targetDbs = [
+    ...new Set(
+        ["riverdb", (process.env.SMARTREFILL_FIRESTORE_DB || "").trim() || "riverdb-dev"].filter(
+            Boolean,
+        ),
+    ),
+];
 
-async function seed() {
+async function seedDatabase(targetDb) {
+    const firestore = getFirestore(app, targetDb);
     console.log(`Seeding emulator (db: ${targetDb})...`);
 
     const businessId = "test-id";
@@ -92,8 +98,14 @@ async function seed() {
     // Fresh signup BDD user (auth.spec.ts) — cleared each emulator seed run
     await firestore.collection("users").doc("bdd_signup_user").delete();
 
-    console.log(`Seeded customer ${customerId} for business ${businessId}`);
-    console.log(`Seeded businesses ${businesses.join(", ")} for user ${userId}`);
+    console.log(`Seeded customer ${customerId} for business ${businessId} (${targetDb})`);
+    console.log(`Seeded businesses ${businesses.join(", ")} for user ${userId} (${targetDb})`);
+}
+
+async function seed() {
+    for (const targetDb of targetDbs) {
+        await seedDatabase(targetDb);
+    }
     process.exit(0);
 }
 

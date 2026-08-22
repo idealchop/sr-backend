@@ -31,7 +31,19 @@ test.describe("Subscription management (BDD)", () => {
     const { data: status } = await statusRes.json();
     expect(status.billingCycle).toBe("trial");
 
-    // 3. Renew subscription
+    // 3. Cancel on trial is rejected — use Pricing to change plans
+    const cancelRes = await request.post(
+      `${API_PATH}/subscriptions/${businessId}/cancel`,
+      {
+        headers: { Authorization: MOCK_TOKEN },
+        data: {},
+      },
+    );
+    expect(cancelRes.status()).toBe(400);
+    const cancelBody = await cancelRes.json();
+    expect(String(cancelBody.error || "")).toMatch(/starter|trial|cancel/i);
+
+    // 4. Renew subscription
     const renewRes = await request.post(
       `${API_PATH}/subscriptions/${businessId}/renew`,
       {
@@ -46,7 +58,7 @@ test.describe("Subscription management (BDD)", () => {
     );
     expect(renewRes.status()).toBe(200);
 
-    // 4. Check history
+    // 5. Check history
     const historyRes = await request.get(
       `${API_PATH}/subscriptions/${businessId}/history`,
       { headers: { Authorization: MOCK_TOKEN } },
@@ -57,17 +69,5 @@ test.describe("Subscription management (BDD)", () => {
     expect(history[0].planName).toContain("Scale");
     expect(history[0].paymentReference).toBe("PAY-BDD-TEST");
     expect(history[0].voucherCode).toBe("WELCOME10");
-
-    // 5. Cancel on trial / Starter is rejected — use Pricing to change plans
-    const cancelRes = await request.post(
-      `${API_PATH}/subscriptions/${businessId}/cancel`,
-      {
-        headers: { Authorization: MOCK_TOKEN },
-        data: {},
-      },
-    );
-    expect(cancelRes.status()).toBe(400);
-    const cancelBody = await cancelRes.json();
-    expect(String(cancelBody.error || "")).toMatch(/starter|trial|cancel/i);
   });
 });
