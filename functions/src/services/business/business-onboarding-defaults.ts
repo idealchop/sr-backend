@@ -14,6 +14,15 @@ export const DEFAULT_QUICK_TOUR_PAGE = {
   tutorials: false,
 } as const;
 
+/**
+ * Written on POST /onboarding/complete so Daily Operation opens Quick actions.
+ * Clears a leftover `Done` flag when the same station finishes setup again.
+ */
+export const POST_ONBOARDING_QUICK_ACTIONS_UI_CONFIG = {
+  postOnboardingQuickActionsPending: true,
+  postOnboardingQuickActionsDone: false,
+} as const;
+
 export const DEFAULT_GETTING_STARTED = {
   verifyEmail: false,
   playVideoTutorials: false,

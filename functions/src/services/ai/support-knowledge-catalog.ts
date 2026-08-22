@@ -46,6 +46,8 @@ ${SUPPORT_WATER_STATION_CONTEXT}
 
 ### Getting started
 - Sign in with your business account. Complete staff onboarding if you were invited as team staff.
+- New owners finish Station, Products, then Payments (GCash / bank). Cash is always available.
+  Payout details can be skipped and added later in Account → Payment settings.
 - Owners manage subscription, billing, team invites, and full settings under Account.
 
 ### Video tutorials (follow-along)
@@ -76,6 +78,14 @@ ${SUPPORT_WATER_STATION_CONTEXT}
 
 ### Inventory
 - Track containers, caps, and station stock; link items to transactions.
+- **Products** (sidebar): delivery catalog for Record Delivery, walk-in, and QR. Search, Inventory,
+  and Add product sit in a toolbar like the suki list. Set price, active, “show in customer order”,
+  default pick (one product), icon, and optional warehouse SKUs. Walk-in and Counter POS Water refill
+  lists refill products; Store items lists Store item only products (Walk-in also lists warehouse stock). Water types seed into Products
+  on first visit and stay as a derived list for older orders. New station setup step 2 suggests Round Purified,
+  Slim Purified, Round Alkaline, and Slim Alkaline with matching gallon icons (add another product to pick an icon).
+  Account → Catalog no longer has Delivery add-on items;
+  use Products (including Store item only) for extras on orders. Walk-in counter QR stays under Catalog.
 
 ### Submissions / portal
 - Review customer portal requests (orders, collections, profile updates) before they apply to
@@ -101,10 +111,69 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
     id: "add-delivery",
     topic: "How do I create a delivery?",
     content:
-      "Go to Transactions → Add Delivery. Pick a customer, water types/quantities, " +
+      "Go to Transactions → Add Delivery. Pick a customer, products/quantities, " +
       "delivery date, payment method, and optional rider. Save to create a pending delivery job. " +
+      "Manage offerings under Products in the sidebar (price, active, QR visibility). " +
+      "When you pick a suki, their Special price products are already added on Record order. " +
+      "Check Expect empty back on a gallon product (Record order or Review & Accept) when the suki should return that empty container. " +
+      "Own-gallon (BYOG) sukis start unchecked; station-gallon sukis start checked. " +
+      "Turn on Collect and the matching Slim or Round return line is already picked. " +
       "If a matching **video tutorial** exists (see live catalog), recommend opening Tutorial videos " +
       "or /dashboard?tutorial={id} so they can follow along while recording.",
+  },
+  {
+    id: "add-products",
+    topic: "How do I add a product?",
+    content:
+      "Open Products from the sidebar (or the phone dock). Search the catalog in the toolbar, " +
+      "or tap Add product for a name and price, choose a Sales Portal gallon icon, and turn on Show in customer order " +
+      "if sukis should see it on the QR page. New station setup already suggests Round Purified, " +
+      "Slim Purified, Round Alkaline, and Slim Alkaline with matching gallon icons — edit those on Products after you finish. " +
+      "Turn on Default for the one product that should be " +
+      "pre-selected on QR and Record order when the suki has no preferred products. " +
+      "If there is no warehouse item to link, tap Add inventory first in that same form. " +
+      "Tap Inventory in the Products toolbar to manage warehouse stock. " +
+      "You can link warehouse items so stock deducts when that product sells. Refill-only products " +
+      "do not touch warehouse stock. Old water types are copied here the first time you open the page. " +
+      "On a suki profile, Special prices lists those products; old water-type rates (like alkaline) still apply. " +
+      "Record order starts with those preferred products already selected. " +
+      "Check Expect empty back on a gallon product (Record order or Review & Accept) when the suki should return that empty container. " +
+      "Own-gallon (BYOG) sukis start unchecked; station-gallon sukis start checked. " +
+      "Turn on Collect and the matching Slim or Round return line is already picked. " +
+      "On Add/Update suki, Containers can be on with no quantity. Preferred products such as Slim Purified show Slim or Round; " +
+      "orders can add gallons later. Each row with a quantity has Deduct from stock. " +
+      "Container agreement is on the suki profile, not that form. " +
+      "Account → Catalog no longer has Delivery add-on items — use Products (including Store item only) " +
+      "for extras on orders. Walk-in counter QR and manual reference numbers stay under Catalog.",
+  },
+  {
+    id: "onboarding-payment-methods",
+    topic: "Add GCash or bank during setup",
+    content:
+      "Station setup step 3 is Payment Accounts — the same Type, Provider, Holder, Account #, " +
+      "Primary, and QR fields you later edit in Account → Payment Accounts. Add GCash or a bank. " +
+      "Cash is always available on orders and is not stored as a payout account. You can skip " +
+      "and add methods later in Account. Finishing setup saves filled accounts to the station payment list.",
+  },
+  {
+    id: "onboarding-quick-actions-first",
+    topic: "Ano ang unang lalabas pagkatapos ng setup?",
+    content:
+      "After Finish setup, Quick actions opens first and stays open — there is no X. " +
+      "Register a suki and a delivery first. Walk-in and expense have Skip. " +
+      "The walk-in step is a counter sale (Walk-in), not that suki. " +
+      "When you finish that walkthrough, you go to Daily Operation. " +
+      "After that, Quick actions is the usual picker (close and choose any step). " +
+      "If you finish setup again on the same station, the required walkthrough opens again. " +
+      "Stations that already finished setup and are not going through setup again are not changed. Tutorial videos stay in Help / the sidebar.",
+  },
+  {
+    id: "catalog-delivery-addons-removed",
+    topic: "Wala na ang Delivery add-on items sa Catalog",
+    content:
+      "Tama — tinanggal na ang Delivery add-on items sa Account → Catalog. " +
+      "Para sa extras sa order (faucet, supplies, Store item), gamitin ang Products. " +
+      "Nandoon pa rin ang Walk-in counter QR at manual reference numbers sa Catalog.",
   },
   {
     id: "video-tutorials",
@@ -142,7 +211,10 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
     topic: "Customer portal orders",
     content:
       "Customers can order via QR portal. Orders appear as submissions for you to approve " +
-      "before they become transactions.",
+      "before they become transactions. Review & Accept shows a Products list when lines match " +
+      "Products; older water-type orders still show Water refills and Item dispatch. Store items " +
+      "are not treated as gallon containers. If many products are listed, tap More to slide to " +
+      "the rest and Back to return.",
   },
   {
     id: "subscription-plans",

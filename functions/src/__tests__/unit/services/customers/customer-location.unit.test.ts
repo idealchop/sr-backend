@@ -12,23 +12,39 @@ import {
 } from "../../../../services/customers/customer-location";
 
 describe("customer-location", () => {
-  it("omits coordinates when address is blank", () => {
+  it("omits coordinates when no valid pin is sent", () => {
+    expect(
+      resolveCustomerLocationForWrite({
+        address: "404 EL GRANDE",
+      }),
+    ).toEqual({ address: "404 EL GRANDE" });
+  });
+
+  it("persists a map pin even when address text is blank", () => {
     expect(
       resolveCustomerLocationForWrite({
         address: "",
         latitude: 14.5,
         longitude: 121,
       }),
-    ).toEqual({ address: "" });
+    ).toEqual({
+      address: "",
+      latitude: 14.5,
+      longitude: 121,
+    });
   });
 
-  it("omits coordinates when only lat/lng are sent without address", () => {
+  it("persists coordinates when only lat/lng are sent without address", () => {
     expect(
       resolveCustomerLocationForWrite({
         latitude: 14.5,
         longitude: 121,
       }),
-    ).toEqual({ address: "" });
+    ).toEqual({
+      address: "",
+      latitude: 14.5,
+      longitude: 121,
+    });
   });
 
   it("persists coordinates when address and valid lat/lng are present", () => {
@@ -45,7 +61,17 @@ describe("customer-location", () => {
     });
   });
 
-  it("deletes stored coordinates on update when address is cleared", () => {
+  it("deletes stored coordinates when address is cleared and no pin is sent", () => {
+    const patch = applyCustomerLocationPatch({
+      address: "",
+    });
+
+    expect(patch.address).toBe("");
+    expect(patch.latitude).toBe("__DELETE__");
+    expect(patch.longitude).toBe("__DELETE__");
+  });
+
+  it("keeps a map pin when address text is cleared but coords remain", () => {
     const patch = applyCustomerLocationPatch({
       address: "",
       latitude: 14.45,
@@ -53,8 +79,8 @@ describe("customer-location", () => {
     });
 
     expect(patch.address).toBe("");
-    expect(patch.latitude).toBe("__DELETE__");
-    expect(patch.longitude).toBe("__DELETE__");
+    expect(patch.latitude).toBe(14.45);
+    expect(patch.longitude).toBe(121.02);
   });
 
   it("updates coordinates only when lat/lng are sent without address", () => {

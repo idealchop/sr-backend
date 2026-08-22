@@ -4,10 +4,37 @@ import {
   InsufficientStockError,
 } from "../inventory/inventory-service";
 
-export type CustomerPossessionMap = Record<
-  string,
-  { quantity?: number; itemName?: string }
->;
+export type CustomerPossessionRow = {
+  quantity?: number;
+  itemName?: string;
+  /** When true, CRM save deducts this row from warehouse. Missing = inherit customer WRS policy. */
+  deductFromStock?: boolean;
+};
+
+export type CustomerPossessionMap = Record<string, CustomerPossessionRow>;
+
+export function possessionRowDeductsStock(
+  row: CustomerPossessionRow | null | undefined,
+  legacyCustomerDeducts: boolean,
+): boolean {
+  if (typeof row?.deductFromStock === "boolean") return row.deductFromStock;
+  return legacyCustomerDeducts;
+}
+
+/** Possession rows that should move warehouse stock (qty > 0 and deduct on). */
+export function toStockedPossession(
+  possession: CustomerPossessionMap | null | undefined,
+  legacyCustomerDeducts: boolean,
+): CustomerPossessionMap {
+  const out: CustomerPossessionMap = {};
+  for (const [itemId, row] of Object.entries(possession || {})) {
+    if (!possessionRowDeductsStock(row, legacyCustomerDeducts)) continue;
+    const quantity = row?.quantity || 0;
+    if (quantity <= 0) continue;
+    out[itemId] = { quantity, itemName: row?.itemName };
+  }
+  return out;
+}
 
 /**
  * Applies warehouse stock changes when customer container possession changes.

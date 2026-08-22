@@ -6,6 +6,7 @@ import { NotificationService } from "../services/notifications/notification-serv
 import {
   DEFAULT_GETTING_STARTED,
   DEFAULT_QUICK_TOUR_PAGE,
+  POST_ONBOARDING_QUICK_ACTIONS_UI_CONFIG,
 } from "../services/business/business-onboarding-defaults";
 import { ensureScaleTrialSubscription } from "../services/business/onboarding-scale-trial";
 import {
@@ -13,6 +14,11 @@ import {
   resolveExistingOwnerBusinessRef,
 } from "../services/business/owner-workspace-resolve";
 import { upsertSmartrefillUserProfile } from "../utils/user-profile-sync";
+import { ProductService } from "../services/products/product-service";
+import {
+  parseOnboardingPaymentAccounts,
+  seedOnboardingPaymentInfo,
+} from "../services/business/onboarding-payment-info";
 
 async function markUserOnboardingComplete(
   uid: string,
@@ -44,6 +50,8 @@ function buildOnboardingBusinessPayload(
       inventoryItems?: unknown[];
       expenseCategories?: unknown[];
       usageGoals?: unknown[];
+      paymentAccounts?: unknown;
+      paymentInfo?: unknown;
     };
   },
   includeDefaults: boolean,
@@ -63,6 +71,7 @@ function buildOnboardingBusinessPayload(
     usageGoals: body.config?.usageGoals || [],
     onboardingComplete: true,
     ownerId,
+    uiConfig: { ...POST_ONBOARDING_QUICK_ACTIONS_UI_CONFIG },
     updatedAt: FieldValue.serverTimestamp(),
   };
 
@@ -137,6 +146,29 @@ export const completeOnboarding = async (req: Request, res: Response) => {
     );
 
     await batch.commit();
+    try {
+      await ProductService.ensureSeeded(businessRef.id);
+    } catch (seedErr) {
+      logger.warn("product seed after onboarding failed", {
+        businessId: businessRef.id,
+        err: seedErr instanceof Error ? seedErr.message : String(seedErr),
+      });
+    }
+    try {
+      const paymentAccounts = parseOnboardingPaymentAccounts(
+        config?.paymentAccounts ?? config?.paymentInfo,
+      );
+      await seedOnboardingPaymentInfo({
+        businessId: businessRef.id,
+        userId: user.uid,
+        accounts: paymentAccounts,
+      });
+    } catch (payErr) {
+      logger.warn("payment info seed after onboarding failed", {
+        businessId: businessRef.id,
+        err: payErr instanceof Error ? payErr.message : String(payErr),
+      });
+    }
     try {
       await ensureScaleTrialSubscription(businessRef);
     } catch (trialErr) {

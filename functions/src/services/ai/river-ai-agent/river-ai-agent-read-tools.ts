@@ -1,6 +1,8 @@
 import { db } from "../../../config/firebase-admin";
 import { CustomerService } from "../../customers/customer-service";
 import { InventoryService } from "../../inventory/inventory-service";
+import { ProductService } from "../../products/product-service";
+import { catalogKeyForProduct } from "../../products/product-catalog";
 import { RiderService } from "../../riders/rider-service";
 import { TransactionService } from "../../transactions/transaction-service";
 import { buildWorkspaceRevenueMetrics } from "../../../utils/ledger-collected-revenue";
@@ -258,14 +260,27 @@ export async function listCatalogForAgent(
   const biz = snap.data() || {};
   const rows: RiverAiAgentListRow[] = [];
 
-  type WaterTypeRow = { id?: string; name?: string; price?: number };
-  for (const wt of (biz.waterTypes as WaterTypeRow[]) || []) {
-    rows.push({
-      id: String(wt.id || wt.name || ""),
-      label: `Water: ${wt.name || "—"}`,
-      sublabel: `₱${wt.price ?? 0}`,
-      meta: { kind: "water" },
-    });
+  const products = await ProductService.listItems(businessId);
+  if (products.length > 0) {
+    for (const product of products) {
+      rows.push({
+        id: product.id,
+        label: `Product: ${product.name}`,
+        sublabel: `₱${product.unitPrice} · ${product.active ? "active" : "inactive"}`,
+        meta: { kind: "product", catalogKey: catalogKeyForProduct(product) },
+      });
+    }
+  } else {
+    type WaterTypeRow = { id?: string; name?: string; water?: string; price?: number };
+    for (const wt of (biz.waterTypes as WaterTypeRow[]) || []) {
+      const name = wt.water || wt.name || "—";
+      rows.push({
+        id: String(wt.id || name),
+        label: `Water: ${name}`,
+        sublabel: `₱${wt.price ?? 0}`,
+        meta: { kind: "water" },
+      });
+    }
   }
   for (const cat of (biz.inventoryCategories as Array<{ id?: string; name?: string }>) || []) {
     rows.push({

@@ -6,6 +6,13 @@ import {
 } from "../customers/container-policy";
 import { ensureCustomerActiveForPortalAcceptance } from "./portal-customer-activation";
 import { InventoryService } from "../inventory/inventory-service";
+import { ProductService } from "../products/product-service";
+import {
+  catalogKeyForProduct,
+  findProductForRefillLine,
+  isVirtualProductId,
+  waterTypeIdForProduct,
+} from "../products/product-catalog";
 import { logger } from "../observability/logging/logger";
 import { TransactionService } from "../transactions/transaction-service";
 import { derivePaymentFields } from "../transactions/payment-status";
@@ -233,15 +240,26 @@ const submissionHandlers: Record<string, SubmissionHandler> = {
       throw new Error("CUSTOMER_NOT_FOUND");
     }
     const lines = submission.payload.refillItems || [];
+    const products = await ProductService.ensureSeeded(businessId);
 
     const refills = await Promise.all(
       lines.map(async (r) => {
+        const product = findProductForRefillLine(products, {
+          productId: r.productId,
+          type: r.type,
+          name: r.type,
+        });
+        const catalogKey = product ? catalogKeyForProduct(product) : r.type;
         const adjustedUnit =
           typeof r.unitPrice === "number" &&
           Number.isFinite(r.unitPrice) &&
           r.unitPrice >= 0 ?
             r.unitPrice :
-            await resolveWaterPrice(businessId, r.type, customer);
+            product && customer?.pricing?.[catalogKey] !== undefined ?
+              customer.pricing[catalogKey] :
+              product ?
+                product.unitPrice :
+                await resolveWaterPrice(businessId, r.type, customer);
         const deliveredQty = Math.max(0, Math.floor(Number(r.qty) || 0));
         const rawPaid = (r as { paidQuantity?: number }).paidQuantity;
         const paidQty =
@@ -251,12 +269,16 @@ const submissionHandlers: Record<string, SubmissionHandler> = {
             Math.floor(rawPaid) :
             deliveredQty;
         return {
-          waterTypeId: r.type,
-          name: r.type,
+          waterTypeId: product ? waterTypeIdForProduct(product) : r.type,
+          name: catalogKey,
           quantity: deliveredQty,
           ...(paidQty !== deliveredQty ? { paidQuantity: paidQty } : {}),
           unitPrice: adjustedUnit,
           subtotal: adjustedUnit * paidQty,
+          ...(product && !isVirtualProductId(product.id) ?
+            { productId: product.id } :
+            {}),
+          ...(r.expectEmptyReturn === true ? { expectEmptyReturn: true } : {}),
         };
       }),
     );

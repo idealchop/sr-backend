@@ -5,43 +5,9 @@ import {
   logAuditEvent,
 } from "../services/observability/logging/logger";
 import { NotificationService } from "../services/notifications/notification-service";
+import { normalizePaymentAccountType } from "../utils/payment-account-type";
 
-const PAYMENT_ACCOUNT_TYPES = new Set([
-  "bank_transfer",
-  "credit_card",
-  "digital_wallet",
-]);
-
-/**
- * Normalizes payment account type for storage and transaction pickers.
- * Legacy rows used "Bank"; wallet providers are inferred from bankName.
- * @param {unknown} raw Type from the client or existing document.
- * @param {unknown} bankName Provider label (e.g. GCash, BDO).
- * @return {string} Canonical account type.
- */
-export const normalizePaymentAccountType = (
-  raw: unknown,
-  bankName?: unknown,
-): "bank_transfer" | "credit_card" | "digital_wallet" => {
-  const type = typeof raw === "string" ? raw.trim().toLowerCase() : "";
-  if (PAYMENT_ACCOUNT_TYPES.has(type)) {
-    return type as "bank_transfer" | "credit_card" | "digital_wallet";
-  }
-  if (type.includes("wallet")) return "digital_wallet";
-  if (type.includes("card")) return "credit_card";
-
-  const provider =
-    typeof bankName === "string" ? bankName.trim().toLowerCase() : "";
-  if (
-    provider.includes("gcash") ||
-    provider.includes("maya") ||
-    provider.includes("paymaya")
-  ) {
-    return "digital_wallet";
-  }
-  // Legacy "Bank" / "bank transfer" and anything else → bank transfer
-  return "bank_transfer";
-};
+export { normalizePaymentAccountType };
 
 /**
  * Verifies if a user has access to a business.

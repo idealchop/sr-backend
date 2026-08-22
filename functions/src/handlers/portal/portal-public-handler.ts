@@ -11,6 +11,14 @@ import {
   resolveBusinessContainerCustodyAgreement,
 } from "../../services/customers/container-custody-agreement";
 import { buildDefaultContainerCustodyAgreementPdf } from "../../services/customers/container-custody-agreement-pdf";
+import { ProductService } from "../../services/products/product-service";
+import {
+  catalogKeyForProduct,
+  listCustomerOrderProducts,
+  serializeProduct,
+} from "../../services/products/product-catalog";
+import { loadMergedProductIcons } from "../../services/products/product-icon-service";
+import { DEFAULT_PRODUCT_ICON_ID, iconUrlForId } from "../../services/products/product-icon-catalog";
 
 function parseQueryString(v: unknown): string | undefined {
   if (typeof v !== "string" || !v.trim()) return undefined;
@@ -101,6 +109,27 @@ export const getPortalCustomerContext = async (req: Request, res: Response) => {
       id: doc.id,
       name: doc.data().name,
       categoryId: doc.data().categoryId,
+    }));
+
+    const productSnap = await db
+      .collection("businesses")
+      .doc(businessId)
+      .collection("products")
+      .get();
+    let products = productSnap.docs.map((doc) => serializeProduct(doc.id, doc.data()));
+    if (products.length === 0) {
+      products = await ProductService.ensureSeeded(businessId);
+    }
+    const productIcons = await loadMergedProductIcons();
+    const customerOrderProducts = listCustomerOrderProducts(products).map((product) => ({
+      id: product.id,
+      name: catalogKeyForProduct(product),
+      unitPrice: product.unitPrice,
+      iconId: product.iconId || DEFAULT_PRODUCT_ICON_ID,
+      iconUrl: iconUrlForId(productIcons, product.iconId) || null,
+      hasBom: product.components.length > 0,
+      components: product.components,
+      defaultForOrder: product.defaultForOrder === true,
     }));
 
     // Fetch Active Transactions for monitoring (only if we have a customer)
@@ -205,6 +234,7 @@ export const getPortalCustomerContext = async (req: Request, res: Response) => {
         qrCodeUrl: customer?.qrCodeUrl,
         portalDeepLink: customer?.portalDeepLink,
         inventory,
+        products: customerOrderProducts,
         waterTypes: (biz?.waterTypes || []).map((w: any) =>
           typeof w === "string" ? { id: w, name: w } : w,
         ),

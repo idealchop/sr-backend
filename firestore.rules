@@ -72,6 +72,7 @@ service cloud.firestore {
       return name in [
         'customers',
         'inventory_items',
+        'products',
         'transactions',
         'raw_submissions',
         'riders',
@@ -221,6 +222,11 @@ service cloud.firestore {
     }
 
     match /vouchers_affiliates/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /product_icons/{iconId} {
       allow read: if isSignedIn();
       allow write: if false;
     }

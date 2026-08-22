@@ -14,9 +14,21 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 - **Viewing** (lists on dashboard): customers, transactions, and pending portal submissions
   update **live** via Firestore while you work—Refresh does not re-download the full customer/ledger lists when sync is healthy.
 - **Inventory**: one shared load per workspace (page and dialogs), not a request per screen.
-  Catalog roles: **Round** and **Slim** (one each, customer-owned sales), **rotation shell** (WRS borrow/return),
-  kit parts, general supplies. **Delivery add-on items** (Account → Catalog) enables priced Round/Slim/supplies on
-  delivery and portal orders; when refills exceed suki's owned Round/Slim count, add-ons auto-fill the gap.
+  **Delivery products** (sidebar **Products**) are what staff and sukis pick on
+  new orders: price, active, QR visibility, default pick, Sales Portal gallon icon, and warehouse links to any inventory item. If Products has
+  nothing to link, **Add inventory first** opens Register item without leaving the product form. Add/edit inventory no longer asks for a catalog role. The page uses the same layout as
+  Suki (search, Inventory, and Add product in a toolbar). Open **Inventory** from that toolbar for warehouse stock.
+  Turn on **Default** for one product so QR, Record order, Walk-in sale, and Counter POS start with it when the suki has no preferred / special-price
+  products. On the customer QR order, overflowing product pills use **More** / **Back** to slide between sets. **Review & Accept** shows a Products list (not Water refills + Item dispatch) when lines match Products; old water-type orders still show Item dispatch. Store items skip gallon dispatch. Walk-in and Counter POS **Water refill** show refill products; **Store items** show products marked Store item only (Walk-in also lists warehouse stock). Inactive products stay off new orders; old refill names on past deliveries do not change. **Record order** uses Products; turn on **Collect**
+  to record returning items. Catalog no longer has **Delivery add-on items**; leftover \`deliveryInventorySalesEnabled\` may still attach priced Round/Slim/supplies
+  on the customer QR portal and auto-fill the gap when refills exceed the suki's owned Round/Slim count.
+  Per-suki **Containers** can be turned on with no quantity. Preferred products such as Slim Purified show Slim or Round; the suki list and profile still show them at 0 pcs. Orders can add gallons later. Each container row with a quantity has **Deduct from stock**. Container agreement is on the suki profile, not the Add/Update form.
+  CRM delivery address, latitude, and longitude are optional — you can save a suki with just a name.
+  **Special prices** on a suki profile pick from Products; old water-type keys (like alkaline) still apply.
+  On **Record order**, those preferred products start already selected (qty 1, Preferred badge).
+  Each gallon product can check **Expect empty back** on Record order and Review & Accept so the stop expects that empty container (qty matches the product). Own-gallon (BYOG) sukis start unchecked; station-gallon sukis start checked. The product must be linked to an inventory item. Store items have no checkbox. Walk-in and Counter POS do not show the checkbox.
+  Turn on **Collect** and the matching Slim or Round return line is already picked.
+  Inventory no longer has a default ₱ deposit per WRS shell; record a suki deposit on their profile when you need it.
   Delete/restock update the list immediately; CRUD/restock sends in-app notifications.
 - **Saving** (create/edit/delete): all business changes go through Smart Refill's secure server;
   the dashboard sends the change, then live lists update.
@@ -26,7 +38,8 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 ### Video tutorials (follow-along)
 - Owners open **Tutorial videos** from the sidebar (desktop) or **Help & support** → Video tutorials
   on the Android/iOS app (and phone web).
-- After first station setup on mobile, a short **quick tour** points to Help, then Video tutorials.
+- After first station setup, **Quick actions** opens and stays open (no X): suki and delivery are required; walk-in and expense have Skip. Walk-in is a counter sale labeled Walk-in, not the suki from the previous step.
+  Finishing that walkthrough goes to Daily Operation. After that, Quick actions is the usual picker. Tutorial videos stay in Help / the sidebar.
 - Published how-to videos come from Smart Refill training content; Play keeps a coach player
   on screen while working. Deep link: /dashboard?tutorial={videoId}.
 - New publishes notify owners in the activity feed; verified emails get a Watch link.
@@ -40,7 +53,15 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
   (tap menu → Open in browser), then sign in again.
 - **Local development**: localhost uses its own auth domain so Google sign-in stays on your machine.
 - New owners: verify email → complete station onboarding (mobile app uses a full-screen 3-step setup:
-  Station, Catalog, Goals) → dashboard.
+  Station, Products, Payments) → dashboard. Step 2 suggests **Round Purified**, **Slim Purified**,
+  **Round Alkaline**, and **Slim Alkaline** (edit prices or remove). Round names show the round
+  gallon icon; Slim names show the slim gallon icon; add another product to pick an icon.
+  Step 3 is **Payment Accounts**
+  (same Type, Provider, Holder, Account #, Primary, and QR fields as Account). Cash is always
+  available; you can skip and add later in Account.
+  Finish copies products into Products and filled payout accounts into Payment settings.
+  **Quick actions** then opens first (required suki + delivery; Skip on walk-in and expense), even if this station walked through it before;
+  finishing that walkthrough goes to Daily Operation.
 - Invited staff: accept Team Hub invite link → verify email if needed → staff onboarding →
   **My Area** (riders) or **dashboard** (admins).
 - **Team Hub directory records** (Scale / Enterprise only): owner can add personnel
@@ -55,6 +76,7 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
   replaces desktop print popups.
 ### Transaction ledger (Transactions page)
 - **Search** ledger by customer name, reference ID, notes, or amount.
+- **Volume column** lists product names (and older refill names when there is no product match).
 - **Tabs/filters** for sales/walk-in, delivery, collection, expenses; status filters for
   order placed, pending, in transit, completed, etc.
 - **Time filter**: today (default), yesterday, week, month, upcoming, or custom range.
@@ -141,6 +163,14 @@ export const SUPPORT_PRODUCT_DOC_ENTRIES: Array<{
       "Minsan hiwalay ang **account ready** vs **station profile complete**. Subukan sign out/in. " +
       "Staff: dapat tama ang invite at staff onboarding. Kung paulit-ulit, i-escalate sa human agent " +
       "kasama station name at role (owner/admin/rider).",
+  },
+  {
+    id: "doc-onboarding-payments",
+    topic: "Setup: GCash at bank account",
+    content:
+      "Huling hakbang ng station setup ay **Payment Accounts** (pareho ng Account). Ilagay ang GCash " +
+      "o bank, i-set ang Primary, at optional QR. Laging available ang cash sa orders. " +
+      "Pwedeng i-skip at idagdag mamaya sa Account → Payment Accounts.",
   },
   {
     id: "doc-google-in-app-browser",

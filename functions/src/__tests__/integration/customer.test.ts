@@ -234,7 +234,45 @@ describe("Customer API Endpoints", () => {
       expect(res.status).toBe(201);
       expect(res.body.data.id).toBe("new-customer-id");
 
-      // Verify stock was deducted for WRS items
+      expect(InventoryService.adjustStock).toHaveBeenCalledWith(
+        "test-id",
+        "slim-5g",
+        -1,
+        expect.objectContaining({
+          reason: "CUSTOMER_ONBOARDING_WRS_ASSIGNMENT",
+        }),
+      );
+    });
+
+    it("should skip stock when deductFromStock is off", async () => {
+      const res = await request(app)
+        .post("/business/test-id/customers")
+        .send({
+          name: "Jane Smith",
+          email: "jane@example.com",
+          phone: "1234567890",
+          containerPolicy: "wrs_rotation",
+          possession: {
+            "slim-5g": { quantity: 1, deductFromStock: false },
+          },
+        });
+      expect(res.status).toBe(201);
+      expect(InventoryService.adjustStock).not.toHaveBeenCalled();
+    });
+
+    it("should deduct stock for a row with deductFromStock even on own-gallon policy", async () => {
+      const res = await request(app)
+        .post("/business/test-id/customers")
+        .send({
+          name: "Jane Smith",
+          email: "jane@example.com",
+          phone: "1234567890",
+          containerPolicy: "byog",
+          possession: {
+            "slim-5g": { quantity: 1, itemName: "Slim", deductFromStock: true },
+          },
+        });
+      expect(res.status).toBe(201);
       expect(InventoryService.adjustStock).toHaveBeenCalledWith(
         "test-id",
         "slim-5g",

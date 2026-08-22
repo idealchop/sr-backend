@@ -46,6 +46,7 @@ import type {
   AddTransactionResult,
   Transaction,
 } from "./transaction-types";
+import { enrichLedgerProductLines } from "../products/enrich-ledger-product-lines";
 
 export async function addTransaction(
   businessId: string,
@@ -161,14 +162,20 @@ export async function addTransaction(
       }
     }
 
+    const enriched = await enrichLedgerProductLines(
+      businessId,
+      transaction.waterRefills || [],
+      transaction.items || [],
+    );
+
     const newTransaction: Transaction = {
       businessId,
       referenceId: transaction.referenceId || referenceId,
       type: transaction.type || "delivery",
       customerId: transaction.customerId,
       customerName: transaction.customerName || (transaction.customerId ? "Unknown" : "Walk-in"),
-      waterRefills: transaction.waterRefills || [],
-      items: transaction.items || [],
+      waterRefills: enriched.waterRefills,
+      items: enriched.items,
       collectionItems: normalizeCollectionItems(
         transaction.collectionItems || [],
       ),

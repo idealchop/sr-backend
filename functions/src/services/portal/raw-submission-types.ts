@@ -52,6 +52,9 @@ export interface RawSubmissionPayload {
     unitPrice?: number;
     paidQuantity?: number;
     gallonShape?: "round" | "slim";
+    productId?: string;
+    /** Staff marked that this refill line should expect an empty container back. */
+    expectEmptyReturn?: boolean;
   }>;
   inventoryItems?: Array<{ inventoryId: string; qty: number; unitPrice?: number }>;
   returnContainers?: Array<{ inventoryId: string; qty: number }>;

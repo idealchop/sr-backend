@@ -21,7 +21,7 @@ export function resolveCustomerLocationForWrite(input: {
     input.longitude,
   );
 
-  if (!address || !hasCoords) {
+  if (!hasCoords) {
     return { address };
   }
 

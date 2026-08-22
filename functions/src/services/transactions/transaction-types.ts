@@ -6,12 +6,16 @@
 export interface TransactionRefill {
   waterTypeId: string;
   name?: string;
+  /** Linked delivery product when the station catalog has been migrated. */
+  productId?: string;
   /** Delivered gallons (paid + free bonus when applicable). */
   quantity: number;
   unitPrice: number;
   subtotal: number;
   /** Gallons charged; omit on legacy rows (derived from subtotal / unitPrice). */
   paidQuantity?: number;
+  /** Staff marked that this product should come back as an empty container. */
+  expectEmptyReturn?: boolean;
 }
 
 export interface TransactionInventoryItem {

@@ -10,6 +10,7 @@ import {
   patchPortalCustomerProfile,
   getContainerCustodyAgreementPdf,
 } from "../handlers/portal/portal-public-handler";
+import { getPublicProductIcons } from "../handlers/product-icon-public-handler";
 import { postPortalSubmission } from "../handlers/portal/portal-submission-handler";
 import {
   trackOrder,
@@ -113,6 +114,7 @@ router.get(
 );
 
 router.get("/qr.png", getQrPng);
+router.get("/product-icons", portalLimiter, getPublicProductIcons);
 router.get("/portal/customer", portalLimiter, getPortalCustomerContext);
 router.get(
   "/portal/container-custody-agreement",

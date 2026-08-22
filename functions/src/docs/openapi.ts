@@ -871,6 +871,93 @@ export const openApiSpec = {
         },
       },
     },
+    "/products/{businessId}": {
+      get: {
+        "tags": ["Inventory"],
+        "summary": "List delivery products",
+        "description":
+          "Sellable delivery catalog. Seeds from businesses.waterTypes when empty. " +
+          "Dashboard uses Firestore products snapshots with GET reconcile.",
+        "x-frontend-read-model": "hybrid-gated",
+        "parameters": [{ $ref: "#/components/parameters/businessId" }],
+        "responses": {
+          200: {
+            description: "Products array.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    data: { type: "array", items: { type: "object" } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ["Inventory"],
+        summary: "Create delivery product",
+        description:
+          "Owner/admin. Syncs derived businesses.waterTypes from active products.",
+        parameters: [{ $ref: "#/components/parameters/businessId" }],
+        responses: {
+          201: { description: "Product created." },
+        },
+      },
+    },
+    "/products/{businessId}/{productId}": {
+      get: {
+        "tags": ["Inventory"],
+        "summary": "Get delivery product",
+        "x-frontend-read-model": "hybrid-gated",
+        "parameters": [
+          { $ref: "#/components/parameters/businessId" },
+          {
+            name: "productId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        "responses": {
+          200: { description: "Product document." },
+          404: { description: "Product not found." },
+        },
+      },
+      patch: {
+        tags: ["Inventory"],
+        summary: "Update delivery product",
+        description: "Owner/admin. Soft-deactivate with active: false.",
+        parameters: [
+          { $ref: "#/components/parameters/businessId" },
+          {
+            name: "productId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          200: { description: "Product updated." },
+        },
+      },
+    },
+    "/public/product-icons": {
+      get: {
+        tags: ["Public"],
+        summary: "Delivery product icons",
+        description:
+          "Sales Portal product_icons image rows when present; otherwise seeded Round/Slim gallon images. Lucide placeholders are omitted. No Firebase auth.",
+        security: [],
+        responses: {
+          200: {
+            description: "Icon catalog (id, name, imageUrl, sortOrder).",
+          },
+        },
+      },
+    },
     "/business/{businessId}/raw-submissions/pending": {
       get: {
         "tags": ["Submissions"],

@@ -58,6 +58,26 @@ describe("CustomerService Unit Tests", () => {
       expect(mockCollection.add.mock.calls[0][0]).not.toHaveProperty("longitude");
       expect(created.id).toBe("cust-no-map");
     });
+
+    it("saves a map pin without address text", async () => {
+      mockCollection.add.mockResolvedValue({ id: "cust-pin-only" });
+
+      await CustomerService.addCustomer("biz-123", {
+        name: "Pin Suki",
+        phone: "09171234567",
+        address: "",
+        latitude: 14.45,
+        longitude: 121.02,
+      });
+
+      expect(mockCollection.add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          address: "",
+          latitude: 14.45,
+          longitude: 121.02,
+        }),
+      );
+    });
   });
 
   describe("getSingleCustomerStats", () => {

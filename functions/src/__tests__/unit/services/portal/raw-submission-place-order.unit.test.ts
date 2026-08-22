@@ -60,6 +60,13 @@ vi.mock("../../../../services/inventory/inventory-service", () => ({
   InventoryService: { getItem: getItemMock },
 }));
 
+vi.mock("../../../../services/products/product-service", () => ({
+  ProductService: {
+    ensureSeeded: vi.fn().mockResolvedValue([]),
+    listItems: vi.fn().mockResolvedValue([]),
+  },
+}));
+
 vi.mock("../../../../services/portal/raw-submission-service", () => ({
   RawSubmissionService: {
     updateStatus: updateStatusMock,
@@ -158,6 +165,28 @@ describe("RawSubmissionProcessor PLACE_ORDER", () => {
         (row: { inventoryId?: string }) => row.inventoryId === "Mineral",
       ),
     ).toBe(false);
+  });
+
+  it("copies expectEmptyReturn onto waterRefills when staff checked it", async () => {
+    await RawSubmissionProcessor.accept(
+      "biz-1",
+      buildPlaceOrderSubmission({
+        payload: {
+          refillItems: [{ type: "Mineral", qty: 2, unitPrice: 25, expectEmptyReturn: true }],
+          inventoryItems: [{ inventoryId: "round-1", qty: 2 }],
+        },
+      }),
+      "staff-1",
+    );
+
+    const txPayload = addTransactionMock.mock.calls.at(-1)?.[1];
+    expect(txPayload.waterRefills).toEqual([
+      expect.objectContaining({
+        waterTypeId: "Mineral",
+        quantity: 2,
+        expectEmptyReturn: true,
+      }),
+    ]);
   });
 
   it("charges paidQuantity and delivers qty when refill bonus is applied", async () => {

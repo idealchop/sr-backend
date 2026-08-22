@@ -58,8 +58,12 @@ export interface Customer {
     {
       itemName: string;
       quantity: number;
+      deductFromStock?: boolean;
     }
   >;
+
+  /** When true, suki gallons are tracked even if possession qty is still 0. */
+  trackContainers?: boolean;
 
   /** WRS rotation vs own gallon; unspecified inherits station default. */
   containerPolicy?: CustomerContainerPolicy;
@@ -210,6 +214,7 @@ export class CustomerService {
         address: location.address,
         pricing: customer.pricing || {},
         possession: customer.possession || {},
+        trackContainers: customer.trackContainers === true,
         containerPolicy: normalizeCustomerContainerPolicy(
           customer.containerPolicy,
         ),

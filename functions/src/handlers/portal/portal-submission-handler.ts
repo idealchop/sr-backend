@@ -15,10 +15,6 @@ import type {
   RawSubmissionPayload,
   RawSubmissionType,
 } from "../../services/portal/raw-submission-types";
-import {
-  customerNeedsContainerCustodyAcceptance,
-  stampCustomerContainerCustodyAcceptance,
-} from "../../services/customers/container-custody-agreement";
 import { applyPortalContainerSetup } from "../../services/portal/portal-container-setup-service";
 import { submissionHasDeliveryOwnedAssetAddons } from "../../services/portal/delivery-owned-asset-addon";
 import { reconcileByogRefillPolicyIfNeeded } from "../../services/customers/byog-refill-policy";
@@ -53,7 +49,6 @@ export const postPortalSubmission = async (req: Request, res: Response) => {
   const token = parseBodyString(req.body?.token);
   const submissionType = req.body?.submissionType as RawSubmissionType;
   const legalAgreed = req.body?.legalAgreed === true;
-  const containerCustodyAgreed = req.body?.containerCustodyAgreed === true;
   const payload = (req.body?.payload || {}) as RawSubmissionPayload;
 
   if (!businessId) {
@@ -445,30 +440,6 @@ export const postPortalSubmission = async (req: Request, res: Response) => {
             payload.refillItems,
           );
         }
-      }
-
-      const bizSnap = await db.collection("businesses").doc(businessId).get();
-      const biz = bizSnap.data() as Record<string, unknown> | undefined;
-      const customer = await CustomerService.getCustomer(businessId, customerId);
-      const skipCustodyForOwnedAssetAddons =
-        submissionType === "PLACE_ORDER" && placeOrderHasOwnedAssetAddons;
-      if (
-        customer &&
-        biz &&
-        !skipCustodyForOwnedAssetAddons &&
-        customerNeedsContainerCustodyAcceptance(customer, biz)
-      ) {
-        if (!containerCustodyAgreed) {
-          return res.status(400).json({
-            error: "CUSTODY_AGREEMENT_REQUIRED",
-            message: "Container custody agreement must be accepted.",
-          });
-        }
-        await stampCustomerContainerCustodyAcceptance(
-          businessId,
-          customerId,
-          "portal",
-        );
       }
     }
 

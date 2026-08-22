@@ -13,6 +13,7 @@ import {
   derivePaymentFields,
   getActiveAmountPaid,
 } from "../../transactions/payment-status";
+import { ProductService } from "../../products/product-service";
 import type { RiverAiAgentConfirmResult, RiverAiAgentPendingAction } from "./river-ai-agent-types";
 import { deletePendingAction } from "./river-ai-agent-pending-store";
 import { logRiverAiAgentConfirm } from "./river-ai-agent-audit";
@@ -290,23 +291,33 @@ export async function confirmRiverAiAgentAction(args: {
     }
 
     if (tool === "catalog.upsert_water_type") {
-      const ref = db.collection("businesses").doc(businessId);
-      const snap = await ref.get();
-      const waterTypes = [...((snap.data()?.waterTypes as unknown[]) || [])];
-      const name = String(p.name);
+      const name = String(p.name || "").trim();
       const price = Number(p.price) || 0;
-      const id = String(p.id || name.toLowerCase().replace(/\s+/g, "_"));
-      const idx = waterTypes.findIndex((w) => {
-        const row = w as { id?: string; name?: string };
-        return row.id === id || row.name === name;
+      if (!name) {
+        return { success: false, summary: "Product name is required.", errors: ["INVALID"] };
+      }
+      await ProductService.ensureSeeded(businessId);
+      const existing = await ProductService.listItems(businessId);
+      const needle = name.toLowerCase();
+      const match = existing.find((product) => {
+        const keys = [product.name, product.legacyWaterName || ""].map((value) =>
+          value.trim().toLowerCase(),
+        );
+        return keys.includes(needle);
       });
-      const row = { id, name, price };
-      if (idx >= 0) waterTypes[idx] = row;
-      else waterTypes.push(row);
-      await ref.update({ waterTypes, updatedAt: FieldValue.serverTimestamp() });
+      if (match) {
+        await ProductService.updateItem(businessId, match.id, { name, unitPrice: price });
+      } else {
+        await ProductService.createItem(businessId, {
+          name,
+          unitPrice: price,
+          active: true,
+          showInCustomerOrder: true,
+        });
+      }
       return completeConfirm(businessId, pending, userId, {
         success: true,
-        summary: `Water type ${name} saved.`,
+        summary: `Product ${name} saved.`,
       });
     }
 

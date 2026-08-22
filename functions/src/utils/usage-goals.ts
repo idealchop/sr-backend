@@ -76,7 +76,7 @@ export type OwnerUsageGoalsContext = {
 };
 
 /**
- * Normalizes `businesses.usageGoals` from onboarding / configuration.
+ * Normalizes leftover `businesses.usageGoals` from configuration.
  * @param {unknown} raw Firestore field value.
  * @return {UsageGoalId[]} Known goal ids in stable order.
  */

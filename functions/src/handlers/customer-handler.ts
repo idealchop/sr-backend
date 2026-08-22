@@ -10,6 +10,7 @@ import {
   applyCustomerPossessionStockDelta,
   CustomerPossessionMap,
   InsufficientStockError,
+  toStockedPossession,
 } from "../services/customers/customer-possession-stock";
 import { normalizeCustomerContainerDeposit } from "../services/customers/container-deposit";
 import {
@@ -45,7 +46,7 @@ function possessionStockErrorResponse(res: Response, error: unknown) {
   });
 }
 
-async function shouldApplyCustomerPossessionStock(
+async function legacyPossessionDeductsStock(
   businessId: string,
   customer: { containerPolicy?: unknown } | null | undefined,
 ): Promise<boolean> {
@@ -54,6 +55,31 @@ async function shouldApplyCustomerPossessionStock(
     businessSnap.data() as Record<string, unknown> | undefined,
   );
   return customerUsesWrContainerRotation(customer, businessDefault);
+}
+
+async function syncPossessionWarehouseStock(
+  businessId: string,
+  oldPossession: CustomerPossessionMap | undefined,
+  newPossession: CustomerPossessionMap | undefined,
+  oldCustomer: { containerPolicy?: unknown } | null | undefined,
+  newCustomer: { containerPolicy?: unknown } | null | undefined,
+  context: {
+    customerId: string;
+    customerName: string;
+    userId: string;
+    reason: string;
+  },
+): Promise<void> {
+  const [oldLegacy, newLegacy] = await Promise.all([
+    legacyPossessionDeductsStock(businessId, oldCustomer),
+    legacyPossessionDeductsStock(businessId, newCustomer),
+  ]);
+  await applyCustomerPossessionStockDelta(
+    businessId,
+    toStockedPossession(oldPossession, oldLegacy),
+    toStockedPossession(newPossession, newLegacy),
+    context,
+  );
 }
 
 export const listCustomers = async (req: Request, res: Response) => {
@@ -133,34 +159,30 @@ export const addCustomer = async (req: Request, res: Response) => {
       customer;
 
     if (req.body.possession && customer.id) {
-      const applyStock = await shouldApplyCustomerPossessionStock(
-        businessId,
-        { containerPolicy: req.body.containerPolicy },
-      );
-      if (applyStock) {
+      try {
+        await syncPossessionWarehouseStock(
+          businessId,
+          {},
+          req.body.possession as CustomerPossessionMap,
+          { containerPolicy: req.body.containerPolicy },
+          { containerPolicy: req.body.containerPolicy },
+          {
+            customerId: customer.id,
+            customerName: customer.name,
+            userId: user.uid,
+            reason: "CUSTOMER_ONBOARDING_WRS_ASSIGNMENT",
+          },
+        );
+      } catch (invErr) {
         try {
-          await applyCustomerPossessionStockDelta(
-            businessId,
-            {},
-            req.body.possession as CustomerPossessionMap,
-            {
-              customerId: customer.id,
-              customerName: customer.name,
-              userId: user.uid,
-              reason: "CUSTOMER_ONBOARDING_WRS_ASSIGNMENT",
-            },
+          await CustomerService.deleteCustomer(businessId, customer.id);
+        } catch (rollbackErr) {
+          logger.error(
+            "Failed to roll back customer after stock deduction failure",
+            rollbackErr,
           );
-        } catch (invErr) {
-          try {
-            await CustomerService.deleteCustomer(businessId, customer.id);
-          } catch (rollbackErr) {
-            logger.error(
-              "Failed to roll back customer after stock deduction failure",
-              rollbackErr,
-            );
-          }
-          return possessionStockErrorResponse(res, invErr);
         }
+        return possessionStockErrorResponse(res, invErr);
       }
     }
 
@@ -258,26 +280,22 @@ export const updateCustomer = async (req: Request, res: Response) => {
         safeBody.containerPolicy !== undefined ?
           safeBody.containerPolicy :
           oldCustomer.containerPolicy;
-      const applyStock = await shouldApplyCustomerPossessionStock(
-        businessId,
-        { containerPolicy: nextPolicy },
-      );
-      if (applyStock) {
-        try {
-          await applyCustomerPossessionStockDelta(
-            businessId,
-            (oldCustomer.possession || {}) as CustomerPossessionMap,
-            safeBody.possession as CustomerPossessionMap,
-            {
-              customerId,
-              customerName: oldCustomer.name,
-              userId: user.uid,
-              reason: "CUSTOMER_POSSESSION_UPDATE",
-            },
-          );
-        } catch (invErr) {
-          return possessionStockErrorResponse(res, invErr);
-        }
+      try {
+        await syncPossessionWarehouseStock(
+          businessId,
+          (oldCustomer.possession || {}) as CustomerPossessionMap,
+          safeBody.possession as CustomerPossessionMap,
+          oldCustomer,
+          { containerPolicy: nextPolicy },
+          {
+            customerId,
+            customerName: oldCustomer.name,
+            userId: user.uid,
+            reason: "CUSTOMER_POSSESSION_UPDATE",
+          },
+        );
+      } catch (invErr) {
+        return possessionStockErrorResponse(res, invErr);
       }
     }
 
@@ -334,26 +352,22 @@ export const deleteCustomer = async (req: Request, res: Response) => {
     );
 
     if (oldCustomer?.possession) {
-      const applyStock = await shouldApplyCustomerPossessionStock(
-        businessId,
-        oldCustomer,
-      );
-      if (applyStock) {
-        try {
-          await applyCustomerPossessionStockDelta(
-            businessId,
-            oldCustomer.possession as CustomerPossessionMap,
-            {},
-            {
-              customerId,
-              customerName: oldCustomer.name,
-              userId: user.uid,
-              reason: "CUSTOMER_DELETED_STOCK_RESTORATION",
-            },
-          );
-        } catch (invErr) {
-          return possessionStockErrorResponse(res, invErr);
-        }
+      try {
+        await syncPossessionWarehouseStock(
+          businessId,
+          oldCustomer.possession as CustomerPossessionMap,
+          {},
+          oldCustomer,
+          oldCustomer,
+          {
+            customerId,
+            customerName: oldCustomer.name,
+            userId: user.uid,
+            reason: "CUSTOMER_DELETED_STOCK_RESTORATION",
+          },
+        );
+      } catch (invErr) {
+        return possessionStockErrorResponse(res, invErr);
       }
     }
 
