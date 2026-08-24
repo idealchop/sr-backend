@@ -2,7 +2,7 @@
  * Canonical sources River AI knowledge must stay aligned with.
  * Updated by `npm run audit:river-ai-knowledge` and the river-ai-knowledge-curator agent.
  */
-export const RIVER_AI_KNOWLEDGE_MANIFEST_VERSION = "2026-08-22";
+export const RIVER_AI_KNOWLEDGE_MANIFEST_VERSION = "2026-08-24";
 
 export type RiverAiKnowledgeSource = {
   id: string;

@@ -39,6 +39,15 @@ describe("River AI expanded knowledge", () => {
     expect(hit).toBeNull();
   });
 
+  it("finds the stuck-after-login FAQ", () => {
+    const hit = findHighConfidenceKnowledgeHit(
+      SUPPORT_FAQ_ENTRIES,
+      "loading screen stuck after login page couldn't load",
+    );
+    expect(hit).not.toBeNull();
+    expect(hit?.entry.id).toBe("stuck-after-login");
+  });
+
   it("boosts clear Taglish delivery phrases into a cache hit", () => {
     const hit = findHighConfidenceKnowledgeHit(
       SUPPORT_FAQ_ENTRIES,

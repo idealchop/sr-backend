@@ -18,9 +18,11 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
   new orders: price, active, QR visibility, default pick, Sales Portal gallon icon, and warehouse links to any inventory item. If Products has
   nothing to link, **Add inventory first** opens Register item without leaving the product form. Add/edit inventory no longer asks for a catalog role. The page uses the same layout as
   Suki (search, Inventory, and Add product in a toolbar). Open **Inventory** from that toolbar for warehouse stock.
+  Products flags **No item linked**, a missing linked warehouse item, not enough / low stock on that item, or **No price**.
   Turn on **Default** for one product so QR, Record order, Walk-in sale, and Counter POS start with it when the suki has no preferred / special-price
   products. On the customer QR order, overflowing product pills use **More** / **Back** to slide between sets. **Review & Accept** shows a Products list (not Water refills + Item dispatch) when lines match Products; old water-type orders still show Item dispatch. Store items skip gallon dispatch. Walk-in and Counter POS **Water refill** show refill products; **Store items** show products marked Store item only (Walk-in also lists warehouse stock). Inactive products stay off new orders; old refill names on past deliveries do not change. **Record order** uses Products; turn on **Collect**
-  to record returning items. Catalog no longer has **Delivery add-on items**; leftover \`deliveryInventorySalesEnabled\` may still attach priced Round/Slim/supplies
+  to record returning items. If products failed to load, are missing, or are all inactive, Record order
+  shows an inline note to update them on Products (not shown on customer QR). The note waits until products finish loading. Catalog no longer has **Delivery add-on items**; leftover \`deliveryInventorySalesEnabled\` may still attach priced Round/Slim/supplies
   on the customer QR portal and auto-fill the gap when refills exceed the suki's owned Round/Slim count.
   Per-suki **Containers** can be turned on with no quantity. Preferred products such as Slim Purified show Slim or Round; the suki list and profile still show them at 0 pcs. Orders can add gallons later. Each container row with a quantity has **Deduct from stock**. Container agreement is on the suki profile, not the Add/Update form.
   CRM delivery address, latitude, and longitude are optional — you can save a suki with just a name.
@@ -47,6 +49,9 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 
 ### Sign-in, verification & onboarding
 - Sign in with email/password or Google.
+- After login, Daily Operation opens once your station is ready. Plan limits and extra lists
+  keep loading in the background. Welcome back should not sit forever. If the station never
+  loads, you get Connection Error and Back to Login — not a page that says it could not load.
 - **Google on mobile** uses a full-browser redirect (not a popup) for reliability.
 - **Google inside Facebook Messenger, Instagram, or other in-app browsers is blocked by Google**
   (Error 403 disallowed_useragent). Open the Smart Refill link in **Safari or Chrome**

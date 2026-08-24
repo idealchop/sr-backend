@@ -108,11 +108,23 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
       "deliveries, collections, inventory, riders, and billing in one dashboard.",
   },
   {
+    id: "stuck-after-login",
+    topic: "Loading screen stuck after login / page couldn’t load",
+    content:
+      "After sign-in, Welcome back only waits for your station. Plan and extra lists keep loading " +
+      "in the background. It should not sit forever. If the station never loads, use Connection Error → " +
+      "Back to Login and try again on a better connection. The black “This page couldn’t load” screen " +
+      "should not appear after a normal login. Sa phone, login does a full open of Daily Operation " +
+      "instead of a soft page jump that can freeze.",
+  },
+  {
     id: "add-delivery",
     topic: "How do I create a delivery?",
     content:
       "Go to Transactions → Add Delivery. Pick a customer, products/quantities, " +
       "delivery date, payment method, and optional rider. Save to create a pending delivery job. " +
+      "If Record order shows a note that products need an update, you can still save the order, " +
+      "or tap Open Products (same app — no full reload). Customer QR does not show that note. " +
       "Manage offerings under Products in the sidebar (price, active, QR visibility). " +
       "When you pick a suki, their Special price products are already added on Record order. " +
       "Check Expect empty back on a gallon product (Record order or Review & Accept) when the suki should return that empty container. " +
@@ -125,7 +137,10 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
     id: "add-products",
     topic: "How do I add a product?",
     content:
-      "Open Products from the sidebar (or the phone dock). Search the catalog in the toolbar, " +
+      "Open Products from the sidebar (or the phone dock). If Record order showed a note that products need an update, this is that page. " +
+      "Flags under a product mean something needs a fix: No item linked, linked item missing, " +
+      "not enough or low stock on that warehouse item, or no price. Tap the product to edit it. " +
+      "Search the catalog in the toolbar, " +
       "or tap Add product for a name and price, choose a Sales Portal gallon icon, and turn on Show in customer order " +
       "if sukis should see it on the QR page. New station setup already suggests Round Purified, " +
       "Slim Purified, Round Alkaline, and Slim Alkaline with matching gallon icons — edit those on Products after you finish. " +
