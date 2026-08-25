@@ -32,11 +32,22 @@ import {
 } from "../services/transactions/claim-nearby-dormant-service";
 
 function possessionStockErrorResponse(res: Response, error: unknown) {
-  if (error instanceof InsufficientStockError) {
+  if (
+    error instanceof InsufficientStockError ||
+    (error instanceof Error && error.name === "InsufficientStockError")
+  ) {
+    const stockError = error as InsufficientStockError;
     return res.status(400).json({
       error: "INSUFFICIENT_STOCK",
-      message: error.message,
-      items: error.items,
+      message: stockError.message,
+      items: stockError.items,
+    });
+  }
+  if (error instanceof Error && /item not found/i.test(error.message)) {
+    return res.status(400).json({
+      error: "INVENTORY_ITEM_NOT_FOUND",
+      message:
+        "A container on this customer is missing from Inventory. Remove it or restore the inventory item, then try again.",
     });
   }
   logger.error("Customer possession stock sync failed", error);

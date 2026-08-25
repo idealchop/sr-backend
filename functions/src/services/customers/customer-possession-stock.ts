@@ -3,6 +3,7 @@ import {
   InventoryService,
   InsufficientStockError,
 } from "../inventory/inventory-service";
+import { logger } from "../observability/logging/logger";
 
 export type CustomerPossessionRow = {
   quantity?: number;
@@ -71,19 +72,42 @@ export async function applyCustomerPossessionStockDelta(
     const delta = newQty - oldQty;
 
     if (delta === 0) continue;
-
-    await InventoryService.adjustStock(businessId, itemId, -delta, {
-      customerId: context.customerId,
-      customerName: context.customerName,
-      userId: context.userId,
-      reason: context.reason,
-      type: delta > 0 ? "deduction" : "restoration",
-    });
+    if (!itemId.trim()) {
+      throw new Error("Item not found");
+    }
 
     const itemName =
       newPossession[itemId]?.itemName ||
       oldPossession[itemId]?.itemName ||
       "Unknown item";
+
+    try {
+      await InventoryService.adjustStock(businessId, itemId, -delta, {
+        customerId: context.customerId,
+        customerName: context.customerName,
+        userId: context.userId,
+        reason: context.reason,
+        type: delta > 0 ? "deduction" : "restoration",
+      });
+    } catch (error) {
+      // Restoring stock for a deleted catalog row should not block CRM saves.
+      if (
+        delta < 0 &&
+        error instanceof Error &&
+        /item not found/i.test(error.message)
+      ) {
+        logger.warn(
+          `Skipping stock restore for missing inventory item ${itemId}`,
+          {
+            businessId,
+            customerId: context.customerId,
+            reason: context.reason,
+          },
+        );
+        continue;
+      }
+      throw error;
+    }
 
     await InventoryService.createAssignment(businessId, {
       inventoryItemId: itemId,
