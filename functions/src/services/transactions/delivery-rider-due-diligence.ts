@@ -4,6 +4,7 @@ import {
   inferInventoryItemRole,
   isContainerShapeRole,
 } from "../inventory/container-kit";
+import { customerTracksContainers } from "./sync-customer-asset-possession";
 
 type CatalogRow = { id: string; name: string; inventoryRole?: unknown };
 
@@ -66,7 +67,7 @@ export async function applyOwnedShapePossessionTarget(
   if (shapeIds.size === 0 || safeTarget <= 0) return;
 
   const customer = await CustomerService.getCustomer(businessId, customerId);
-  if (!customer) return;
+  if (!customer || !customerTracksContainers(customer)) return;
 
   const possession: Record<string, { itemName: string; quantity: number }> = {
     ...(customer.possession ?? {}),

@@ -286,6 +286,11 @@ export const updateCustomer = async (req: Request, res: Response) => {
       }
     }
 
+    if (safeBody.trackContainers === false) {
+      // Containers off — held qty is not tracked; clear so past orders cannot surface later.
+      safeBody.possession = {};
+    }
+
     if (safeBody.possession !== undefined && oldCustomer) {
       const nextPolicy =
         safeBody.containerPolicy !== undefined ?

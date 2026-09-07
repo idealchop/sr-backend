@@ -75,6 +75,12 @@ export interface Transaction {
   waterRefills?: TransactionRefill[];
   items?: TransactionInventoryItem[];
   collectionItems?: CollectionItem[];
+  /** Who last filed a missing/damaged collection report (ledger or My Area). */
+  collectionConditionReport?: {
+    reportedByUserId: string;
+    reportedByName: string;
+    reportedAt: string;
+  };
   totalAmount: number;
   amountPaid: number;
   balanceDue: number;

@@ -14,7 +14,11 @@ import {
   dueDiligenceRequiresWrPossessionSync,
   isRiderContainerDueDiligence,
 } from "./delivery-rider-due-diligence";
-import { syncCustomerAssetPossession } from "./sync-customer-asset-possession";
+import {
+  customerTracksContainers,
+  syncCustomerAssetPossession,
+} from "./sync-customer-asset-possession";
+import { CustomerService } from "../customers/customer-service";
 import { logCollectionContainerAudit } from "./collection-item-utils";
 import type { Transaction } from "./transaction-types";
 import { customerHasUnpaidReceivable } from "./customer-unpaid-receivable";
@@ -139,42 +143,47 @@ export async function runUpdateTransactionPostCommit(params: {
       possessionSyncType === "collection") &&
     (itemsChanged || becomingDispatched || riderDueDiligence);
   if (shouldSyncPossession && customerId) {
-    const mergedCollection =
-      updates.collectionItems ?? current.collectionItems ?? [];
-    const syncWrShellPossession =
-      dueDiligenceRequiresWrPossessionSync(riderDueDiligence) ||
-      (await params.shouldSyncWrContainerPossession(businessId, customerId));
-    if (syncWrShellPossession) {
-      await syncCustomerAssetPossession(
-        businessId,
-        customerId,
-        updates.items ?? current.items ?? [],
-        mergedCollection,
-        transactionId,
-        userId,
-        false,
-        userName,
-      );
-      if (updates.collectionItems !== undefined && mergedCollection.length > 0) {
-        await logCollectionContainerAudit(
+    const customer = await CustomerService.getCustomer(businessId, customerId);
+    if (!customerTracksContainers(customer)) {
+      // Containers off: do not apply this order (or past edits) to held qty.
+    } else {
+      const mergedCollection =
+        updates.collectionItems ?? current.collectionItems ?? [];
+      const syncWrShellPossession =
+        dueDiligenceRequiresWrPossessionSync(riderDueDiligence) ||
+        (await params.shouldSyncWrContainerPossession(businessId, customerId));
+      if (syncWrShellPossession) {
+        await syncCustomerAssetPossession(
           businessId,
-          transactionId,
           customerId,
+          updates.items ?? current.items ?? [],
           mergedCollection,
+          transactionId,
           userId,
-          "COLLECTION_CONTAINER_UPDATED",
-          current.referenceId,
+          false,
           userName,
         );
+        if (updates.collectionItems !== undefined && mergedCollection.length > 0) {
+          await logCollectionContainerAudit(
+            businessId,
+            transactionId,
+            customerId,
+            mergedCollection,
+            userId,
+            "COLLECTION_CONTAINER_UPDATED",
+            current.referenceId,
+            userName,
+          );
+        }
       }
-    }
-    const ownedTarget = dueDiligenceOwnedPossessionTarget(riderDueDiligence);
-    if (ownedTarget != null) {
-      await applyOwnedShapePossessionTarget(
-        businessId,
-        customerId,
-        ownedTarget,
-      );
+      const ownedTarget = dueDiligenceOwnedPossessionTarget(riderDueDiligence);
+      if (ownedTarget != null) {
+        await applyOwnedShapePossessionTarget(
+          businessId,
+          customerId,
+          ownedTarget,
+        );
+      }
     }
   }
 

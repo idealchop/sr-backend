@@ -7,6 +7,7 @@ import {
   customerUsesWrContainerRotation,
   getBusinessContainerDefaultPolicy,
 } from "../customers/container-policy";
+import { inferInventoryItemRole } from "../inventory/container-kit";
 import { resolveStockInventoryLineId } from "./transaction-line-inventory";
 import {
   describeCollectionLine,
@@ -18,6 +19,30 @@ import type {
   TransactionInventoryItem,
 } from "./transaction-types";
 
+/** CRM Containers toggle — orders must not adjust possession while this is off. */
+export function customerTracksContainers(
+  customer: { trackContainers?: boolean } | null | undefined,
+): boolean {
+  return customer?.trackContainers === true;
+}
+
+/** Delivery/collection lines that count as containers held (not general BOM stock). */
+export function isContainerPossessionInventory(
+  name: string,
+  inventoryRole?: unknown,
+): boolean {
+  const role = inferInventoryItemRole(name, inventoryRole);
+  return (
+    role === "container_shell" ||
+    role === "container_round" ||
+    role === "container_slim"
+  );
+}
+
+/**
+ * True when this suki should get WRS shell possession deltas from orders.
+ * Requires Containers enabled — past orders before enable must not be applied later.
+ */
 export async function shouldSyncWrContainerPossession(
   businessId: string,
   customerId: string,
@@ -26,6 +51,7 @@ export async function shouldSyncWrContainerPossession(
     CustomerService.getCustomer(businessId, customerId),
     db.collection("businesses").doc(businessId).get(),
   ]);
+  if (!customerTracksContainers(customer)) return false;
   const businessDefault = getBusinessContainerDefaultPolicy(
     businessSnap.data() as Record<string, unknown> | undefined,
   );
@@ -64,12 +90,22 @@ export async function syncCustomerAssetPossession(
     }
 
     const data = customerSnap.data();
+    if (!customerTracksContainers(data as { trackContainers?: boolean })) {
+      // Containers off — leave CRM possession untouched (no backfill from this order).
+      return;
+    }
     const customerName = data?.name || "Unknown Customer";
     const currentPossession = data?.possession || {};
     const updatedPossession = JSON.parse(JSON.stringify(currentPossession));
     let changed = false;
 
     const updatedCollectionItems = [...cItems];
+    const inventoryRows = await InventoryService.listItems(businessId);
+    const inventoryById = new Map(
+      inventoryRows
+        .filter((row) => Boolean(row.id))
+        .map((row) => [row.id as string, row]),
+    );
 
     const getOrCreate = (id: string, name: string) => {
       if (!updatedPossession[id]) {
@@ -85,8 +121,18 @@ export async function syncCustomerAssetPossession(
     for (const item of dItems) {
       const invId = resolveStockInventoryLineId(item);
       if (!invId || !item.quantity || item.quantity <= 0) continue;
+      const catalog = inventoryById.get(invId);
+      const lineName = item.name || catalog?.name || "";
+      if (
+        !isContainerPossessionInventory(
+          lineName,
+          catalog?.inventoryRole,
+        )
+      ) {
+        continue;
+      }
 
-      const pItem = getOrCreate(invId, item.name || "");
+      const pItem = getOrCreate(invId, lineName);
       const prevTotal = pItem.quantity || 0;
 
       if (isReverse) {
@@ -100,7 +146,7 @@ export async function syncCustomerAssetPossession(
         const delta = isReverse ? -item.quantity : item.quantity;
         await InventoryService.createAssignment(businessId, {
           inventoryItemId: invId,
-          inventoryItemName: item.name || "Unknown Item",
+          inventoryItemName: lineName || "Unknown Item",
           customerId,
           customerName,
           quantityAssigned: delta,
@@ -114,8 +160,18 @@ export async function syncCustomerAssetPossession(
     for (let i = 0; i < updatedCollectionItems.length; i++) {
       const item = updatedCollectionItems[i];
       if (!item.inventoryId) continue;
+      const catalog = inventoryById.get(item.inventoryId);
+      const lineName = item.name || catalog?.name || "";
+      if (
+        !isContainerPossessionInventory(
+          lineName,
+          catalog?.inventoryRole,
+        )
+      ) {
+        continue;
+      }
 
-      const pItem = getOrCreate(item.inventoryId, item.name);
+      const pItem = getOrCreate(item.inventoryId, lineName);
       const prevTotal = pItem.quantity || 0;
 
       const qtyReturned = item.qtyOk || 0;
@@ -136,7 +192,7 @@ export async function syncCustomerAssetPossession(
           changed = true;
           await InventoryService.createAssignment(businessId, {
             inventoryItemId: item.inventoryId,
-            inventoryItemName: item.name || "Unknown Item",
+            inventoryItemName: lineName || "Unknown Item",
             customerId,
             customerName,
             quantityAssigned: delta,

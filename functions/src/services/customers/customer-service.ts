@@ -213,7 +213,8 @@ export class CustomerService {
         phone: customer.phone || "",
         address: location.address,
         pricing: customer.pricing || {},
-        possession: customer.possession || {},
+        possession:
+          customer.trackContainers === true ? customer.possession || {} : {},
         trackContainers: customer.trackContainers === true,
         containerPolicy: normalizeCustomerContainerPolicy(
           customer.containerPolicy,
