@@ -20,6 +20,7 @@ import type {
   CollectionItem,
   Transaction,
   TransactionInventoryItem,
+  TransactionRefill,
 } from "./transaction-types";
 
 export type {
@@ -133,6 +134,7 @@ export class TransactionService {
     userId?: string,
     isReverse = false,
     userName?: string,
+    waterRefills?: TransactionRefill[],
   ): Promise<void> {
     return syncCustomerAssetPossessionFn(
       businessId,
@@ -143,6 +145,7 @@ export class TransactionService {
       userId,
       isReverse,
       userName,
+      waterRefills,
     );
   }
 

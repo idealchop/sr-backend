@@ -7,16 +7,21 @@ import {
   customerUsesWrContainerRotation,
   getBusinessContainerDefaultPolicy,
 } from "../customers/container-policy";
-import { inferInventoryItemRole } from "../inventory/container-kit";
 import { resolveStockInventoryLineId } from "./transaction-line-inventory";
 import {
   describeCollectionLine,
   normalizeCollectionItems,
 } from "./collection-item-utils";
+import {
+  isContainerPossessionInventory,
+  possessionDeliveryItemsFromOrder,
+} from "./possession-from-order-lines";
+import { ProductService } from "../products/product-service";
 import type {
   CollectionItem,
   Transaction,
   TransactionInventoryItem,
+  TransactionRefill,
 } from "./transaction-types";
 
 /** CRM Containers toggle — orders must not adjust possession while this is off. */
@@ -26,18 +31,7 @@ export function customerTracksContainers(
   return customer?.trackContainers === true;
 }
 
-/** Delivery/collection lines that count as containers held (not general BOM stock). */
-export function isContainerPossessionInventory(
-  name: string,
-  inventoryRole?: unknown,
-): boolean {
-  const role = inferInventoryItemRole(name, inventoryRole);
-  return (
-    role === "container_shell" ||
-    role === "container_round" ||
-    role === "container_slim"
-  );
-}
+export { isContainerPossessionInventory } from "./possession-from-order-lines";
 
 /**
  * True when this suki should get WRS shell possession deltas from orders.
@@ -67,13 +61,17 @@ export async function syncCustomerAssetPossession(
   userId?: string,
   isReverse = false,
   userName?: string,
+  waterRefills: TransactionRefill[] = [],
 ): Promise<void> {
   const actor = buildAuditActorFields(userId, userName);
   try {
-    const dItems = Array.isArray(deliveryItems) ? deliveryItems : [];
+    const rawDelivery = Array.isArray(deliveryItems) ? deliveryItems : [];
     const cItems = Array.isArray(collectionItems) ? collectionItems : [];
+    const refills = Array.isArray(waterRefills) ? waterRefills : [];
 
-    if (dItems.length === 0 && cItems.length === 0) return;
+    if (rawDelivery.length === 0 && cItems.length === 0 && refills.length === 0) {
+      return;
+    }
 
     const customerRef = db
       .collection("businesses")
@@ -100,7 +98,21 @@ export async function syncCustomerAssetPossession(
     let changed = false;
 
     const updatedCollectionItems = [...cItems];
-    const inventoryRows = await InventoryService.listItems(businessId);
+    const [inventoryRows, products, businessSnap] = await Promise.all([
+      InventoryService.listItems(businessId),
+      ProductService.ensureSeeded(businessId),
+      db.collection("businesses").doc(businessId).get(),
+    ]);
+    const policy = getBusinessContainerDefaultPolicy(
+      businessSnap.data() as Record<string, unknown> | undefined,
+    );
+    const dItems = possessionDeliveryItemsFromOrder(
+      rawDelivery,
+      refills,
+      inventoryRows,
+      products,
+      policy,
+    );
     const inventoryById = new Map(
       inventoryRows
         .filter((row) => Boolean(row.id))

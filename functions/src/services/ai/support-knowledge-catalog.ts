@@ -70,6 +70,10 @@ ${SUPPORT_WATER_STATION_CONTEXT}
 
 ### Operations
 - Operations hub: fleet, quotas, cash reconciliation, assign/reassign riders, performance metrics.
+- **Item & container rotation** (Operations hub chart): **Items out** = station gallons lent on
+  completed deliveries when Containers is on. **Return** = empties collected (qty OK). A delivery
+  that lends and picks up empties counts both. Walk-in refills are not a lend. **Still out** =
+  lent minus returned. Direct sale is priced inventory, not a lend.
 - Team Hub (Grow+): invite admins or riders; riders land on My Area only.
 
 ### My Area (riders)
@@ -148,6 +152,8 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
       "pre-selected on QR and Record order when the suki has no preferred products. " +
       "If there is no warehouse item to link, tap Add inventory first in that same form. " +
       "Tap Inventory in the Products toolbar to manage warehouse stock. " +
+      "Tap the trash icon on a product (or Delete in Edit product) to remove it from the catalog after you confirm. " +
+      "Past orders keep their names and prices. Turn Active off if you only want to hide it from new orders. " +
       "You can link warehouse items so stock deducts when that product sells. Refill-only products " +
       "do not touch warehouse stock. Old water types are copied here the first time you open the page. " +
       "On a suki profile, Special prices lists those products; old water-type rates (like alkaline) still apply. " +
@@ -206,6 +212,24 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
     content:
       "Go to Transactions → Add Collection. Select customer and containers to collect " +
       "with expected quantities. Assign a rider if needed.",
+  },
+  {
+    id: "item-container-rotation",
+    topic: "What is Item & container rotation?",
+    content:
+      "On Daily Operation → Operations hub, Item & container rotation shows station gallons lent " +
+      "on completed deliveries (Containers on), empties returned, missing, and damaged. A stop that " +
+      "delivers and picks up empties counts both. Walk-in refills are not a lend. Still out is " +
+      "lent minus returned. Direct sale is priced inventory sold, not a lend.",
+  },
+  {
+    id: "production-volume-products",
+    topic: "What is Production volume / which product sells the most?",
+    content:
+      "On Daily Operation → Operations hub, Production volume stacks gallon units by stop status. " +
+      "Names come from Products. Deep Dive → Product sales lists gallon and store items from " +
+      "completed deliveries and walk-in, and highlights the product with the highest sales. " +
+      "Free rotation shells that were not sold are not counted there.",
   },
   {
     id: "rider-my-area",

@@ -10,6 +10,7 @@ import {
   claimNearbyDormantCustomer,
 } from "../handlers/customer-handler";
 import { acceptContainerCustodyAgreement } from "../handlers/customers/container-custody-handler";
+import { syncPossessionFromOrders } from "../handlers/customers/sync-possession-from-orders-handler";
 import { statementShareHandler } from "../handlers/customers/statement-share-handler";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
 import { validateBusinessAccess } from "../middleware/business-middleware";
@@ -54,6 +55,12 @@ router.post(
   validateFirebaseIdToken,
   validateBusinessAccess,
   acceptContainerCustodyAgreement,
+);
+router.post(
+  "/:customerId/possession/sync-from-orders",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  syncPossessionFromOrders,
 );
 router.post(
   "/:customerId/claim-nearby-dormant",

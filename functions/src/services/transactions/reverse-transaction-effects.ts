@@ -1,6 +1,7 @@
 import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
 import { InventoryService } from "../inventory/inventory-service";
+import { CustomerService } from "../customers/customer-service";
 import {
   resolveStockInventoryLineId,
   transactionSkipsSalesInventoryStock,
@@ -11,7 +12,7 @@ import {
 } from "./transaction-stock-phases";
 import { normalizeCollectionItems } from "./collection-item-utils";
 import {
-  shouldSyncWrContainerPossession,
+  customerTracksContainers,
   syncCustomerAssetPossession,
 } from "./sync-customer-asset-possession";
 import type { Transaction } from "./transaction-types";
@@ -167,7 +168,9 @@ export async function reverseTransactionEffects(
   }
 
   // 3. Revert customer possession
-  if (customerId && (await shouldSyncWrContainerPossession(businessId, customerId))) {
+  if (customerId && customerTracksContainers(
+    await CustomerService.getCustomer(businessId, customerId),
+  )) {
     await syncCustomerAssetPossession(
       businessId,
       customerId,
@@ -177,6 +180,7 @@ export async function reverseTransactionEffects(
       userId,
       true, // isReverse
       userName,
+      transaction.waterRefills || [],
     );
   }
 }

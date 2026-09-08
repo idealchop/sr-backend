@@ -18,6 +18,7 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
   new orders: price, active, QR visibility, default pick, Sales Portal gallon icon, and warehouse links to any inventory item. If Products has
   nothing to link, **Add inventory first** opens Register item without leaving the product form. Add/edit inventory no longer asks for a catalog role. The page uses the same layout as
   Suki (search, Inventory, and Add product in a toolbar). Open **Inventory** from that toolbar for warehouse stock.
+  Owners can **Delete** a product from the list or Edit product after a confirm; past orders keep names and prices. Admins do not see Delete.
   Products flags **No item linked**, a missing linked warehouse item, not enough / low stock on that item, or **No price**.
   Turn on **Default** for one product so QR, Record order, Walk-in sale, and Counter POS start with it when the suki has no preferred / special-price
   products. On the customer QR order, overflowing product pills use **More** / **Back** to slide between sets. **Review & Accept** shows a Products list (not Water refills + Item dispatch) when lines match Products; old water-type orders still show Item dispatch. Store items skip gallon dispatch. Walk-in and Counter POS **Water refill** show refill products; **Store items** show products marked Store item only (Walk-in also lists warehouse stock). Inactive products stay off new orders; old refill names on past deliveries do not change. **Record order** uses Products; turn on **Collect**
@@ -29,6 +30,7 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
   **Special prices** on a suki profile pick from Products; old water-type keys (like alkaline) still apply.
   On **Record order**, those preferred products start already selected (qty 1, Preferred badge).
   Each gallon product can check **Expect empty back** on Record order and Review & Accept so the stop expects that empty container (qty matches the product). Own-gallon (BYOG) sukis start unchecked; station-gallon sukis start checked. The product must be linked to an inventory item. Store items have no checkbox. Walk-in and Counter POS do not show the checkbox.
+  Completing a delivery opens **Container check at arrival** only when at least one refill has **Expect empty back**. Without that check, Completed does not ask for a container count, and ledger / My Area **Report** is hidden on that delivery.
   Turn on **Collect** and the matching Slim or Round return line is already picked.
   Inventory no longer has a default ₱ deposit per WRS shell; record a suki deposit on their profile when you need it.
   Delete/restock update the list immediately; CRUD/restock sends in-app notifications.
@@ -103,7 +105,8 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
   only non-zero buckets.
 - **Transaction mix chart** includes delivery, walk-in, collection, expense, and **community order**
   (messenger channel) categories.
-- **Customer health**, ratings, production, rider productivity charts below.
+- **Customer health**, ratings, production (**product sales** / highest-selling SKU in Deep Dive), **item & container rotation** (lent gallons vs empties
+  back; walk-in is not a lend), rider productivity charts below.
 
 ### Operations & field work
 - **Operations** page: fleet, assign riders, cash reconciliation, performance, live dispatch map.

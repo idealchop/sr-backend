@@ -1,10 +1,12 @@
 import {
   QueryDocumentSnapshot,
+  QuerySnapshot,
   Transaction,
   DocumentReference,
 } from "firebase-admin/firestore";
 import { db, FieldValue } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
+import { dedupeAssignmentHistory } from "./assignment-history";
 import {
   assertUniqueContainerShapeRole,
   inferInventoryItemRole,
@@ -55,6 +57,34 @@ export interface InventoryAssignment {
   quantityAssigned: number;
   date: any; // Firestore Timestamp
   transactionId?: string;
+  /** Order-sourced history: gallons given vs empties collected. */
+  movement?: "possess" | "return";
+}
+
+function assignmentSortMs(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: unknown }).toDate === "function"
+  ) {
+    return (value as { toDate: () => Date }).toDate().getTime();
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+  }
+  if (value && typeof value === "object") {
+    const seconds =
+      "seconds" in value ?
+        Number((value as { seconds?: unknown }).seconds) :
+        "_seconds" in value ?
+          Number((value as { _seconds?: unknown })._seconds) :
+          NaN;
+    if (Number.isFinite(seconds)) return seconds * 1000;
+  }
+  return 0;
 }
 
 export class InsufficientStockError extends Error {
@@ -636,6 +666,38 @@ export class InventoryService {
     }
   }
 
+  static async upsertAssignment(
+    businessId: string,
+    assignmentId: string,
+    assignment: InventoryAssignment,
+  ): Promise<void> {
+    const assignmentRef = db
+      .collection("businesses")
+      .doc(businessId)
+      .collection("inventory_assignments")
+      .doc(assignmentId);
+    await assignmentRef.set(
+      {
+        ...assignment,
+        id: assignmentId,
+        createdAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  }
+
+  static async deleteAssignment(
+    businessId: string,
+    assignmentId: string,
+  ): Promise<void> {
+    await db
+      .collection("businesses")
+      .doc(businessId)
+      .collection("inventory_assignments")
+      .doc(assignmentId)
+      .delete();
+  }
+
   /**
    * Lists inventory assignment events for a specific item (e.g. customer assets).
    * @param {string} businessId The business ID.
@@ -678,35 +740,52 @@ export class InventoryService {
    * Lists inventory assignments for a specific customer.
    * @param {string} businessId The business ID.
    * @param {string} customerId The customer ID.
+   * @param {boolean} raw When true, skip collapsing duplicate order rows.
    * @return {Promise<InventoryAssignment[]>}
    */
   static async getCustomerAssignments(
     businessId: string,
     customerId: string,
+    raw = false,
   ): Promise<InventoryAssignment[]> {
-    try {
-      const snapshot = await db
-        .collection("businesses")
-        .doc(businessId)
-        .collection("inventory_assignments")
-        .where("customerId", "==", customerId)
-        .orderBy("date", "desc")
-        .limit(50)
-        .get();
-
-      return snapshot.docs.map(
+    const col = db
+      .collection("businesses")
+      .doc(businessId)
+      .collection("inventory_assignments");
+    const mapDocs = (snapshot: QuerySnapshot) =>
+      snapshot.docs.map(
         (doc: QueryDocumentSnapshot) =>
           ({
             ...doc.data(),
             id: doc.id,
           }) as InventoryAssignment,
       );
+    let rows: InventoryAssignment[] = [];
+    try {
+      const snapshot = await col
+        .where("customerId", "==", customerId)
+        .orderBy("date", "desc")
+        .limit(200)
+        .get();
+      rows = mapDocs(snapshot);
     } catch (error) {
-      logger.error(`Failed to fetch assignments for customer ${customerId}`, {
-        error,
+      logger.warn(
+        `Assignment date index missed for customer ${customerId}; sorting in memory`,
+        { error },
+      );
+      const snapshot = await col
+        .where("customerId", "==", customerId)
+        .limit(200)
+        .get();
+      rows = mapDocs(snapshot).sort((a, b) => {
+        const aMs = assignmentSortMs(a.date);
+        const bMs = assignmentSortMs(b.date);
+        return bMs - aMs;
       });
-      throw error;
     }
+    if (raw) return rows;
+    const deduped = dedupeAssignmentHistory(rows);
+    return deduped.sort((a, b) => assignmentSortMs(b.date) - assignmentSortMs(a.date));
   }
 
   /**

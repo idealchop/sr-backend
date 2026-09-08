@@ -134,6 +134,20 @@
     },
     {
       "collectionGroup": "inventory_assignments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "customerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "inventory_assignments",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         {

@@ -11,7 +11,6 @@ import { notifyTransactionUpdated } from "../notifications/station-activity-noti
 import {
   applyOwnedShapePossessionTarget,
   dueDiligenceOwnedPossessionTarget,
-  dueDiligenceRequiresWrPossessionSync,
   isRiderContainerDueDiligence,
 } from "./delivery-rider-due-diligence";
 import {
@@ -37,10 +36,6 @@ export async function runUpdateTransactionPostCommit(params: {
   changedFields: string[];
   userId?: string;
   userName?: string;
-  shouldSyncWrContainerPossession: (
-    businessId: string,
-    customerId: string,
-  ) => Promise<boolean>;
 }): Promise<void> {
   const {
     businessId,
@@ -127,7 +122,9 @@ export async function runUpdateTransactionPostCommit(params: {
 
   const possessionSyncType = current.type;
   const itemsChanged =
-    updates.items !== undefined || updates.collectionItems !== undefined;
+    updates.items !== undefined ||
+    updates.collectionItems !== undefined ||
+    updates.waterRefills !== undefined;
   const riderDueDiligence = isRiderContainerDueDiligence(
     updates.riderContainerDueDiligence,
   ) ?
@@ -149,32 +146,28 @@ export async function runUpdateTransactionPostCommit(params: {
     } else {
       const mergedCollection =
         updates.collectionItems ?? current.collectionItems ?? [];
-      const syncWrShellPossession =
-        dueDiligenceRequiresWrPossessionSync(riderDueDiligence) ||
-        (await params.shouldSyncWrContainerPossession(businessId, customerId));
-      if (syncWrShellPossession) {
-        await syncCustomerAssetPossession(
+      await syncCustomerAssetPossession(
+        businessId,
+        customerId,
+        updates.items ?? current.items ?? [],
+        mergedCollection,
+        transactionId,
+        userId,
+        false,
+        userName,
+        updates.waterRefills ?? current.waterRefills ?? [],
+      );
+      if (updates.collectionItems !== undefined && mergedCollection.length > 0) {
+        await logCollectionContainerAudit(
           businessId,
-          customerId,
-          updates.items ?? current.items ?? [],
-          mergedCollection,
           transactionId,
+          customerId,
+          mergedCollection,
           userId,
-          false,
+          "COLLECTION_CONTAINER_UPDATED",
+          current.referenceId,
           userName,
         );
-        if (updates.collectionItems !== undefined && mergedCollection.length > 0) {
-          await logCollectionContainerAudit(
-            businessId,
-            transactionId,
-            customerId,
-            mergedCollection,
-            userId,
-            "COLLECTION_CONTAINER_UPDATED",
-            current.referenceId,
-            userName,
-          );
-        }
       }
       const ownedTarget = dueDiligenceOwnedPossessionTarget(riderDueDiligence);
       if (ownedTarget != null) {

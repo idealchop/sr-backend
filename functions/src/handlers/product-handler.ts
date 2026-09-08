@@ -113,3 +113,33 @@ export const updateProduct = async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message || "Internal Server Error" });
   }
 };
+
+export const deleteProduct = async (req: Request, res: Response) => {
+  const { businessId, productId } = req.params;
+  const user = (req as any).user;
+
+  try {
+    const { hasAccess, role } = await checkBusinessAccess(user.uid, businessId);
+    if (!hasAccess || !canMutateProducts(role)) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+
+    const before = await ProductService.deleteItem(businessId, productId);
+    logAuditEvent(
+      "PRODUCT_DELETED",
+      { businessId, userId: user.uid, productId },
+      before,
+      null,
+    );
+    res.json({ success: true });
+  } catch (error: any) {
+    if (error instanceof ProductValidationError) {
+      const status = error.message === "Product not found." ? 404 : 400;
+      res.status(status).json({ error: error.message });
+      return;
+    }
+    logger.error(`Error deleting product ${productId}`, error);
+    res.status(500).json({ error: error.message || "Internal Server Error" });
+  }
+};

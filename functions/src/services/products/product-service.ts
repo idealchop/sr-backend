@@ -173,6 +173,16 @@ export class ProductService {
     await this.syncDerivedWaterTypes(businessId);
   }
 
+  static async deleteItem(businessId: string, productId: string): Promise<DeliveryProduct> {
+    const current = await this.getItem(businessId, productId);
+    if (!current) {
+      throw new ProductValidationError("Product not found.");
+    }
+    await this.collection(businessId).doc(productId).delete();
+    await this.syncDerivedWaterTypes(businessId);
+    return current;
+  }
+
   private static async clearOtherDefaults(
     businessId: string,
     keepId: string,

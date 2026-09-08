@@ -12,6 +12,12 @@ import {
   InsufficientStockError,
   toStockedPossession,
 } from "../services/customers/customer-possession-stock";
+import {
+  computePossessionFromFulfilledOrders,
+  ensureAssignmentHistoryFromOrders,
+  mergeOrderPossessionOnto,
+} from "../services/customers/backfill-customer-possession-from-orders";
+import { possessionHasPositiveQuantity } from "../services/transactions/possession-from-order-lines";
 import { normalizeCustomerContainerDeposit } from "../services/customers/container-deposit";
 import {
   customerUsesWrContainerRotation,
@@ -289,6 +295,31 @@ export const updateCustomer = async (req: Request, res: Response) => {
     if (safeBody.trackContainers === false) {
       // Containers off — held qty is not tracked; clear so past orders cannot surface later.
       safeBody.possession = {};
+    }
+
+    const willTrack =
+      safeBody.trackContainers === true ||
+      (safeBody.trackContainers === undefined &&
+        oldCustomer?.trackContainers === true);
+    if (willTrack) {
+      const proposed =
+        safeBody.possession !== undefined ?
+          (safeBody.possession as CustomerPossessionMap) :
+          ((oldCustomer?.possession || {}) as CustomerPossessionMap);
+      if (!possessionHasPositiveQuantity(proposed)) {
+        const fromOrders = await computePossessionFromFulfilledOrders(
+          businessId,
+          customerId,
+        );
+        if (possessionHasPositiveQuantity(fromOrders)) {
+          safeBody.possession = mergeOrderPossessionOnto(proposed, fromOrders);
+        }
+      }
+      await ensureAssignmentHistoryFromOrders({
+        businessId,
+        customerId,
+        customerName: oldCustomer?.name || "Unknown Customer",
+      });
     }
 
     if (safeBody.possession !== undefined && oldCustomer) {

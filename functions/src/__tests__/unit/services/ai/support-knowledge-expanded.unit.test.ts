@@ -56,4 +56,22 @@ describe("River AI expanded knowledge", () => {
     expect(hit).not.toBeNull();
     expect(hit?.entry.id).toBe("add-delivery");
   });
+
+  it("finds the item and container rotation FAQ", () => {
+    const hit = findHighConfidenceKnowledgeHit(
+      SUPPORT_FAQ_ENTRIES,
+      "What is Item & container rotation?",
+    );
+    expect(hit).not.toBeNull();
+    expect(hit?.entry.id).toBe("item-container-rotation");
+  });
+
+  it("finds the production volume product sales FAQ", () => {
+    const hit = findHighConfidenceKnowledgeHit(
+      SUPPORT_FAQ_ENTRIES,
+      "What is Production volume / which product sells the most?",
+    );
+    expect(hit).not.toBeNull();
+    expect(hit?.entry.id).toBe("production-volume-products");
+  });
 });

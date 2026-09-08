@@ -13,6 +13,7 @@ import {
 } from "./transaction-line-inventory";
 import { CustomerLastFulfilledService } from "../customers/customer-last-fulfilled-service";
 import { CustomerHealthScoreService } from "../customers/customer-health-score-service";
+import { CustomerService } from "../customers/customer-service";
 import { AnalyticsMaterializerService } from "../analytics/analytics-materializer-service";
 import { notifyTransactionCreated } from "../notifications/station-activity-notification-service";
 import {
@@ -34,7 +35,7 @@ import {
   normalizeCollectionItems,
 } from "./collection-item-utils";
 import {
-  shouldSyncWrContainerPossession,
+  customerTracksContainers,
   syncCustomerAssetPossession,
 } from "./sync-customer-asset-possession";
 import {
@@ -449,7 +450,9 @@ export async function addTransaction(
       if (!customerId) {
         throw new Error("Customer ID is required when syncing possession");
       }
-      if (await shouldSyncWrContainerPossession(businessId, customerId)) {
+      if (customerTracksContainers(
+        await CustomerService.getCustomer(businessId, customerId),
+      )) {
         await syncCustomerAssetPossession(
           businessId,
           customerId,
@@ -459,6 +462,7 @@ export async function addTransaction(
           userId,
           false,
           userName,
+          newTransaction.waterRefills || [],
         );
         if ((newTransaction.collectionItems || []).length > 0) {
           await logCollectionContainerAudit(

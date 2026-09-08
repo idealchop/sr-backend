@@ -66,6 +66,44 @@ test.describe("Delivery products catalog (BDD)", () => {
     );
   });
 
+  test("Scenario: Owner deletes a product", async ({ request }) => {
+    const createRes = await request.post(`${API_PATH}/products/test-id`, {
+      headers: { Authorization: MOCK_TOKEN },
+      data: {
+        name: "Temporary Caps",
+        unitPrice: 5,
+        active: true,
+        itemOnly: true,
+        iconId: "round-gallon",
+        components: [],
+      },
+    });
+    expect(createRes.status()).toBe(201);
+    const productId = (await createRes.json()).productId as string;
+    expect(productId).toBeDefined();
+
+    const deleteRes = await request.delete(
+      `${API_PATH}/products/test-id/${productId}`,
+      { headers: { Authorization: MOCK_TOKEN } },
+    );
+    expect(deleteRes.status()).toBe(200);
+
+    const getRes = await request.get(
+      `${API_PATH}/products/test-id/${productId}`,
+      { headers: { Authorization: MOCK_TOKEN } },
+    );
+    expect(getRes.status()).toBe(404);
+
+    const listRes = await request.get(`${API_PATH}/products/test-id`, {
+      headers: { Authorization: MOCK_TOKEN },
+    });
+    expect(listRes.status()).toBe(200);
+    const listData = await listRes.json();
+    expect(listData.data.some((item: { id: string }) => item.id === productId)).toBe(
+      false,
+    );
+  });
+
   test("Scenario: Public product icons are readable without auth", async ({
     request,
   }) => {

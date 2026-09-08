@@ -669,6 +669,26 @@ export const openApiSpec = {
         },
       },
     },
+    "/business/{businessId}/customers/{customerId}/possession/sync-from-orders": {
+      post: {
+        tags: ["Customers"],
+        summary: "Fill held containers from completed orders",
+        description:
+          "When Containers is on and held qty is still 0, writes possession from " +
+          "fulfilled deliveries and collections (refill gallons count when the ticket " +
+          "has no container SKU lines). GET customer to read the result.",
+        parameters: [
+          { $ref: "#/components/parameters/businessId" },
+          { $ref: "#/components/parameters/customerId" },
+        ],
+        responses: {
+          200: {
+            description: "Possession map after the fill (applied may be false if qty already set).",
+          },
+          400: { description: "Containers is off." },
+        },
+      },
+    },
     "/business/{businessId}/transactions": {
       get: {
         "tags": ["Transactions"],
@@ -941,6 +961,26 @@ export const openApiSpec = {
         ],
         responses: {
           200: { description: "Product updated." },
+        },
+      },
+      delete: {
+        tags: ["Inventory"],
+        summary: "Delete delivery product",
+        description:
+          "Owner/admin. Removes the catalog row and rewrites derived businesses.waterTypes. " +
+          "Past ledger lines keep their names and prices; productId may no longer resolve.",
+        parameters: [
+          { $ref: "#/components/parameters/businessId" },
+          {
+            name: "productId",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          200: { description: "Product deleted." },
+          404: { description: "Product not found." },
         },
       },
     },

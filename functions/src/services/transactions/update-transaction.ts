@@ -20,7 +20,6 @@ import {
 import { buildUpdateStockDeltaPlan } from "./build-update-stock-deltas";
 import { runUpdateTransactionPostCommit } from "./update-transaction-post-commit";
 import { normalizeCollectionItems } from "./collection-item-utils";
-import { shouldSyncWrContainerPossession } from "./sync-customer-asset-possession";
 import { reverseTransactionEffects } from "./reverse-transaction-effects";
 import {
   getSoleActiveRiderId,
@@ -462,7 +461,6 @@ export async function updateTransaction(
       changedFields,
       userId,
       userName,
-      shouldSyncWrContainerPossession,
     });
 
     return true;

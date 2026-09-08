@@ -14,6 +14,14 @@ export function isContainerShapeRole(role: InventoryItemRole): role is Container
   return role === "container_round" || role === "container_slim";
 }
 
+export function containerShapeFromName(name: string): ContainerShapeRole | null {
+  const lower = name.trim().toLowerCase();
+  if (!lower) return null;
+  if (lower.includes("slim")) return "container_slim";
+  if (lower.includes("round")) return "container_round";
+  return null;
+}
+
 export function normalizeInventoryItemRole(value: unknown): InventoryItemRole {
   if (
     value === "container_shell" ||
