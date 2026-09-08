@@ -59,6 +59,50 @@ describe("CustomerService Unit Tests", () => {
       expect(created.id).toBe("cust-no-map");
     });
 
+    it("saves WRS possession when policy is rotation even without trackContainers", async () => {
+      mockCollection.add.mockResolvedValue({ id: "cust-wrs" });
+
+      await CustomerService.addCustomer("biz-123", {
+        name: "WRS Suki",
+        phone: "09171234567",
+        containerPolicy: "wrs_rotation",
+        possession: {
+          slim1: { itemName: "Slim", quantity: 5 },
+        },
+      });
+
+      expect(mockCollection.add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          trackContainers: true,
+          containerPolicy: "wrs_rotation",
+          possession: {
+            slim1: { itemName: "Slim", quantity: 5 },
+          },
+        }),
+      );
+    });
+
+    it("does not save possession when containers are off", async () => {
+      mockCollection.add.mockResolvedValue({ id: "cust-own" });
+
+      await CustomerService.addCustomer("biz-123", {
+        name: "Own-gallon Suki",
+        phone: "09171234567",
+        containerPolicy: "byog",
+        possession: {
+          slim1: { itemName: "Slim", quantity: 5 },
+        },
+      });
+
+      expect(mockCollection.add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          trackContainers: false,
+          containerPolicy: "byog",
+          possession: {},
+        }),
+      );
+    });
+
     it("saves a map pin without address text", async () => {
       mockCollection.add.mockResolvedValue({ id: "cust-pin-only" });
 

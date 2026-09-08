@@ -11,6 +11,17 @@ import {
 import { normalizeRefillBonus } from "./refill-bonus";
 import { isUnpaidReceivableTransaction } from "../../utils/unpaid-receivable";
 
+/** Containers-on: explicit toggle or WRS rotation policy (lend gallons). */
+function customerPersistsContainerTracking(
+  customer: Partial<Customer>,
+): boolean {
+  if (customer.trackContainers === true) return true;
+  return (
+    normalizeCustomerContainerPolicy(customer.containerPolicy) ===
+    "wrs_rotation"
+  );
+}
+
 export interface Customer {
   id?: string;
   businessId: string;
@@ -202,6 +213,7 @@ export class CustomerService {
         latitude: customer.latitude,
         longitude: customer.longitude,
       });
+      const tracksContainers = customerPersistsContainerTracking(customer);
 
       const newCustomer: Customer = {
         businessId,
@@ -213,9 +225,8 @@ export class CustomerService {
         phone: customer.phone || "",
         address: location.address,
         pricing: customer.pricing || {},
-        possession:
-          customer.trackContainers === true ? customer.possession || {} : {},
-        trackContainers: customer.trackContainers === true,
+        possession: tracksContainers ? customer.possession || {} : {},
+        trackContainers: tracksContainers,
         containerPolicy: normalizeCustomerContainerPolicy(
           customer.containerPolicy,
         ),
