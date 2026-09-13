@@ -75,6 +75,7 @@ service cloud.firestore {
         'products',
         'transactions',
         'raw_submissions',
+        'portal_order_ratings',
         'riders',
         'members',
         'team_invites',
