@@ -1,4 +1,5 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
+import { webinarEmailActionButtonsHtml } from "./webinar-email-cta";
 
 export type GuestWebinarInviteEmailInput = {
   displayName: string;
@@ -7,6 +8,7 @@ export type GuestWebinarInviteEmailInput = {
   timezone: string;
   joinUrl: string;
   cancelUrl: string;
+  feedbackUrl: string;
   requiresApproval: boolean;
 };
 
@@ -39,7 +41,11 @@ export function buildGuestWebinarInviteEmail(
       <p style="margin:4px 0 0;font-size:15px;font-weight:700;color:#0f172a;">${escapeHtmlForEmail(input.startsAtLabel)}</p>
       <p style="margin:8px 0 0;font-size:12px;color:#64748b;">Timezone: ${escapeHtmlForEmail(input.timezone)}</p>
     </div>
-    <a href="${escapeHtmlForEmail(input.joinUrl)}" style="display:inline-block;background:#44c1ba;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 20px;border-radius:12px;">Join webinar</a>
+    ${webinarEmailActionButtonsHtml({
+    primaryUrl: input.joinUrl,
+    primaryLabel: "Join webinar",
+    feedbackUrl: input.feedbackUrl,
+  })}
     <p style="margin:20px 0 0;font-size:12px;line-height:1.5;color:#94a3b8;">
       Join opens about 30 minutes before start. Keep this email — the link is personal to your registration.
     </p>
@@ -59,6 +65,7 @@ export function buildGuestWebinarInviteEmail(
     `When: ${input.startsAtLabel} (${input.timezone})`,
     "",
     `Join: ${input.joinUrl}`,
+    `Rate & feedback: ${input.feedbackUrl}`,
     "",
     `Cancel: ${input.cancelUrl}`,
   ].join("\n");
@@ -78,6 +85,7 @@ export type GuestWebinarReminderEmailInput = {
   timezone: string;
   joinUrl: string;
   cancelUrl: string;
+  feedbackUrl: string;
 };
 
 /** T-1h reminder for opted-in guests. */
@@ -103,7 +111,11 @@ export function buildGuestWebinarReminderEmail(
       <p style="margin:4px 0 0;font-size:15px;font-weight:700;color:#0f172a;">${escapeHtmlForEmail(input.startsAtLabel)}</p>
       <p style="margin:8px 0 0;font-size:12px;color:#64748b;">Timezone: ${escapeHtmlForEmail(input.timezone)}</p>
     </div>
-    <a href="${escapeHtmlForEmail(input.joinUrl)}" style="display:inline-block;background:#44c1ba;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 20px;border-radius:12px;">Join webinar</a>
+    ${webinarEmailActionButtonsHtml({
+    primaryUrl: input.joinUrl,
+    primaryLabel: "Join webinar",
+    feedbackUrl: input.feedbackUrl,
+  })}
     <p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:#94a3b8;">
       <a href="${escapeHtmlForEmail(input.cancelUrl)}" style="color:#64748b;">Cancel registration</a>
     </p>
@@ -120,6 +132,7 @@ export function buildGuestWebinarReminderEmail(
     `When: ${input.startsAtLabel} (${input.timezone})`,
     "",
     `Join: ${input.joinUrl}`,
+    `Rate & feedback: ${input.feedbackUrl}`,
     `Cancel: ${input.cancelUrl}`,
   ].join("\n");
 

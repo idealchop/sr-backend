@@ -289,6 +289,7 @@ export async function registerForWebinar(input: {
         await sendMemberWebinarConfirmationEmail({
           registrationId: existing.id,
           email: memberEmail,
+          eventId,
           eventName: String(eventData.name ?? "").trim() || "Smart Refill webinar",
           startsAt: toIsoTimestamp(eventData.startsAt),
           timezone:
@@ -336,6 +337,7 @@ export async function registerForWebinar(input: {
       await sendMemberWebinarConfirmationEmail({
         registrationId: ref.id,
         email: memberEmail,
+        eventId,
         eventName: String(eventData.name ?? "").trim() || "Smart Refill webinar",
         startsAt: toIsoTimestamp(eventData.startsAt),
         timezone:

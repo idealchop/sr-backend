@@ -43,6 +43,7 @@ import {
   getPublicResourceVideoById,
   getPublicWebinarEvent,
   getPublicWebinarEventComments,
+  getPublicWebinarEventFeedback,
   getPublicWebinarEvents,
   getPublicWebinarRecordings,
   getPublicWrsBlogById,
@@ -51,6 +52,8 @@ import {
   getPublicTutorials,
   getGuestWebinarJoin,
   postGuestWebinarCancel,
+  postGuestWebinarFeedbackByToken,
+  postPublicWebinarFeedback,
   postGuestWebinarCertificate,
   postGuestWebinarJoinByEmail,
   postGuestWebinarJoinByToken,
@@ -171,6 +174,11 @@ router.get(
   resourcesLimiter,
   getPublicWebinarEventComments,
 );
+router.get(
+  "/resources/webinar-events/:eventId/feedback",
+  resourcesLimiter,
+  getPublicWebinarEventFeedback,
+);
 router.post(
   "/resources/webinar-events/:eventId/comments",
   marketingLimiter,
@@ -225,6 +233,16 @@ router.post(
   "/resources/webinar-join/:token/cancel",
   marketingLimiter,
   postGuestWebinarCancel,
+);
+router.post(
+  "/resources/webinar-join/:token/feedback",
+  marketingLimiter,
+  postGuestWebinarFeedbackByToken,
+);
+router.post(
+  "/resources/webinar-events/:eventId/feedback",
+  marketingLimiter,
+  postPublicWebinarFeedback,
 );
 router.get("/resources/blogs", resourcesLimiter, getPublicWrsBlogs);
 router.get(

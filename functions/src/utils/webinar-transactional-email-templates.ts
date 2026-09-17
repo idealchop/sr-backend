@@ -1,4 +1,5 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
+import { webinarEmailActionButtonsHtml } from "./webinar-email-cta";
 
 export type WebinarTransactionalEmailInput = {
   displayName: string;
@@ -8,6 +9,7 @@ export type WebinarTransactionalEmailInput = {
   hubUrl?: string | null;
   joinUrl?: string | null;
   cancelUrl?: string | null;
+  feedbackUrl?: string | null;
   requiresApproval?: boolean;
 };
 
@@ -17,12 +19,19 @@ function shell(opts: {
   bodyHtml: string;
   ctaLabel?: string;
   ctaUrl?: string | null;
+  feedbackUrl?: string | null;
   footerHtml?: string;
 }): string {
   const cta =
-    opts.ctaUrl && opts.ctaLabel ?
-      `<a href="${escapeHtmlForEmail(opts.ctaUrl)}" style="display:inline-block;background:#44c1ba;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 20px;border-radius:12px;">${escapeHtmlForEmail(opts.ctaLabel)}</a>` :
-      "";
+    opts.ctaUrl && opts.ctaLabel && opts.feedbackUrl ?
+      webinarEmailActionButtonsHtml({
+        primaryUrl: opts.ctaUrl,
+        primaryLabel: opts.ctaLabel,
+        feedbackUrl: opts.feedbackUrl,
+      })
+    : opts.ctaUrl && opts.ctaLabel ?
+      `<a href="${escapeHtmlForEmail(opts.ctaUrl)}" style="display:inline-block;background:#44c1ba;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 20px;border-radius:12px;">${escapeHtmlForEmail(opts.ctaLabel)}</a>`
+    : "";
   return `
 <!DOCTYPE html>
 <html>
@@ -65,6 +74,7 @@ export function buildMemberWebinarConfirmationEmail(
     </div>`,
     ctaLabel: "Open webinars hub",
     ctaUrl: input.hubUrl,
+    feedbackUrl: input.feedbackUrl,
   });
 
   const text = [
@@ -75,6 +85,7 @@ export function buildMemberWebinarConfirmationEmail(
     "",
     `When: ${input.startsAtLabel} (${input.timezone})`,
     input.hubUrl ? `Hub: ${input.hubUrl}` : "",
+    input.feedbackUrl ? `Rate & feedback: ${input.feedbackUrl}` : "",
   ].filter(Boolean).join("\n");
 
   return { subject, html, text, brevoTag: "member_webinar_confirm" };
@@ -104,6 +115,7 @@ export function buildWebinarApprovedEmail(
     </div>`,
     ctaLabel: input.joinUrl ? "Join webinar" : "Open webinars hub",
     ctaUrl: input.joinUrl || input.hubUrl,
+    feedbackUrl: input.feedbackUrl,
     footerHtml: input.cancelUrl ?
       `<p style="margin:12px 0 0;font-size:12px;line-height:1.5;color:#94a3b8;">Need to cancel? <a href="${escapeHtmlForEmail(input.cancelUrl)}" style="color:#64748b;">Cancel registration</a></p>` :
       "",
@@ -118,6 +130,7 @@ export function buildWebinarApprovedEmail(
     `When: ${input.startsAtLabel} (${input.timezone})`,
     input.joinUrl ? `Join: ${input.joinUrl}` : "",
     input.hubUrl ? `Hub: ${input.hubUrl}` : "",
+    input.feedbackUrl ? `Rate & feedback: ${input.feedbackUrl}` : "",
   ].filter(Boolean).join("\n");
 
   return { subject, html, text, brevoTag: "webinar_approved" };
@@ -144,6 +157,7 @@ export function buildMemberWebinarReminderEmail(
     </div>`,
     ctaLabel: "Open webinars hub",
     ctaUrl: input.hubUrl,
+    feedbackUrl: input.feedbackUrl,
   });
 
   const text = [
@@ -152,6 +166,7 @@ export function buildMemberWebinarReminderEmail(
     `Hi ${name}, reminder — ${eventName} starts in about an hour.`,
     `When: ${input.startsAtLabel} (${input.timezone})`,
     input.hubUrl ? `Hub: ${input.hubUrl}` : "",
+    input.feedbackUrl ? `Rate & feedback: ${input.feedbackUrl}` : "",
   ].filter(Boolean).join("\n");
 
   return { subject, html, text, brevoTag: "member_webinar_reminder" };

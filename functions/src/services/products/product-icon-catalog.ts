@@ -5,6 +5,8 @@ export type ProductIcon = {
   lucide?: string;
   sortOrder: number;
   active: boolean;
+  /** Gallon, bottle, or other refill container (not a store accessory). */
+  waterContainer?: boolean;
 };
 
 const ROUND_GALLON_URL =
@@ -23,6 +25,7 @@ export const SEEDED_PRODUCT_ICONS: ProductIcon[] = [
     imageUrl: ROUND_GALLON_URL,
     sortOrder: 1,
     active: true,
+    waterContainer: true,
   },
   {
     id: "slim-gallon",
@@ -30,11 +33,19 @@ export const SEEDED_PRODUCT_ICONS: ProductIcon[] = [
     imageUrl: SLIM_GALLON_URL,
     sortOrder: 2,
     active: true,
+    waterContainer: true,
   },
 ];
 
+/** Sales Portal `product_icons` are image assets — Lucide placeholders are not in that catalog. */
 export function isSalesPortalProductIcon(icon: Pick<ProductIcon, "imageUrl">): boolean {
   return Boolean(icon.imageUrl?.trim());
+}
+
+export function isWaterContainerProductIcon(
+  icon: Pick<ProductIcon, "waterContainer">,
+): boolean {
+  return icon.waterContainer === true;
 }
 
 export function mergeProductIcons(cmsRows: ProductIcon[]): ProductIcon[] {
@@ -49,6 +60,7 @@ export function mergeProductIcons(cmsRows: ProductIcon[]): ProductIcon[] {
       lucide: icon.lucide,
       sortOrder: Number.isFinite(Number(icon.sortOrder)) ? Number(icon.sortOrder) : 99,
       active: true,
+      waterContainer: icon.waterContainer === true,
     });
   }
 

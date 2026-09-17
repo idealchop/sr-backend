@@ -18,7 +18,7 @@ import {
   cancelGuestWebinarByToken,
 } from "../services/events-training/guest-webinar-join-service";
 import { createGuestWebinarUnlockCheckout, getGuestReplayAccess } from "../services/events-training/guest-webinar-unlock-service";
-import { claimGuestWebinarCertificate } from "../services/events-training/guest-webinar-certificate-service";
+import { submitWebinarFeedback, listPublicWebinarFeedback } from "../services/events-training/webinar-feedback-service";
 import {
   attachWebinarEventListEngagement,
   createPublicWebinarEventComment,
@@ -134,6 +134,25 @@ export async function getPublicWebinarEvent(
   } catch (error) {
     logger.error("getPublicWebinarEvent failed", error);
     res.status(500).json({ error: "Failed to load webinar event." });
+  }
+}
+
+/** GET /public/resources/webinar-events/:eventId/feedback */
+export async function getPublicWebinarEventFeedback(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const data = await listPublicWebinarFeedback(String(req.params.eventId || ""));
+    res.json({ success: true, data });
+  } catch (error) {
+    const status = Number((error as { status?: number })?.status) || 500;
+    if (status === 404) {
+      res.status(404).json({ error: "Webinar not found." });
+      return;
+    }
+    logger.error("getPublicWebinarEventFeedback failed", error);
+    res.status(500).json({ error: "Failed to load webinar feedback." });
   }
 }
 
@@ -399,6 +418,49 @@ export async function postGuestWebinarCancel(
     res.json({ success: true, data });
   } catch (error) {
     respondGuestError(res, error, "postGuestWebinarCancel");
+  }
+}
+
+/** POST /public/resources/webinar-join/:token/feedback */
+export async function postGuestWebinarFeedbackByToken(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const body = req.body ?? {};
+    const data = await submitWebinarFeedback({
+      token: req.params.token,
+      rating: body.rating,
+      feedback: body.feedback,
+      recommend: body.recommend,
+      recommendation: body.recommendation,
+      displayName: body.displayName,
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    respondGuestError(res, error, "postGuestWebinarFeedbackByToken");
+  }
+}
+
+/** POST /public/resources/webinar-events/:eventId/feedback */
+export async function postPublicWebinarFeedback(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const body = req.body ?? {};
+    const data = await submitWebinarFeedback({
+      eventId: req.params.eventId,
+      email: body.email,
+      displayName: body.displayName,
+      rating: body.rating,
+      feedback: body.feedback,
+      recommend: body.recommend,
+      recommendation: body.recommendation,
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    respondGuestError(res, error, "postPublicWebinarFeedback");
   }
 }
 

@@ -10,6 +10,7 @@ describe("mergeProductIcons", () => {
     expect(icons.map((icon) => icon.id)).toEqual(["round-gallon", "slim-gallon"]);
     expect(icons.every((icon) => icon.imageUrl)).toBe(true);
     expect(icons.some((icon) => icon.lucide)).toBe(false);
+    expect(icons.every((icon) => icon.waterContainer)).toBe(true);
   });
 
   it("uses only Sales Portal image icons when CMS is populated", () => {
@@ -54,5 +55,27 @@ describe("mergeProductIcons", () => {
     expect(icons.map((icon) => icon.id)).toEqual(
       SEEDED_PRODUCT_ICONS.map((icon) => icon.id),
     );
+  });
+
+  it("keeps waterContainer so SmartRefill can tell gallon/bottle artwork", () => {
+    const icons = mergeProductIcons([
+      {
+        id: "1liter-bottle",
+        name: "1 Liter Bottle",
+        imageUrl: "https://example.com/1l.svg",
+        sortOrder: 10,
+        active: true,
+        waterContainer: true,
+      },
+      {
+        id: "faucet",
+        name: "Faucet",
+        imageUrl: "https://example.com/faucet.svg",
+        sortOrder: 20,
+        active: true,
+      },
+    ]);
+    expect(icons.find((icon) => icon.id === "1liter-bottle")?.waterContainer).toBe(true);
+    expect(icons.find((icon) => icon.id === "faucet")?.waterContainer).toBe(false);
   });
 });
