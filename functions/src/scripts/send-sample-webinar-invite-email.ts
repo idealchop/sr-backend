@@ -1,8 +1,8 @@
 /**
  * Sends a sample guest webinar invite (Join + ratings/feedback buttons) via Brevo.
  *
- * Usage:
- *   cd backend/functions && npx ts-node src/scripts/send-sample-webinar-invite-email.ts you@example.com
+ * Usage (from backend/functions):
+ *   npx ts-node src/scripts/send-sample-webinar-invite-email.ts you@example.com
  *
  * Uses SMARTREFILL_BREVO_API_KEY from functions/.env. Does not apply the Dev
  * outbound sink so the intended inbox receives the sample.
@@ -16,7 +16,9 @@ loadLocalEnvIfNeeded();
 async function main(): Promise<void> {
   const email = String(process.argv[2] || "").trim().toLowerCase();
   if (!email.includes("@")) {
-    throw new Error("Pass a recipient email: npx ts-node src/scripts/send-sample-webinar-invite-email.ts you@example.com");
+    throw new Error(
+      "Pass a recipient email as the first argument to this script.",
+    );
   }
 
   const apiKey = process.env.SMARTREFILL_BREVO_API_KEY?.trim();
