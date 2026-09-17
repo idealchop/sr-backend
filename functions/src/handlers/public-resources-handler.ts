@@ -18,6 +18,7 @@ import {
   cancelGuestWebinarByToken,
 } from "../services/events-training/guest-webinar-join-service";
 import { createGuestWebinarUnlockCheckout, getGuestReplayAccess } from "../services/events-training/guest-webinar-unlock-service";
+import { claimGuestWebinarCertificate } from "../services/events-training/guest-webinar-certificate-service";
 import { submitWebinarFeedback, listPublicWebinarFeedback } from "../services/events-training/webinar-feedback-service";
 import {
   attachWebinarEventListEngagement,
