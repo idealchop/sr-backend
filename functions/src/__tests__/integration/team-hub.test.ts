@@ -94,7 +94,7 @@ describe("Team Hub API Endpoints", () => {
       const res = await request(app).get("/business/test-biz/team");
 
       expect(res.status).toBe(403);
-      expect(res.body.error).toMatch(/Starter plan/i);
+      expect(res.body.error).toMatch(/Free or Starter/i);
     });
 
     it("should allow Team Hub during Scale trial", async () => {

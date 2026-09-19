@@ -650,7 +650,9 @@ export class SubscriptionService {
       .doc();
 
     const price =
-      cycle === "yearly" ? planData.pricing.yearly : planData.pricing.monthly;
+      cycle === "yearly" ?
+        Number(planData?.pricing?.yearly) || 0 :
+        Number(planData?.pricing?.monthly) || 0;
 
     const dates: Record<string, unknown> = {};
     if (!deferPeriodDates) {

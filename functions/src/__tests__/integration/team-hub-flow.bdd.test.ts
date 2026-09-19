@@ -108,7 +108,7 @@ describe("Feature: Team Hub Management Flow", () => {
     it("Step 2: When the owner tries to access the Team Hub overview", async () => {
       const res = await request(app).get("/business/test-biz-123/team");
       expect(res.status).toBe(403);
-      expect(res.body.error).toMatch(/not available on the Starter plan/i);
+      expect(res.body.error).toMatch(/not available on Free or Starter/i);
     });
   });
 });
