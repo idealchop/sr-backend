@@ -6,24 +6,22 @@ import {
 import { SUBSCRIPTION_PLAN_LIMITATION_PATCHES } from "../../../config/subscription-plans-catalog";
 
 describe("resolveSupportAiPlanLimits", () => {
-  it("limits Starter to 5 monthly chats without attachments or agent", () => {
-    const limits = resolveSupportAiPlanLimits({
-      planCode: "starter",
-      billingCycle: "monthly",
-      status: "active",
-      isExpired: false,
-      agentChatEnabled: false,
-    });
-    expect(limits).toEqual({
-      chatMax: 5,
-      chatFrequency: "monthly",
-      attachmentsMax: null,
-      attachmentsAllowed: false,
-      agentChatEnabled: false,
-    });
+  it("turns Buddy off on Free, Starter, and Grow", () => {
+    for (const planCode of ["free", "starter", "grow"] as const) {
+      const limits = resolveSupportAiPlanLimits({
+        planCode,
+        billingCycle: "monthly",
+        status: "active",
+        isExpired: false,
+        agentChatEnabled: true,
+      });
+      expect(limits.chatMax).toBe(0);
+      expect(limits.attachmentsAllowed).toBe(false);
+      expect(limits.agentChatEnabled).toBe(true);
+    }
   });
 
-  it("gives Scale trial 50 daily chats and attachments with agent chat", () => {
+  it("gives Scale trial 5 Buddy prompts per day", () => {
     const limits = resolveSupportAiPlanLimits({
       planCode: "scale",
       billingCycle: "trial",
@@ -32,32 +30,15 @@ describe("resolveSupportAiPlanLimits", () => {
       agentChatEnabled: true,
     });
     expect(limits).toEqual({
-      chatMax: 50,
+      chatMax: 5,
       chatFrequency: "daily",
-      attachmentsMax: 50,
+      attachmentsMax: 5,
       attachmentsAllowed: true,
       agentChatEnabled: true,
     });
   });
 
-  it("limits Grow to 10 monthly chats with attachments", () => {
-    const limits = resolveSupportAiPlanLimits({
-      planCode: "grow",
-      billingCycle: "monthly",
-      status: "active",
-      isExpired: false,
-      agentChatEnabled: true,
-    });
-    expect(limits).toEqual({
-      chatMax: 10,
-      chatFrequency: "monthly",
-      attachmentsMax: null,
-      attachmentsAllowed: true,
-      agentChatEnabled: true,
-    });
-  });
-
-  it("gives paid Scale unlimited River AI support", () => {
+  it("gives paid Scale unlimited River AI Buddy", () => {
     const limits = resolveSupportAiPlanLimits({
       planCode: "scale",
       billingCycle: "monthly",
@@ -72,16 +53,15 @@ describe("resolveSupportAiPlanLimits", () => {
 });
 
 describe("parsePlanSupportAiLimits + catalog", () => {
-  it("reads Starter support limits from subscription_plans limitations", () => {
+  it("reads Starter support as human chat only from catalog", () => {
     const parsed = parsePlanSupportAiLimits(
       { support: SUBSCRIPTION_PLAN_LIMITATION_PATCHES.starter.support },
       { planCode: "starter", billingCycle: "monthly", status: "active" },
     );
     expect(parsed).toMatchObject({
-      chatMax: 5,
-      chatFrequency: "monthly",
+      chatMax: 0,
       attachmentsAllowed: false,
-      agentChatEnabled: false,
+      agentChatEnabled: true,
     });
   });
 
@@ -95,15 +75,14 @@ describe("parsePlanSupportAiLimits + catalog", () => {
       limitations: { support: SUBSCRIPTION_PLAN_LIMITATION_PATCHES.scale.support },
     });
     expect(limits).toMatchObject({
-      chatMax: 50,
+      chatMax: 5,
       chatFrequency: "daily",
-      attachmentsMax: 50,
       attachmentsAllowed: true,
       agentChatEnabled: true,
     });
   });
 
-  it("reads Grow chat cap from Firestore support limitations", () => {
+  it("reads Grow catalog as human chat without Buddy", () => {
     const limits = resolveSupportAiPlanLimits({
       planCode: "grow",
       billingCycle: "monthly",
@@ -113,9 +92,8 @@ describe("parsePlanSupportAiLimits + catalog", () => {
       limitations: SUBSCRIPTION_PLAN_LIMITATION_PATCHES.grow,
     });
     expect(limits).toMatchObject({
-      chatMax: 10,
-      chatFrequency: "monthly",
-      attachmentsAllowed: true,
+      chatMax: 0,
+      attachmentsAllowed: false,
       agentChatEnabled: true,
     });
   });

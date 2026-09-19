@@ -17,7 +17,7 @@ describe("parsePlanSupportAccess", () => {
       { support: SUBSCRIPTION_PLAN_LIMITATION_PATCHES.starter.support },
       "starter",
     );
-    expect(starter).toEqual({ level: "community", chatEnabled: false });
+    expect(starter).toEqual({ level: "chat", chatEnabled: true });
   });
 
   it("treats capped chat object without agentChat as community-only", () => {
@@ -81,7 +81,7 @@ describe("resolveEffectiveSupportAccess", () => {
     expect(effective.level).toBe("chat");
   });
 
-  it("disables chat on Starter free mode", () => {
+  it("enables chat on Starter paid mode", () => {
     const planSupport = parsePlanSupportAccess(null, "starter");
     const effective = resolveEffectiveSupportAccess({
       planSupport,
@@ -90,7 +90,7 @@ describe("resolveEffectiveSupportAccess", () => {
       status: "active",
       isExpired: false,
     });
-    expect(effective.chatEnabled).toBe(false);
+    expect(effective.chatEnabled).toBe(true);
   });
 
   it("enables chat for paid Scale in grace period", () => {

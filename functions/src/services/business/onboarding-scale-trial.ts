@@ -3,8 +3,9 @@ import type { DocumentReference } from "firebase-admin/firestore";
 import { logAuditEvent } from "../observability/logging/logger";
 import { SubscriptionService } from "../subscriptions/subscription-service";
 import { TrialLifecycleService } from "../subscriptions/trial-lifecycle-service";
-
-const TRIAL_DAYS = 15;
+import { applyTrialOverlayToLimitations } from "../subscriptions/trial-policy";
+import { loadEffectiveTrialPolicy } from "../subscriptions/trial-policy-service";
+import { planSnapshotFields } from "../subscriptions/plan-snapshot";
 
 function addDays(base: Date, days: number): Date {
   const d = new Date(base);
@@ -12,14 +13,19 @@ function addDays(base: Date, days: number): Date {
   return d;
 }
 
+function isTrialRow(data: Record<string, unknown> | undefined): boolean {
+  return String(data?.billingCycle || "") === "trial";
+}
+
 /**
- * First workspace onboarding: Scale plan, 15-day trial (`billingCycle: trial`).
- * Uses `dates.expiresAt` (not `trialExpiresAt`) so subscription status UI counts days correctly.
- * @param {DocumentReference} businessRef The document reference to the business
+ * First workspace onboarding: published trial policy (default 15-day Scale).
  */
 export async function ensureScaleTrialSubscription(
   businessRef: DocumentReference,
 ): Promise<void> {
+  const policy = await loadEffectiveTrialPolicy();
+  if (!policy.enabled) return;
+
   const subsSnap = await businessRef
     .collection("subscriptions")
     .orderBy("createdAt", "desc")
@@ -27,25 +33,45 @@ export async function ensureScaleTrialSubscription(
     .get();
 
   const activatedAt = new Date();
-  const expiresAt = addDays(activatedAt, TRIAL_DAYS);
+  const expiresAt = addDays(activatedAt, policy.durationDays);
   const gracePeriodExpiresAt = new Date(expiresAt);
 
-  const scalePlan = await SubscriptionService.lookupPlanRowForCode("scale");
-  let planId = "scale";
+  const basePlan = await SubscriptionService.lookupPlanRowForCode(
+    policy.basedOnPlanCode,
+  );
+  let planId = policy.basedOnPlanCode;
   let planName = "Scale Plan";
+  let planData: Record<string, unknown> = {
+    code: policy.basedOnPlanCode,
+    name: planName,
+    limitations: {},
+  };
 
-  if (scalePlan) {
-    const p = scalePlan.planData as {
+  if (basePlan) {
+    const p = basePlan.planData as {
       name?: string;
-      pricing?: { monthly?: number };
+      limitations?: unknown;
+      capabilities?: unknown;
+      code?: string;
     };
-    planId = scalePlan.planId;
+    planId = basePlan.planId;
     planName = p.name || planName;
+    planData = {
+      ...basePlan.planData,
+      code: p.code || policy.basedOnPlanCode,
+      name: planName,
+      limitations: applyTrialOverlayToLimitations(
+        p.limitations,
+        policy.overlayLimitations,
+      ),
+    };
   }
+
+  const snapshot = planSnapshotFields(planData, activatedAt);
 
   const subPayload = TrialLifecycleService.withTrialBudgetMetadata(expiresAt, {
     planId,
-    planCode: "scale",
+    planCode: policy.basedOnPlanCode,
     planName,
     status: "active",
     billingCycle: "trial",
@@ -56,6 +82,8 @@ export async function ensureScaleTrialSubscription(
       renewalAt: Timestamp.fromDate(expiresAt),
       gracePeriodExpiresAt: Timestamp.fromDate(gracePeriodExpiresAt),
     },
+    ...snapshot,
+    trialTeamChatPreviewDays: policy.teamChatPreviewDays,
     updatedAt: FieldValue.serverTimestamp(),
   });
 
@@ -77,24 +105,22 @@ export async function ensureScaleTrialSubscription(
   const hasValidExpiry =
     data?.dates?.expiresAt != null &&
     String(data?.dates?.expiresAt) !== "";
-  const isScaleTrial =
-    String(data?.planCode || "").toLowerCase() === "scale" &&
-    String(data?.billingCycle || "") === "trial";
+  const alreadyTrial = isTrialRow(data);
 
-  if (isScaleTrial && hasValidExpiry) {
+  if (alreadyTrial && hasValidExpiry) {
     return;
   }
 
   const usedTrial = await TrialLifecycleService.hasUsedTrialBudget(
     businessRef.id,
   );
-  if (usedTrial && !isScaleTrial) {
+  if (usedTrial && !alreadyTrial) {
     return;
   }
 
-  if (!hasValidExpiry || !isScaleTrial) {
+  if (!hasValidExpiry || !alreadyTrial) {
     await subDoc.ref.set(subPayload, { merge: true });
-    if (!isScaleTrial) {
+    if (!alreadyTrial) {
       logAuditEvent("TRIAL_STARTED", {
         businessId: businessRef.id,
         subscriptionId: subDoc.id,

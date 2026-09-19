@@ -7,7 +7,7 @@ import {
   RawSubmissionStatus,
   RawSubmissionType,
 } from "./raw-submission-types";
-import { OnlineOrderLimitService } from "./online-order-limit-service";
+import { OnlineOrderLimitError, OnlineOrderLimitService } from "./online-order-limit-service";
 import { allocateWalkInQueueNumber } from "./walk-in-queue-service";
 import { sendNewOrderPushForSubmission } from "../notifications/new-order-push-service";
 import {
@@ -97,6 +97,17 @@ export class RawSubmissionService {
       submissionType === "PLACE_ORDER" ||
       submissionType === "REQUEST_COLLECTION"
     ) {
+      const quota = await OnlineOrderLimitService.resolveOnlineOrdersQuota(
+        businessId,
+      );
+      if (quota && quota.max <= 0) {
+        throw new OnlineOrderLimitError(
+          "QR portal orders are not included on the Free plan. Upgrade to receive customer orders.",
+          0,
+          0,
+          quota.frequency,
+        );
+      }
       overOnlineOrderLimit =
         await OnlineOrderLimitService.willCreateBeyondOnlineOrderLimit(
           businessId,

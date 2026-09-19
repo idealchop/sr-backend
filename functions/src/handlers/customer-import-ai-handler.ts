@@ -16,9 +16,25 @@ import {
   assertInteractiveAiQuota,
   sendAiQuotaExceeded,
 } from "../services/ai/ai-tool-quota-service";
+import { SubscriptionService } from "../services/subscriptions/subscription-service";
+import { isGrowPlan, isScalePlanFamily } from "../utils/subscription-plan-codes";
 
 function getUser(req: Request) {
   return (req as { user?: { uid: string } }).user;
+}
+
+async function assertCustomerImportPlan(
+  businessId: string,
+  res: Response,
+): Promise<boolean> {
+  const sub = await SubscriptionService.getSubscriptionStatus(businessId);
+  const code = String((sub as { planCode?: string }).planCode || "free");
+  if (isGrowPlan(code) || isScalePlanFamily(code)) return true;
+  res.status(403).json({
+    error: "CUSTOMER_IMPORT_PLAN_REQUIRED",
+    message: "Customer import is included on Grow and Scale.",
+  });
+  return false;
 }
 
 export async function getCustomerImportAiEligibility(
@@ -27,6 +43,7 @@ export async function getCustomerImportAiEligibility(
 ) {
   const { businessId } = req.params;
   try {
+    if (!(await assertCustomerImportPlan(businessId, res))) return;
     const snap = await db.collection("businesses").doc(businessId).get();
     if (!snap.exists) {
       res.status(404).json({ error: "Business not found" });
@@ -55,6 +72,7 @@ export async function postCustomerImportAiParse(req: Request, res: Response) {
     return;
   }
   try {
+    if (!(await assertCustomerImportPlan(businessId, res))) return;
     const bizRef = db.collection("businesses").doc(businessId);
     const bizSnap = await bizRef.get();
     if (!bizSnap.exists) {
@@ -97,6 +115,7 @@ export async function postCustomerImportAiProfile(req: Request, res: Response) {
   }
 
   try {
+    if (!(await assertCustomerImportPlan(businessId, res))) return;
     const result = await CustomerImportProfileService.profileImport(
       businessId,
       rawRows as ExtractedCustomerDraft[],
@@ -155,6 +174,7 @@ export async function postCustomerImportAiCommit(req: Request, res: Response) {
   }
 
   try {
+    if (!(await assertCustomerImportPlan(businessId, res))) return;
     const bizSnap = await db.collection("businesses").doc(businessId).get();
     if (!bizSnap.exists) {
       res.status(404).json({ error: "Business not found" });

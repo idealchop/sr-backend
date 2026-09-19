@@ -6,6 +6,10 @@ import {
   getPasswordResetEmail,
   SMART_REFILL_EMAIL_LOGO_SRC,
 } from "./auth-transactional-email";
+import {
+  buildSmartRefillEmailLegalFooterPlainText,
+  buildSmartRefillEmailLegalFooterRowHtml,
+} from "./smartrefill-email-legal-footer";
 
 // eslint-disable-next-line valid-jsdoc
 // eslint-disable-next-line valid-jsdoc
@@ -61,7 +65,6 @@ export function getTeamWorkspaceInviteEmail(
   text: string;
 } {
   const brandColor = "#44c1ba";
-  const year = new Date().getFullYear();
   const inviter = escapeHtmlForEmail(
     input.inviterName.trim() || "A workspace representative",
   );
@@ -94,7 +97,7 @@ export function getTeamWorkspaceInviteEmail(
     `Accept this invitation (${days}-day link validity):\n${url}\n\n` +
     `A copy is sent to ${input.inviterName.trim() || "the inviting party"} for operational traceability. ` +
     "If you did not expect this message, you may disregard it.\n\n" +
-    `—\nSmart Refill\nRiver PH · https://riverph.com/\n© ${year} · All rights reserved`;
+    buildSmartRefillEmailLegalFooterPlainText();
 
   const mailtoHref = `mailto:${input.inviteeEmail.trim()}`;
   const mailtoHrefEsc = escapeHtmlForEmail(mailtoHref);
@@ -274,26 +277,7 @@ export function getTeamWorkspaceInviteEmail(
                   </table>
                 </td>
               </tr>
-              <tr>
-                <td style="padding:24px 28px;background-color:#f8fafc;border-top:1px solid #e2e8f0;">
-                  <p style="margin:0;font-size:14px;font-weight:700;line-height:1.45;color:${brandColor};text-align:center;">
-                    River&nbsp;PH — disciplined infrastructure for water entrepreneurs.
-                  </p>
-                  <p style="margin:10px 0 0;font-size:12px;color:#64748b;line-height:1.5;text-align:center;">
-                    Learn more:&nbsp;<a href="https://riverph.com" target="_blank" rel="noopener noreferrer"
-                      style="color:${brandColor};font-weight:600;text-decoration:none;">riverph.com</a>
-                  </p>
-                  <div style="margin-top:18px;padding-top:16px;border-top:1px solid #e2e8f8;font-size:10px;line-height:1.55;
-                    color:#7b8794;text-align:left;">
-                    <strong>DISCLAIMER:</strong>&nbsp;This communication is confidential and intended strictly for the named
-                    recipient(s). If misdelivered, please notify the sender and delete this message. Personal data processed in
-                    line with the Data Privacy Act of 2012 (<abbr title="Republic Act">RA</abbr>&nbsp;10173).
-                  </div>
-                  <p style="margin:16px 0 0;font-size:11px;color:#64748b;text-align:center;line-height:1.5;">
-                    ©&nbsp;${year}&nbsp;Smart&nbsp;Refill · All rights reserved
-                  </p>
-                </td>
-              </tr>
+              ${buildSmartRefillEmailLegalFooterRowHtml()}
             </table>
           </td>
         </tr>

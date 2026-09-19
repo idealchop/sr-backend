@@ -257,7 +257,7 @@ function assertTeamHubEligible(sub: {
   const plan = (sub.planCode || "starter").toLowerCase();
   const cycle = (sub.billingCycle || "").toLowerCase();
   if (plan === "starter" || plan === "free") {
-    return "Team invitations are not available on the Starter plan.";
+    return "Team invitations are not available on Free or Starter.";
   }
   if (cycle === "trial" || sub.status === "trial") {
     return "Team invitations are not available during the trial period.";

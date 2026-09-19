@@ -9,19 +9,11 @@ import { buildDormantDigestEmail } from
 describe("morning-brief-scheduler-service", () => {
   const monday7amManila = new Date("2026-05-31T23:00:00.000Z");
 
-  it("runs auto brief once per day at configured hour", () => {
+  it("does not auto-run morning brief while the flag is hard-disabled", () => {
     expect(
       shouldRunAutoMorningBriefNow(
         { autoMorningBriefEnabled: true, dormantPushHour: 7 },
         undefined,
-        monday7amManila,
-      ),
-    ).toBe(true);
-
-    expect(
-      shouldRunAutoMorningBriefNow(
-        { autoMorningBriefEnabled: true, dormantPushHour: 7 },
-        "2026-06-01",
         monday7amManila,
       ),
     ).toBe(false);

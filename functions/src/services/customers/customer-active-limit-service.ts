@@ -71,11 +71,52 @@ export class CustomerActiveLimitService {
   }
 
   /**
-   * After a plan downgrade: if active sukis exceed the new cap, set all active sukis inactive.
+   * After a plan higher than Free moves to Free: set every active suki inactive
+   * so the owner reactivates up to the Free cap.
    * @param {string} businessId Business id.
-   * @param {number | null} cap Max active sukis from plan; null skips enforcement.
    * @return {Promise<number>} Count of customers deactivated.
    */
+  static async deactivateAllActiveCustomersForFreePlan(
+    businessId: string,
+  ): Promise<number> {
+    const customers = await CustomerService.getCustomersByBusiness(businessId);
+    const active = customers.filter((c) => isCustomerActiveForLimit(c.status));
+    const toDeactivate = active.filter((c) => c.id);
+    if (toDeactivate.length === 0) return 0;
+
+    const chunkSize = 400;
+    for (let i = 0; i < toDeactivate.length; i += chunkSize) {
+      const chunk = toDeactivate.slice(i, i + chunkSize);
+      const batch = db.batch();
+      for (const customer of chunk) {
+        const customerId = customer.id;
+        if (!customerId) continue;
+        const ref = db
+          .collection("businesses")
+          .doc(businessId)
+          .collection("customers")
+          .doc(customerId);
+        batch.update(ref, {
+          status: "inactive",
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
+    const count = toDeactivate.length;
+    const cap = (await this.resolveActiveCustomerCap(businessId)) ?? 100;
+    logger.info(
+      `Deactivated ${count} active customers for business ${businessId} (Free plan)`,
+    );
+    await notifyBusinessMembers(businessId, {
+      title: "Sukis set inactive for Free plan",
+      message:
+        `All ${count} active suki${count === 1 ? "" : "s"} were set to inactive because this station moved to Free (${cap} active sukis). Reactivate up to ${cap} from your suki list. Recording an order for an inactive suki will ask you to set them active.`,
+      type: "warning",
+      metadata: { reviewTab: "customers", category: "customer" },
+    });
+    return count;
+  }
   static async applyPlanDowngradeActivePolicy(
     businessId: string,
     cap: number | null,

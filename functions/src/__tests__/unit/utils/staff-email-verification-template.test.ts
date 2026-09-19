@@ -19,7 +19,7 @@ describe("getStaffEmailVerificationEmail", () => {
     expect(tpl.html).toContain("Alphamart Water Station");
     expect(tpl.html).toContain("Rider / Operator");
     expect(tpl.html).toContain("What happens next");
-    expect(tpl.html).toContain("DISCLAIMER");
+    expect(tpl.html).toContain("Privacy Policy");
     expect(tpl.text).toContain(link);
     expect(tpl.brevoTag).toBe("email_verification_staff");
   });

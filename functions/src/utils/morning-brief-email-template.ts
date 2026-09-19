@@ -1,4 +1,8 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
+import {
+  buildSmartRefillEmailLegalFooterHtml,
+  buildSmartRefillEmailLegalFooterPlainText,
+} from "./smartrefill-email-legal-footer";
 
 export type MorningBriefEmailInput = {
   ownerName: string;
@@ -50,6 +54,7 @@ export function buildMorningBriefEmail(
     <a href="${escapeHtmlForEmail(input.dashboardUrl)}" style="display:inline-block;background:#44c1ba;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 20px;border-radius:12px;">Open dashboard</a>
     ${historyBlock}
     <p style="margin:20px 0 0;font-size:12px;color:#64748b;">Good morning, ${escapeHtmlForEmail(input.ownerName)} — bukas ang full River AI history sa app.</p>
+    ${buildSmartRefillEmailLegalFooterHtml()}
   </div>
 </body>
 </html>`;
@@ -63,7 +68,7 @@ export function buildMorningBriefEmail(
     input.historyUrl ? `History: ${input.historyUrl}` : "",
   ]
     .filter(Boolean)
-    .join("\n");
+    .join("\n") + "\n\n" + buildSmartRefillEmailLegalFooterPlainText();
 
   return { subject, html, text, brevoTag: "morning_brief_email" };
 }

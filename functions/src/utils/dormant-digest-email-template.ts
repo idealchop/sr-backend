@@ -1,4 +1,8 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
+import {
+  buildSmartRefillEmailLegalFooterHtml,
+  buildSmartRefillEmailLegalFooterPlainText,
+} from "./smartrefill-email-legal-footer";
 
 export type DormantDigestEmailInput = {
   businessName: string;
@@ -78,6 +82,7 @@ export function buildDormantDigestEmail(
     <p style="${footerStyle}">
       You receive this because weekly email summary is on in Account → Alerts.
     </p>
+    ${buildSmartRefillEmailLegalFooterHtml()}
   </div>
 </body>
 </html>`;
@@ -93,6 +98,7 @@ export function buildDormantDigestEmail(
     textLines.push("", `River AI brief: ${input.morningBriefSummary.trim()}`);
   }
   textLines.push("", `Open Forecast: ${input.dashboardUrl}`);
+  textLines.push("", buildSmartRefillEmailLegalFooterPlainText());
 
   return {
     subject,

@@ -51,6 +51,7 @@ export async function postRequestDemo(
         parseString(body.stationCount, 20) :
         undefined;
     const requestedDate = parseString(body.requestedDate, 40) || undefined;
+    const requestedTime = parseString(body.requestedTime, 10) || undefined;
 
     if (!name || !phone || !businessName) {
       res.status(400).json({ error: "Missing required fields" });
@@ -64,6 +65,7 @@ export async function postRequestDemo(
       businessName,
       stationCount,
       requestedDate,
+      requestedTime,
     });
 
     res.status(200).json({ success: true });

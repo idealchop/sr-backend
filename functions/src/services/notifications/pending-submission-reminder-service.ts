@@ -7,6 +7,7 @@ import {
   resolveNotificationPreferencesFromUiConfig,
   resolveQuietHoursFromUiConfig,
 } from "../../utils/notification-preferences";
+import { isBusinessEligibleForStationAlerts } from "../../utils/scale-plan-access";
 import { manilaDateKey, manilaHour } from "../../utils/philippine-datetime";
 import {
   deleteOwnerDevicesByTokens,
@@ -73,6 +74,9 @@ export async function sendPendingSubmissionReminderForBusiness(
   businessId: string,
   now = new Date(),
 ): Promise<{ sent: boolean; pendingCount: number }> {
+  if (!(await isBusinessEligibleForStationAlerts(businessId))) {
+    return { sent: false, pendingCount: 0 };
+  }
   const businessRef = db.collection("businesses").doc(businessId);
   const businessDoc = await businessRef.get();
   if (!businessDoc.exists) return { sent: false, pendingCount: 0 };

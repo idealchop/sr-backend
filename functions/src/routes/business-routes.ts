@@ -49,6 +49,10 @@ import {
   postCommunityInquiryReplyHandler,
 } from "../handlers/community-inquiry-handler";
 import { validateBusinessAccess } from "../middleware/business-middleware";
+import {
+  getInactivityStatus,
+  postInactivityReactivate,
+} from "../handlers/inactivity-handler";
 import { getOfflineSnapshot } from "../handlers/offline-snapshot-handler";
 import {
   deleteRiderMessengerLink,
@@ -107,6 +111,18 @@ router.post(
   postCommunityInquiryReplyHandler,
 );
 router.get("/:businessId", validateFirebaseIdToken, getBusiness);
+router.get(
+  "/:businessId/inactivity-status",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  getInactivityStatus,
+);
+router.post(
+  "/:businessId/inactivity/reactivate",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  postInactivityReactivate,
+);
 router.put("/:businessId", validateFirebaseIdToken, updateBusiness);
 router.delete("/:businessId", validateFirebaseIdToken, deleteBusiness);
 router.post("/bulk-delete", validateFirebaseIdToken, deleteMultipleBusinesses);

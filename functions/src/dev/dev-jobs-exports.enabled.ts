@@ -2,11 +2,14 @@
 export const DEV_JOBS_REGISTERED = true;
 export {
   purgeExpiredProactiveScheduleWeekSnapshotsDev,
+  generateForecastScheduleWeekDev,
+  scoreForecastScheduleWeekDev,
   purgeExpiredTeamChatsDev,
   backfillCustomerLastFulfilledDev,
   reconcileAnalyticsSnapshotsDev,
   dormantDigestNotificationDev,
   morningOwnerIntelligenceDev,
+  inactiveAccountDeactivationDev,
   proactiveInsightPushNotificationDev,
   pmRecurrenceSchedulerDev,
   subscriptionAutoRenewSchedulerDev,

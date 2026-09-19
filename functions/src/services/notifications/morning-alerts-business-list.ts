@@ -1,13 +1,12 @@
 import { db } from "../../config/firebase-admin";
-import {
-  resolveNotificationPreferencesFromUiConfig,
-} from "../../utils/notification-preferences";
+import { resolveOwnerMorningAlertsEnabled } from "../../utils/notification-preferences";
+import { isBusinessEligibleForStationAlerts } from "../../utils/scale-plan-access";
 import { manilaHour } from "../../utils/philippine-datetime";
 
 const BUSINESSES_PER_RUN = 200;
 
 /**
- * Businesses with auto morning brief or weekly email digest enabled.
+ * Scale businesses with owner email alerts enabled.
  * @param {number} [limit] Max businesses to return.
  * @return {Promise<Array<string>>} Business ids.
  */
@@ -21,7 +20,15 @@ export async function listBusinessesForMorningAlerts(
     .get();
 
   if (!snap.empty) {
-    return snap.docs.map((doc) => doc.id);
+    const ids: string[] = [];
+    for (const doc of snap.docs) {
+      if (await isBusinessEligibleForStationAlerts(doc.id)) {
+        ids.push(doc.id);
+      } else {
+        void doc.ref.set({ ownerMorningAlertsEnabled: false }, { merge: true });
+      }
+    }
+    return ids;
   }
 
   // Self-heal: businesses enabled before denormalized flag shipped.
@@ -34,25 +41,14 @@ export async function listBusinessesForMorningAlerts(
   const ids: string[] = [];
   for (const doc of fallback.docs) {
     const uiConfig = (doc.data().uiConfig ?? {}) as Record<string, unknown>;
-    if (resolveOwnerMorningAlertsEnabledFromUi(uiConfig)) {
+    if (resolveOwnerMorningAlertsEnabled(uiConfig) &&
+      (await isBusinessEligibleForStationAlerts(doc.id))) {
       ids.push(doc.id);
       void doc.ref.set({ ownerMorningAlertsEnabled: true }, { merge: true });
     }
     if (ids.length >= limit) break;
   }
   return ids;
-}
-
-function resolveOwnerMorningAlertsEnabledFromUi(
-  uiConfig: Record<string, unknown>,
-): boolean {
-  const prefs = resolveNotificationPreferencesFromUiConfig(uiConfig);
-  return (
-    prefs.autoMorningBriefEnabled === true ||
-    prefs.dormantEmailDigestEnabled === true ||
-    prefs.morningBriefEmailEnabled === true ||
-    prefs.paymentReminderEmailEnabled === true
-  );
 }
 
 export function isMorningAlertHour(now = new Date()): boolean {

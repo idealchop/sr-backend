@@ -48,6 +48,7 @@ import type {
   Transaction,
 } from "./transaction-types";
 import { enrichLedgerProductLines } from "../products/enrich-ledger-product-lines";
+import { ContainerDailyLimitService } from "../subscriptions/container-daily-limit-service";
 
 export async function addTransaction(
   businessId: string,
@@ -168,6 +169,12 @@ export async function addTransaction(
       transaction.waterRefills || [],
       transaction.items || [],
     );
+
+    await ContainerDailyLimitService.assertCanAdd(businessId, {
+      type: transaction.type || "delivery",
+      deliveryStatus: transaction.deliveryStatus,
+      waterRefills: enriched.waterRefills,
+    });
 
     const newTransaction: Transaction = {
       businessId,

@@ -12,9 +12,18 @@ export type BrevoOutboundEmailPayload = {
   cc?: BrevoEmailContact[] | null;
   bcc?: BrevoEmailContact[] | null;
   subject?: string | null;
+  tags?: string[] | null;
 };
 
 const DEFAULT_DEV_EMAIL_SINK = "support@riverph.com";
+
+/**
+ * Transactional tags that must reach the real recipient even on Dev/emulator
+ * redirect (e.g. Request-a-Demo confirmation to the inquiree who just opted in).
+ */
+const DEV_DELIVER_AS_IS_TAGS = new Set([
+  "marketing-request-demo-confirm",
+]);
 
 function isFunctionsEmulator(): boolean {
   return (
@@ -64,6 +73,11 @@ export function applyDevOutboundEmailRedirect(
   payload: BrevoOutboundEmailPayload,
 ): { redirected: boolean; originalRecipients: string[]; sink: string } {
   if (!shouldRedirectOutboundEmail()) {
+    return { redirected: false, originalRecipients: [], sink: "" };
+  }
+
+  const tags = Array.isArray(payload.tags) ? payload.tags : [];
+  if (tags.some((t) => DEV_DELIVER_AS_IS_TAGS.has(String(t || "").trim()))) {
     return { redirected: false, originalRecipients: [], sink: "" };
   }
 

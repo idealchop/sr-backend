@@ -24,6 +24,8 @@ import {
 import { LedgerScanService } from "../services/ai/ledger-scan-service";
 import { LedgerScanCommitService } from "../services/ai/ledger-scan-commit-service";
 import { InventoryScanService } from "../services/ai/inventory-scan-service";
+import { SubscriptionService } from "../services/subscriptions/subscription-service";
+import { planAllowsDuplicateAiValidation } from "../utils/subscription-plan-codes";
 
 function getUser(req: Request) {
   return (req as { user?: { uid: string } }).user;
@@ -194,6 +196,15 @@ export async function postDuplicatesDetect(req: Request, res: Response) {
 export async function postDuplicatesValidateAi(req: Request, res: Response) {
   const { businessId } = req.params;
   try {
+    const sub = await SubscriptionService.getSubscriptionStatus(businessId);
+    if (!planAllowsDuplicateAiValidation(String(sub.planCode || "free"))) {
+      res.status(403).json({
+        error: "DUPLICATE_AI_PLAN_REQUIRED",
+        message:
+          "AI duplicate validation is included on Scale and Enterprise. Free through Grow use detailed comparison only.",
+      });
+      return;
+    }
     assertAiFeatureAvailable("duplicates.validate");
     await assertInteractiveAiQuota(businessId);
     const [customers, businessDoc] = await Promise.all([

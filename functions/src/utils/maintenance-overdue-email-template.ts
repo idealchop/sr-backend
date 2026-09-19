@@ -1,4 +1,8 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
+import {
+  buildSmartRefillEmailLegalFooterHtml,
+  buildSmartRefillEmailLegalFooterPlainText,
+} from "./smartrefill-email-legal-footer";
 
 export type MaintenanceOverdueEmailInput = {
   ownerName: string;
@@ -41,6 +45,7 @@ export function buildMaintenanceOverdueOwnerEmail(
     <ul style="margin:0 0 16px;padding-left:20px;">${listHtml}</ul>
     ${extra}
     <a href="${escapeHtmlForEmail(input.dashboardUrl)}" style="display:inline-block;background:#44c1ba;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 20px;border-radius:12px;">Open Plant ops</a>
+    ${buildSmartRefillEmailLegalFooterHtml()}
   </div>
 </body>
 </html>`;
@@ -49,6 +54,8 @@ export function buildMaintenanceOverdueOwnerEmail(
     `${input.overdueCount} overdue maintenance tasks`,
     ...input.overdueNames.slice(0, 12).map((n) => `• ${n}`),
     `Dashboard: ${input.dashboardUrl}`,
+    "",
+    buildSmartRefillEmailLegalFooterPlainText(),
   ].join("\n");
 
   return { subject, html, text, brevoTag: "maintenance_overdue_email" };

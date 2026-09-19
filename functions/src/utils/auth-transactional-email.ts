@@ -1,5 +1,9 @@
 /* eslint-disable max-len */
 import { getStaffEmailVerificationEmail } from "./staff-email-verification-template";
+import {
+  buildSmartRefillEmailLegalFooterPlainText,
+  buildSmartRefillEmailLegalFooterRowHtml,
+} from "./smartrefill-email-legal-footer";
 
 /** Shared masthead + layout for account security emails (verify, reset password). */
 
@@ -77,7 +81,6 @@ export function buildAuthTransactionalEmail(
   text: string;
   brevoTag: string;
 } {
-  const year = new Date().getFullYear();
   const name = escapeHtmlForEmail(input.greetingName.trim() || "there");
   const url = input.actionUrl.trim();
   const urlEsc = escapeHtmlForEmail(url);
@@ -117,7 +120,7 @@ export function buildAuthTransactionalEmail(
     `${input.textIntro}\n\n` +
     `${input.ctaLabel}:\n${url}\n\n` +
     "If you did not request this, you can ignore this email.\n\n" +
-    `—\nSmart Refill\nRiver PH · https://riverph.com/\n© ${year} · All rights reserved`;
+    buildSmartRefillEmailLegalFooterPlainText();
 
   const html = `
       <!DOCTYPE html>
@@ -221,17 +224,7 @@ export function buildAuthTransactionalEmail(
                   </table>
                 </td>
               </tr>
-              <tr>
-                <td style="padding:24px 28px;background-color:#f8fafc;border-top:1px solid #e2e8f0;">
-                  <p style="margin:0;font-size:14px;font-weight:700;color:${BRAND_COLOR};text-align:center;">
-                    River&nbsp;PH — disciplined infrastructure for water entrepreneurs.
-                  </p>
-                  <p style="margin:10px 0 0;font-size:12px;color:#64748b;text-align:center;">
-                    <a href="https://riverph.com" style="color:${BRAND_COLOR};font-weight:600;text-decoration:none;">riverph.com</a>
-                  </p>
-                  <p style="margin:16px 0 0;font-size:11px;color:#64748b;text-align:center;">©&nbsp;${year}&nbsp;Smart&nbsp;Refill</p>
-                </td>
-              </tr>
+              ${buildSmartRefillEmailLegalFooterRowHtml()}
             </table>
           </td>
         </tr>
@@ -377,7 +370,6 @@ export function getOwnerEmailVerificationEmail(input: {
   email: string;
   verificationLink: string;
 }): { subject: string; html: string; text: string; brevoTag: string } {
-  const year = new Date().getFullYear();
   const emailPlain = input.email.trim();
   const emailEsc = escapeHtmlForEmail(emailPlain);
   const mailtoHrefEsc = escapeHtmlForEmail(`mailto:${emailPlain}`);
@@ -410,7 +402,7 @@ export function getOwnerEmailVerificationEmail(input: {
     `— What happens next —\n${stepsPlain}\n` +
     `Confirm your email:\n${url}\n\n` +
     "If you did not create a Smart Refill account, no action is required.\n" +
-    `\n—\nSmart Refill\nRiver PH · https://riverph.com/\n© ${year} · All rights reserved`;
+    `\n${buildSmartRefillEmailLegalFooterPlainText()}`;
 
   const html = `
       <!DOCTYPE html>
@@ -549,26 +541,7 @@ export function getOwnerEmailVerificationEmail(input: {
                   </table>
                 </td>
               </tr>
-              <tr>
-                <td style="padding:24px 28px;background-color:#f8fafc;border-top:1px solid #e2e8f0;">
-                  <p style="margin:0;font-size:14px;font-weight:700;line-height:1.45;color:${BRAND_COLOR};text-align:center;">
-                    River&nbsp;PH — disciplined infrastructure for water entrepreneurs.
-                  </p>
-                  <p style="margin:10px 0 0;font-size:12px;color:#64748b;line-height:1.5;text-align:center;">
-                    Learn more:&nbsp;<a href="https://riverph.com" target="_blank" rel="noopener noreferrer"
-                      style="color:${BRAND_COLOR};font-weight:600;text-decoration:none;">riverph.com</a>
-                  </p>
-                  <div style="margin-top:18px;padding-top:16px;border-top:1px solid #e2e8f8;font-size:10px;line-height:1.55;
-                    color:#7b8794;text-align:left;">
-                    <strong>DISCLAIMER:</strong>&nbsp;This communication is confidential and intended strictly for the named
-                    recipient(s). If misdelivered, please notify the sender and delete this message. Personal data processed in
-                    line with the Data Privacy Act of 2012 (<abbr title="Republic Act">RA</abbr>&nbsp;10173).
-                  </div>
-                  <p style="margin:16px 0 0;font-size:11px;color:#64748b;text-align:center;line-height:1.5;">
-                    ©&nbsp;${year}&nbsp;Smart&nbsp;Refill · All rights reserved
-                  </p>
-                </td>
-              </tr>
+              ${buildSmartRefillEmailLegalFooterRowHtml()}
             </table>
           </td>
         </tr>

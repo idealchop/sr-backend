@@ -18,6 +18,7 @@ import { buildAtRiskDeliverySnapshot } from "../../utils/at-risk-delivery-alert"
 import { buildSubscriptionLifecycleSnapshot } from "../../utils/subscription-lifecycle-alert";
 import { listPendingOrderCustomerIds } from "./pending-submission-reminder-service";
 import { resolveNotificationPreferencesFromUiConfig, resolveQuietHoursFromUiConfig } from "../../utils/notification-preferences";
+import { isBusinessEligibleForStationAlerts } from "../../utils/scale-plan-access";
 import { manilaDateKey, manilaHour } from "../../utils/philippine-datetime";
 import {
   deleteOwnerDevicesByTokens,
@@ -617,6 +618,19 @@ export async function sendProactiveInsightPushesForBusiness(
   lowStock: boolean;
   subscription: boolean;
 }> {
+  if (!(await isBusinessEligibleForStationAlerts(businessId))) {
+    return {
+      payment: false,
+      maintenance: false,
+      variance: false,
+      reorder: false,
+      sla: false,
+      containerDeficit: false,
+      atRisk: false,
+      lowStock: false,
+      subscription: false,
+    };
+  }
   const [
     payment,
     maintenance,

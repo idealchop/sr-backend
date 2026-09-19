@@ -82,4 +82,28 @@ describe("outbound-email-safety", () => {
     process.env.SUPPORT_EMAIL = "Support@RiverPH.com";
     expect(resolveDevEmailSink()).toBe("support@riverph.com");
   });
+
+  it("delivers Request-a-Demo inquiree confirmation as-is on Dev", () => {
+    process.env.SMARTREFILL_DEPLOY_TIER = "dev";
+    const payload = {
+      to: [{ email: "prospect@example.com", name: "Prospect" }],
+      subject: "Your Smart Refill demo is scheduled",
+      tags: ["marketing-request-demo-confirm"],
+    };
+    const result = applyDevOutboundEmailRedirect(payload);
+    expect(result.redirected).toBe(false);
+    expect(payload.to?.[0]?.email).toBe("prospect@example.com");
+    expect(payload.subject).toBe("Your Smart Refill demo is scheduled");
+  });
+
+  it("still redirects team demo-lead mail on Dev", () => {
+    process.env.SMARTREFILL_DEPLOY_TIER = "dev";
+    const payload = {
+      to: [{ email: "support@riverph.com" }],
+      subject: "Demo request — Aqua",
+      tags: ["marketing-request-demo"],
+    };
+    const result = applyDevOutboundEmailRedirect(payload);
+    expect(result.redirected).toBe(true);
+  });
 });

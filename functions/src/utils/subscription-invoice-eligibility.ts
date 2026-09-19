@@ -11,7 +11,7 @@ export function subscriptionRowEligibleForInvoicePdf(
   if (billingCycle === "trial") return false;
 
   const planCode = String(sub.planCode ?? "").toLowerCase();
-  if (planCode === "starter") return false;
+  if (planCode === "free") return false;
 
   const priceRaw = sub.price;
   const price = typeof priceRaw === "number" ? priceRaw : Number(priceRaw);

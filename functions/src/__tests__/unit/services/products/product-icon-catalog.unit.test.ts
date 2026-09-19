@@ -37,9 +37,9 @@ describe("mergeProductIcons", () => {
         active: true,
       },
     ]);
-    expect(icons.map((icon) => icon.id)).toEqual(["Round Gallon", "Slim Gallon"]);
+    expect(icons.map((icon) => icon.id)).toEqual(["round-gallon", "slim-gallon"]);
+    expect(icons.map((icon) => icon.name)).toEqual(["Round gallon", "Slim gallon"]);
     expect(icons.some((icon) => icon.id === "droplets")).toBe(false);
-    expect(icons.some((icon) => icon.id === "round-gallon")).toBe(false);
   });
 
   it("ignores lucide-only CMS rows so placeholders stay out of the picker", () => {
@@ -55,6 +55,36 @@ describe("mergeProductIcons", () => {
     expect(icons.map((icon) => icon.id)).toEqual(
       SEEDED_PRODUCT_ICONS.map((icon) => icon.id),
     );
+  });
+
+  it("collapses CMS round/slim aliases onto one chip each", () => {
+    const icons = mergeProductIcons([
+      {
+        id: "roundgallon",
+        name: "Round Gallon",
+        imageUrl: "https://example.com/Round.svg",
+        sortOrder: 1,
+        active: true,
+        waterContainer: true,
+      },
+      {
+        id: "round-gallon",
+        name: "Round gallon",
+        imageUrl: "https://example.com/round-seed.svg",
+        sortOrder: 1,
+        active: true,
+        waterContainer: true,
+      },
+      {
+        id: "slimgallon",
+        name: "Slim Gallon",
+        imageUrl: "https://example.com/Slim.svg",
+        sortOrder: 3,
+        active: true,
+        waterContainer: true,
+      },
+    ]);
+    expect(icons.map((icon) => icon.id)).toEqual(["round-gallon", "slim-gallon"]);
   });
 
   it("keeps waterContainer so SmartRefill can tell gallon/bottle artwork", () => {

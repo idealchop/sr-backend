@@ -1,5 +1,9 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
 import { webinarEmailActionButtonsHtml } from "./webinar-email-cta";
+import {
+  buildSmartRefillEmailLegalFooterHtml,
+  buildSmartRefillEmailLegalFooterPlainText,
+} from "./smartrefill-email-legal-footer";
 
 export type GuestWebinarInviteEmailInput = {
   displayName: string;
@@ -52,6 +56,7 @@ export function buildGuestWebinarInviteEmail(
     <p style="margin:12px 0 0;font-size:12px;line-height:1.5;color:#94a3b8;">
       Need to cancel? <a href="${escapeHtmlForEmail(input.cancelUrl)}" style="color:#64748b;">Cancel registration</a>
     </p>
+    ${buildSmartRefillEmailLegalFooterHtml()}
   </div>
 </body>
 </html>`;
@@ -68,7 +73,7 @@ export function buildGuestWebinarInviteEmail(
     `Rate & feedback: ${input.feedbackUrl}`,
     "",
     `Cancel: ${input.cancelUrl}`,
-  ].join("\n");
+  ].join("\n") + "\n\n" + buildSmartRefillEmailLegalFooterPlainText();
 
   return {
     subject,
@@ -119,6 +124,7 @@ export function buildGuestWebinarReminderEmail(
     <p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:#94a3b8;">
       <a href="${escapeHtmlForEmail(input.cancelUrl)}" style="color:#64748b;">Cancel registration</a>
     </p>
+    ${buildSmartRefillEmailLegalFooterHtml()}
   </div>
 </body>
 </html>`;
@@ -134,7 +140,7 @@ export function buildGuestWebinarReminderEmail(
     `Join: ${input.joinUrl}`,
     `Rate & feedback: ${input.feedbackUrl}`,
     `Cancel: ${input.cancelUrl}`,
-  ].join("\n");
+  ].join("\n") + "\n\n" + buildSmartRefillEmailLegalFooterPlainText();
 
   return {
     subject,

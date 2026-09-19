@@ -1,4 +1,8 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
+import {
+  buildSmartRefillEmailLegalFooterHtml,
+  buildSmartRefillEmailLegalFooterPlainText,
+} from "./smartrefill-email-legal-footer";
 
 export type ResourcesVideoPublishedOwnerEmailInput = {
   ownerName: string;
@@ -31,6 +35,7 @@ export function buildResourcesVideoPublishedOwnerEmail(
       <p style="margin:8px 0 0;font-size:13px;line-height:1.45;color:#64748b;">Open Resources to watch it on your station dashboard.</p>
     </div>
     <a href="${escapeHtmlForEmail(input.watchUrl)}" style="display:inline-block;background:#44c1ba;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 20px;border-radius:12px;">Watch video</a>
+    ${buildSmartRefillEmailLegalFooterHtml()}
   </div>
 </body>
 </html>`;
@@ -42,6 +47,8 @@ export function buildResourcesVideoPublishedOwnerEmail(
     `${videoName} is now available for ${input.businessName}.`,
     "",
     `Watch: ${input.watchUrl}`,
+    "",
+    buildSmartRefillEmailLegalFooterPlainText(),
   ].join("\n");
 
   return {

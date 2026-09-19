@@ -25,6 +25,7 @@ import {
   subscriptionPlanRowMatchesCode,
 } from "../utils/subscription-addon-plan-limits";
 import { subscriptionRowEligibleForInvoicePdf } from "../utils/subscription-invoice-eligibility";
+import { loadPublicSubscriptionCatalog } from "../services/subscriptions/subscription-catalog-query";
 import { formatFirestorePhilippineDate } from "../utils/philippine-datetime";
 
 /**
@@ -85,42 +86,34 @@ const checkBusinessAccess = async (uid: string, businessId: string) => {
 export const listPlans = async (req: Request, res: Response) => {
   try {
     const { search } = req.query;
-    const query: any = db.collection("subscription_plans");
+    const catalog = await loadPublicSubscriptionCatalog();
+    let plans = catalog.plans.map((plan) => ({
+      ...plan,
+      price: plan.pricing.monthly,
+      pricing: {
+        monthly: plan.pricing.monthly,
+        yearly: plan.pricing.yearly,
+        annual: plan.pricing.yearly,
+      },
+    }));
 
-    const snapshot = await query.get();
-    let plans = snapshot.docs.map((doc: any) => {
-      const data = doc.data();
-      return {
-        ...data,
-        id: doc.id,
-      };
-    });
-
-    // Fallback for empty environment (development/test)
     if (plans.length === 0) {
       plans = [
         {
-          id: "starter",
-          code: "starter",
-          name: "Starter",
+          id: "free",
+          code: "free",
+          name: "Free",
           price: 0,
-          features: ["basic"],
+          features: ["Core records"],
+          pricing: { monthly: 0, yearly: 0, annual: 0 },
         },
-        { id: "pro", code: "pro", name: "Pro", price: 29, features: ["all"] },
-        {
-          id: "scale",
-          code: "scale",
-          name: "Scale",
-          price: 99,
-          features: ["all", "priority"],
-        },
-      ];
+      ] as typeof plans;
     }
 
     if (search) {
       const s = (search as string).toLowerCase();
       plans = plans.filter(
-        (p: any) =>
+        (p) =>
           p.name.toLowerCase().includes(s) || p.code.toLowerCase().includes(s),
       );
     }
@@ -128,9 +121,19 @@ export const listPlans = async (req: Request, res: Response) => {
     logAuditEvent("SUBSCRIPTION_PLANS_ACCESSED", {
       userId: (req as any).user?.uid,
     });
-    res.json({ data: plans });
+    res.json({ data: plans, trial: catalog.trial });
   } catch (error) {
     logger.error("Error listing plans", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getSubscriptionCatalog = async (_req: Request, res: Response) => {
+  try {
+    const catalog = await loadPublicSubscriptionCatalog();
+    res.json({ data: catalog });
+  } catch (error) {
+    logger.error("Error loading subscription catalog", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -462,13 +465,9 @@ export const cancelSubscription = async (req: Request, res: Response) => {
 
     const planCode = String(effective.data.planCode || "").toLowerCase();
     const cycle = String(effective.data.billingCycle || "");
-    if (
-      planCode === "starter" ||
-      planCode === "free" ||
-      cycle === "trial"
-    ) {
+    if (planCode === "free" || cycle === "trial") {
       return res.status(400).json({
-        error: "Starter and trial plans cannot be cancelled. Open pricing to change plans.",
+        error: "Free and trial plans cannot be cancelled. Open pricing to change plans.",
       });
     }
 
@@ -800,6 +799,7 @@ export const listCatalogAddons = async (req: Request, res: Response) => {
         ...serializeTimestamps(doc.data()),
       }))
       .filter((row: any) => row.isActive !== false)
+      .filter((row: any) => String(row.code || "").toUpperCase() !== "EXT_AI_BOOST")
       .sort((a: any, b: any) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
 
     if (planCodeParam && applyLimitationFilter && limitationQuotas) {
@@ -1035,9 +1035,7 @@ export const seedSubscriptionCatalog = async (req: Request, res: Response) => {
         currency: "PHP",
         billingModel: "recurring",
         billingInterval: "monthly",
-        isActive: true,
-        sortOrder: 20,
-        featureKey: "ai_prompt_pack",
+        isActive: false,
         extendsPlanLimitation: "ai_tools",
         applicablePlanCodes: ["pro", "scale"],
         maxUnitsPerBusiness: 3,

@@ -12,6 +12,7 @@ export type AddonLimitationExtension =
   | "ai_tools"
   | "customers"
   | "transactions_daily"
+  | "containers_daily"
   | "online_orders"
   | "extra_business"
   | "none";
@@ -28,8 +29,17 @@ export interface ParsedPlanQuotas {
   staffAdminMax: number | null;
   aiToolsMonthlyMax: number | null;
   customersMax: number | null;
+  /**
+   * Daily water-container qty (walk-in + delivery/order).
+   * Alias of catalog `containers` (falls back to `transactions`).
+   * null = unlimited (`full`).
+   */
   transactionsDailyMax: number | null;
-  /** Portal PLACE_ORDER + REQUEST_COLLECTION cap; null = unlimited (`full` in Firestore). */
+  containersDailyMax: number | null;
+  /**
+   * Portal PLACE_ORDER + REQUEST_COLLECTION cap; null = unlimited (`full`).
+   * `max: 0` means the QR portal cannot receive orders.
+   */
   onlineOrders: OnlineOrdersQuota | null;
   /** Messenger / WhatsApp / SMS / webhook monthly caps (BL-31). */
   channelUsage: ChannelUsageQuotas | null;
@@ -80,17 +90,18 @@ export function parsePlanLimitations(
     aiToolsMonthlyMax = finiteNonNegative((ai as { max: unknown }).max);
   }
 
-  let transactionsDailyMax: number | null = null;
-  const tx = L.transactions;
-  if (isUnlimitedMarker(tx)) {
-    transactionsDailyMax = null;
-  } else if (tx && typeof tx === "object") {
-    const t = tx as { max?: unknown; frequency?: unknown };
+  let containersDailyMax: number | null = null;
+  const containerSrc = L.containers ?? L.transactions;
+  if (isUnlimitedMarker(containerSrc)) {
+    containersDailyMax = null;
+  } else if (containerSrc && typeof containerSrc === "object") {
+    const t = containerSrc as { max?: unknown; frequency?: unknown };
     const freq = String(t.frequency || "").toLowerCase();
     if (!freq || freq === "daily") {
-      transactionsDailyMax = finiteNonNegative(t.max);
+      containersDailyMax = finiteNonNegative(t.max);
     }
   }
+  const transactionsDailyMax = containersDailyMax;
 
   const staff = L.staff;
   let staffRiderMax: number | null = null;
@@ -109,7 +120,7 @@ export function parsePlanLimitations(
     const o = oo as { max?: unknown; frequency?: unknown };
     const max = finiteNonNegative(o.max);
     const freq = String(o.frequency || "daily").toLowerCase();
-    if (max !== null && max > 0) {
+    if (max !== null) {
       onlineOrders = {
         max,
         frequency: freq === "monthly" ? "monthly" : "daily",
@@ -123,6 +134,7 @@ export function parsePlanLimitations(
     aiToolsMonthlyMax,
     customersMax,
     transactionsDailyMax,
+    containersDailyMax,
     onlineOrders,
     channelUsage: parseChannelUsageQuotas(L.channels),
   };
@@ -144,6 +156,7 @@ export function hasCappedQuotas(q: ParsedPlanQuotas | null): boolean {
     quotaIsCapped(q.aiToolsMonthlyMax) ||
     quotaIsCapped(q.customersMax) ||
     quotaIsCapped(q.transactionsDailyMax) ||
+    quotaIsCapped(q.containersDailyMax) ||
     q.onlineOrders !== null
   );
 }
@@ -172,7 +185,8 @@ export function addonExtensionMatchesPlan(
   case "customers":
     return quotaIsCapped(q.customersMax);
   case "transactions_daily":
-    return quotaIsCapped(q.transactionsDailyMax);
+  case "containers_daily":
+    return quotaIsCapped(q.containersDailyMax ?? q.transactionsDailyMax);
   case "online_orders":
     return q.onlineOrders !== null;
   case "extra_business":
@@ -254,10 +268,9 @@ export function parsePlanSupportAccess(
     }
   }
 
-  if (code === "starter" || code === "free") {
-    return { level: "community", chatEnabled: false };
-  }
   if (
+    code === "free" ||
+    code === "starter" ||
     code === "pro" ||
     code === "grow" ||
     code === "scale" ||
@@ -272,8 +285,8 @@ const LIVE_CHAT_ACTIVE_STATUSES = new Set(["active", "grace_period"]);
 
 /**
  * Applies subscription state on top of plan catalog support flags.
- * Grow / Scale / Enterprise (including Scale free trial) get Brevo live chat when
- * the plan catalog enables it. Starter never does.
+ * Human chat support is available on every self-serve plan (including Free)
+ * while the subscription is active, in grace, or on Scale trial.
  * @param {object} input Plan support + active subscription row fields.
  * @return {PlanSupportAccess} Effective support access for the dashboard and APIs.
  */
@@ -284,27 +297,20 @@ export function resolveEffectiveSupportAccess(input: {
   status: string;
   isExpired: boolean;
 }): PlanSupportAccess {
-  const code = (input.planCode || "starter").toLowerCase();
   const cycle = (input.billingCycle || "").toLowerCase();
   const status = (input.status || "").toLowerCase();
   const isTrial = cycle === "trial" || status === "trial";
-  const isStarter = code === "starter" || code === "free";
   const subscriptionActive =
-    LIVE_CHAT_ACTIVE_STATUSES.has(status) || status === "trial";
+    LIVE_CHAT_ACTIVE_STATUSES.has(status) || status === "trial" || isTrial;
 
   const chatEnabled =
     input.planSupport.chatEnabled &&
     subscriptionActive &&
-    !isStarter &&
     !input.isExpired;
 
   let level = input.planSupport.level;
-  if (!chatEnabled) {
-    if (isStarter || isTrial) {
-      level = "community";
-    } else if (level === "chat") {
-      level = "community";
-    }
+  if (!chatEnabled && level === "chat") {
+    level = "community";
   }
 
   return { level, chatEnabled };

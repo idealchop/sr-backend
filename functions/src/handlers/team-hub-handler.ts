@@ -27,7 +27,7 @@ function assertTeamHubEligibleOrSend(
   if (plan === "starter" || plan === "free") {
     res
       .status(403)
-      .json({ error: "Team Hub is not available on the Starter plan." });
+      .json({ error: "Team Hub is not available on Free or Starter." });
     return false;
   }
   // Scale trial (billingCycle trial) includes Team Hub; seats deactivate on trial → Starter.

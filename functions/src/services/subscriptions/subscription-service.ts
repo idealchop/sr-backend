@@ -22,24 +22,38 @@ import {
   computeStaffSeatLimitFromRoleQuotas,
 } from "../../utils/staff-seat-limit";
 import { OnlineOrderLimitService } from "../portal/online-order-limit-service";
+import { ContainerDailyLimitService } from "./container-daily-limit-service";
 import { ChannelUsageService } from "../channels/channel-usage-service";
 import { isBusinessEligibleForCommunityMessenger } from "../../utils/community-messenger-plan-access";
 import { readCommunityOrdersAcceptedThisMonth } from "../meta/community-dispatch-station-usage-service";
 import { syncCommunityDispatchEnrollment } from "../meta/community-dispatch-enrollment-service";
 import { SupportAiUsageService } from "../support/support-ai-usage-service";
 import { runSubscriptionLifecycleMaintenance } from "./subscription-lifecycle-maintenance";
-import { TrialLifecycleService } from "./trial-lifecycle-service";
+import {
+  isTrialEligibleFromSubscriptionRows,
+  TrialLifecycleService,
+} from "./trial-lifecycle-service";
 import {
   resolveSupportAiPlanLimits,
   type SupportAiUsageSnapshot,
 } from "../../utils/support-ai-plan-limits";
+import { isLegacyUnpaidStarterRow } from "../../utils/subscription-plan-codes";
 import { formatPhilippineDate } from "../../utils/philippine-datetime";
+import {
+  capabilitiesFromRowOrPlan,
+  limitationsFromRowOrPlan,
+  needsInitialCatalogSnapshot,
+  planSnapshotFields,
+  shouldRefreshFreeCatalogSnapshot,
+} from "./plan-snapshot";
+import { applyTrialOverlayToLimitations } from "./trial-policy";
+import { loadEffectiveTrialPolicy } from "./trial-policy-service";
 import {
   calculatePeriodDates,
   computeDatesView,
   fetchRecentSubscriptionRows,
   getActivatesAt,
-  isStarterPlan,
+  isFreePlan,
   latestQueuedRenewalPeriodEnd,
   parseSubscriptionTimestamp,
   paymentReadyForActivation,
@@ -205,16 +219,19 @@ export class SubscriptionService {
   ): Promise<ReturnType<typeof parsePlanLimitations>> {
     await this.repairStuckApprovedSubscriptions(businessId);
     await promoteDueScheduledSubscriptions(businessId);
-    await this.ensureStarterWhenNoPaidAccess(businessId);
+    await this.ensureFreeWhenNoPaidAccess(businessId);
     const now = new Date();
     const rows = await fetchRecentSubscriptionRows(businessId);
     const effective = pickEffectiveEntitling(rows, now);
     const planCode = effective ?
-      String(effective.data.planCode || "starter") :
-      "starter";
+      String(effective.data.planCode || "free") :
+      "free";
     const planId = effective ? String(effective.data.planId || "") : undefined;
     const planRow = await this.fetchSubscriptionPlanRow(planId, planCode);
-    return parsePlanLimitations(planRow?.limitations);
+    const subData = effective?.data || {};
+    return parsePlanLimitations(
+      limitationsFromRowOrPlan(subData, planRow) ?? planRow?.limitations,
+    );
   }
 
   private static async resolvePlanFromFirestore(
@@ -266,6 +283,51 @@ export class SubscriptionService {
       });
     }
     return null;
+  }
+
+  private static async persistCatalogSnapshotIfNeeded(
+    ref: DocumentReference,
+    sub: Record<string, unknown>,
+    planRow: Record<string, unknown> | null,
+    now: Date,
+  ): Promise<Record<string, unknown>> {
+    if (!planRow) return sub;
+    const shouldStamp = needsInitialCatalogSnapshot(sub);
+    const shouldRefresh = shouldRefreshFreeCatalogSnapshot(sub, planRow, now);
+    if (!shouldStamp && !shouldRefresh) return sub;
+    const isTrial = String(sub.billingCycle || "").toLowerCase() === "trial";
+    const trialPolicyForStamp =
+      isTrial && shouldStamp ? await loadEffectiveTrialPolicy(now) : null;
+    const overlay = trialPolicyForStamp?.overlayLimitations;
+    const fields = overlay ?
+      this.snapshotFieldsForPlan(planRow, overlay) :
+      planSnapshotFields(planRow, now);
+    await ref.update({
+      ...fields,
+      ...(trialPolicyForStamp ?
+        { trialTeamChatPreviewDays: trialPolicyForStamp.teamChatPreviewDays } :
+        {}),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return {
+      ...sub,
+      ...fields,
+      ...(trialPolicyForStamp ?
+        { trialTeamChatPreviewDays: trialPolicyForStamp.teamChatPreviewDays } :
+        {}),
+    };
+  }
+
+  private static snapshotFieldsForPlan(
+    planData: Record<string, unknown> | null | undefined,
+    overlay?: Record<string, unknown>,
+  ): ReturnType<typeof planSnapshotFields> {
+    if (!planData) return planSnapshotFields(null);
+    if (!overlay) return planSnapshotFields(planData);
+    return planSnapshotFields({
+      ...planData,
+      limitations: applyTrialOverlayToLimitations(planData.limitations, overlay),
+    });
   }
 
   /**
@@ -331,7 +393,7 @@ export class SubscriptionService {
       sub.planId,
       sub.planCode,
     );
-    const lim = planRow?.limitations;
+    const lim = limitationsFromRowOrPlan(sub, planRow) ?? planRow?.limitations;
     if (!lim || typeof lim !== "object") return legacy;
 
     const staff = (lim as Record<string, unknown>).staff;
@@ -374,53 +436,76 @@ export class SubscriptionService {
     cycle: "monthly" | "yearly" | "trial" = "monthly",
     paymentDetails: Partial<SubscriptionRecord> = {},
   ) {
+    const trialPolicy =
+      cycle === "trial" ? await loadEffectiveTrialPolicy() : null;
+
+    if (cycle === "trial") {
+      if (!trialPolicy?.enabled) {
+        throw new Error("Trial is not available");
+      }
+      if (trialPolicy.oneTrialPerBusiness) {
+        const existingTrials = await db
+          .collection("businesses")
+          .doc(businessId)
+          .collection("audit_logs")
+          .where("message", "==", "AUDIT: TRIAL_STARTED")
+          .limit(1)
+          .get();
+        if (!existingTrials.empty) {
+          throw new Error("Trial already used for this business");
+        }
+      }
+    }
+
+    const resolvedCode =
+      cycle === "trial" && trialPolicy ?
+        trialPolicy.basedOnPlanCode :
+        String(planCode || "").trim();
+
     // 1. Fetch Plan (`apps.subscriptionPlans` doc id, then `code` query)
-    const resolved = await this.resolvePlanFromFirestore(
-      String(planCode || "").trim(),
-    );
+    const resolved = await this.resolvePlanFromFirestore(resolvedCode);
     let planData: any;
     let planId: string;
 
     if (!resolved) {
       // Fallback for emulator/initial setup
-      planId = `${planCode}_default`;
+      planId = `${resolvedCode}_default`;
       planData = {
-        name: planCode.charAt(0).toUpperCase() + planCode.slice(1),
+        name: resolvedCode.charAt(0).toUpperCase() + resolvedCode.slice(1),
         pricing: { monthly: 29, yearly: 290 },
       };
     } else {
       planData = resolved.planData;
       planId = resolved.planId;
     }
-
-    // 2. Check for trial eligibility if applicable
-    if (cycle === "trial") {
-      const existingTrials = await db
-        .collection("businesses")
-        .doc(businessId)
-        .collection("audit_logs")
-        .where("message", "==", "AUDIT: TRIAL_STARTED")
-        .limit(1)
-        .get();
-      if (!existingTrials.empty) {
-        throw new Error("Trial already used for this business");
-      }
-    }
-
-    // 3. Create Subscription Record
-    const { expiresAt, gracePeriodExpiresAt } = this.calculateDates(
-      new Date(),
-      cycle,
-    );
+    const expiresAt =
+      cycle === "trial" && trialPolicy ?
+        (() => {
+          const date = new Date();
+          date.setDate(date.getDate() + trialPolicy.durationDays);
+          return date;
+        })() :
+        this.calculateDates(new Date(), cycle).expiresAt;
+    const gracePeriodExpiresAt =
+      cycle === "trial" ? new Date(expiresAt) :
+        this.calculateDates(new Date(), cycle).gracePeriodExpiresAt;
     const subRef = db
       .collection("businesses")
       .doc(businessId)
       .collection("subscriptions")
       .doc();
 
+    const snapshot =
+      cycle === "trial" ?
+        this.snapshotFieldsForPlan(
+          planData,
+          trialPolicy?.overlayLimitations,
+        ) :
+        this.snapshotFieldsForPlan(planData);
+
     const subData = {
       planId,
-      planCode,
+      planCode: resolvedCode,
       planName: planData.name,
       status: "active",
       billingCycle: cycle,
@@ -437,6 +522,10 @@ export class SubscriptionService {
         gracePeriodExpiresAt: Timestamp.fromDate(gracePeriodExpiresAt),
       },
       createdAt: FieldValue.serverTimestamp(),
+      ...snapshot,
+      ...(trialPolicy ?
+        { trialTeamChatPreviewDays: trialPolicy.teamChatPreviewDays } :
+        {}),
       ...paymentDetails,
     };
 
@@ -541,12 +630,12 @@ export class SubscriptionService {
     const paymentPending =
       String(paymentDetails.paymentStatus || "").toLowerCase() ===
       "pending_verification";
-    const upgradingFromStarter =
+    const upgradingFromFree =
       action === "UPGRADE" &&
       !!currentEffective &&
-      isStarterPlan(String(currentEffective.data.planCode || ""));
+      isFreePlan(String(currentEffective.data.planCode || ""));
     const deferPeriodDates =
-      upgradingFromStarter && paymentPending && !deferUntil;
+      upgradingFromFree && paymentPending && !deferUntil;
 
     const periodStart = deferUntil ?? now;
     const { expiresAt, gracePeriodExpiresAt } = this.calculateDates(
@@ -613,7 +702,7 @@ export class SubscriptionService {
       status = "pending";
       notifyMessage =
         `Your upgrade to ${planData.name} is pending payment verification. ` +
-        "Starter access ends now; paid features start once approved.";
+        "Free access ends now; paid features start once approved.";
     } else {
       dates.activatedAt = FieldValue.serverTimestamp();
       if (action === "DOWNGRADE" && paymentPending) {
@@ -640,6 +729,7 @@ export class SubscriptionService {
       billingCycle: cycle,
       price,
       createdAt: FieldValue.serverTimestamp(),
+      ...this.snapshotFieldsForPlan(planData),
       ...paymentDetails,
       ...(Object.keys(mergedMetadata).length > 0 ?
         { metadata: mergedMetadata } :
@@ -652,7 +742,7 @@ export class SubscriptionService {
 
     const activatesImmediately =
       !deferUntil && status === "active" && !paymentPending;
-    if (upgradingFromStarter || activatesImmediately) {
+    if (upgradingFromFree || activatesImmediately) {
       const allRows = await fetchRecentSubscriptionRows(businessId);
       await supersedeOtherEntitlingRows(businessId, subRef, allRows, now);
     }
@@ -660,9 +750,15 @@ export class SubscriptionService {
     if (action === "DOWNGRADE") {
       await deactivateAllNonOwnerWorkspaceMembers(businessId);
       if (!deferUntil) {
-        await CustomerActiveLimitService.applyPlanDowngradeActivePolicyForBusiness(
-          businessId,
-        );
+        if (isFreePlan(targetPlanCode)) {
+          await CustomerActiveLimitService.deactivateAllActiveCustomersForFreePlan(
+            businessId,
+          );
+        } else {
+          await CustomerActiveLimitService.applyPlanDowngradeActivePolicyForBusiness(
+            businessId,
+          );
+        }
       }
     }
 
@@ -695,19 +791,91 @@ export class SubscriptionService {
    * @return {Promise<any>} The current subscription status.
    */
   /**
-   * If there is no active paid/trial access and no queued renewal, ensure a Starter row exists.
+   * If there is no active paid/trial access and no queued renewal, ensure a Free row exists.
+   * Migrates legacy unpaid Starter (₱0) rows to Free without deactivating sukis.
    * @param {string} businessId The business ID.
    * @return {Promise<void>}
    */
-  static async ensureStarterWhenNoPaidAccess(businessId: string): Promise<void> {
+  static async ensureFreeWhenNoPaidAccess(businessId: string): Promise<void> {
     await promoteDueScheduledSubscriptions(businessId);
     const now = new Date();
     const rows = await fetchRecentSubscriptionRows(businessId);
     if (pickPendingScheduled(rows, now)) return;
     if (pickPendingPaidUpgrade(rows, now)) return;
-    if (pickEffectiveEntitling(rows, now)) return;
+
+    const effective = pickEffectiveEntitling(rows, now);
+    if (effective && isLegacyUnpaidStarterRow(effective.data)) {
+      await this.migrateLegacyUnpaidStarterRowsInBusiness(businessId);
+      return;
+    }
+    if (effective) return;
     if (await TrialLifecycleService.hasResumablePausedTrial(businessId)) return;
     await this.handleAutoDowngrade(businessId);
+  }
+
+  /** @deprecated Use ensureFreeWhenNoPaidAccess. */
+  static async ensureStarterWhenNoPaidAccess(businessId: string): Promise<void> {
+    await this.ensureFreeWhenNoPaidAccess(businessId);
+  }
+
+  static async migrateLegacyUnpaidStarterToFree(
+    ref: DocumentReference,
+  ): Promise<void> {
+    const resolved = await this.resolvePlanFromFirestore("free");
+    await ref.update(this.legacyUnpaidStarterToFreePayload(resolved));
+  }
+
+  private static legacyUnpaidStarterToFreePayload(
+    resolved: { planId: string; planData: Record<string, unknown> } | null,
+  ): Record<string, unknown> {
+    return {
+      planCode: "free",
+      planName: resolved?.planData?.name || "Free",
+      planId: resolved?.planId || "free",
+      price: 0,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+  }
+
+  /** Rewrite every unpaid Starter row on a workspace to Free. */
+  static async migrateLegacyUnpaidStarterRowsInBusiness(
+    businessId: string,
+  ): Promise<number> {
+    const snap = await db
+      .collection("businesses")
+      .doc(businessId)
+      .collection("subscriptions")
+      .get();
+    const resolved = await this.resolvePlanFromFirestore("free");
+    const payload = this.legacyUnpaidStarterToFreePayload(resolved);
+    let updated = 0;
+    let batch = db.batch();
+    let ops = 0;
+    for (const doc of snap.docs) {
+      if (!isLegacyUnpaidStarterRow(doc.data())) continue;
+      batch.update(doc.ref, payload);
+      updated += 1;
+      ops += 1;
+      if (ops >= 400) {
+        await batch.commit();
+        batch = db.batch();
+        ops = 0;
+      }
+    }
+    if (ops > 0) await batch.commit();
+    return updated;
+  }
+
+  static async migrateAllLegacyUnpaidStarterToFree(): Promise<{
+    businesses: number;
+    updated: number;
+  }> {
+    const businesses = await db.collection("businesses").select().get();
+    let updated = 0;
+    for (const business of businesses.docs) {
+      updated += await this.migrateLegacyUnpaidStarterRowsInBusiness(business.id);
+    }
+    return { businesses: businesses.size, updated };
   }
 
   /** Emulator/BDD: single active Scale trial row (shared user123 workspace isolation). */
@@ -781,24 +949,31 @@ export class SubscriptionService {
     await this.repairStuckApprovedSubscriptions(businessId);
     await promoteDueScheduledSubscriptions(businessId);
     const lifecycle = await runSubscriptionLifecycleMaintenance(businessId);
-    await this.ensureStarterWhenNoPaidAccess(businessId);
+    await this.ensureFreeWhenNoPaidAccess(businessId);
 
     const now = new Date();
-    const rows = await fetchRecentSubscriptionRows(businessId);
+    const rows = await fetchRecentSubscriptionRows(businessId, 48);
+    const trialEligible = isTrialEligibleFromSubscriptionRows(rows);
     const effective = pickEffectiveEntitling(rows, now);
     const pendingScheduled = pickPendingScheduled(rows, now);
     const pendingPaidUpgrade = pickPendingPaidUpgrade(rows, now);
 
     if (!effective) {
-      const starterPlan = await this.fetchSubscriptionPlanRow(undefined, "starter");
-      const starterQuotas = parsePlanLimitations(starterPlan?.limitations);
-      const starterOnlineOrdersUsed = starterQuotas?.onlineOrders ?
+      const freePlan = await this.fetchSubscriptionPlanRow(undefined, "free");
+      const freeQuotas = parsePlanLimitations(freePlan?.limitations);
+      const freeOnlineOrdersUsed = freeQuotas?.onlineOrders ?
         await OnlineOrderLimitService.countOnlineOrdersInPeriod(
           businessId,
-          starterQuotas.onlineOrders.frequency,
+          freeQuotas.onlineOrders.frequency,
         ) :
         0;
-      const starterChannelUsage = await ChannelUsageService.getStatusSnapshot(businessId);
+      const freeChannelUsage = await ChannelUsageService.getStatusSnapshot(businessId);
+      const freeContainersCap =
+        freeQuotas?.containersDailyMax ?? freeQuotas?.transactionsDailyMax ?? null;
+      const freeContainersUsed =
+        freeContainersCap === null ?
+          0 :
+          await ContainerDailyLimitService.countUsedToday(businessId);
       void syncCommunityDispatchEnrollment(businessId).catch((error) => {
         logger.error("syncCommunityDispatchEnrollment failed", { businessId, error });
       });
@@ -814,11 +989,13 @@ export class SubscriptionService {
           billingCycle: pendingPaidUpgrade.data.billingCycle,
         } :
         undefined;
+      const freeSupport = parsePlanSupportAccess(freePlan?.limitations, "free");
       return {
         status: pendingPaidUpgrade ? "pending" : "active",
-        planCode: "starter",
-        planName: "Starter",
+        planCode: "free",
+        planName: "Free",
         billingCycle: "monthly",
+        trialEligible,
         isExpired: false,
         isGracePeriod: false,
         daysUntilExpiration: 0,
@@ -828,25 +1005,27 @@ export class SubscriptionService {
           undefined,
         pendingUpgrade: pendingUpgradePayload,
         limitations: {
-          staffLimit: 1,
+          staffLimit: 0,
           currentStaffCount: 0,
-          customersMax: starterQuotas?.customersMax ?? null,
-          transactionsDailyMax: starterQuotas?.transactionsDailyMax ?? null,
-          aiToolsMonthlyMax: starterQuotas?.aiToolsMonthlyMax ?? null,
-          onlineOrdersMax: starterQuotas?.onlineOrders?.max ?? null,
-          onlineOrdersFrequency: starterQuotas?.onlineOrders?.frequency ?? null,
-          onlineOrdersUsed: starterOnlineOrdersUsed,
-          channelUsage: starterChannelUsage,
+          customersMax: freeQuotas?.customersMax ?? 100,
+          transactionsDailyMax: freeContainersCap,
+          containersDailyMax: freeContainersCap,
+          containersDailyUsed: freeContainersUsed,
+          aiToolsMonthlyMax: freeQuotas?.aiToolsMonthlyMax ?? null,
+          onlineOrdersMax: freeQuotas?.onlineOrders?.max ?? 0,
+          onlineOrdersFrequency: freeQuotas?.onlineOrders?.frequency ?? "daily",
+          onlineOrdersUsed: freeOnlineOrdersUsed,
+          channelUsage: freeChannelUsage,
           communityMessenger,
         },
-        supportAccess: { level: "community", chatEnabled: false },
+        supportAccess: { level: "chat", chatEnabled: true },
         supportAi: await this.resolveSupportAiUsageForBusiness(businessId, {
-          planCode: "starter",
+          planCode: "free",
           billingCycle: "monthly",
           status: "active",
           isExpired: false,
-          agentChatEnabled: false,
-          planLimitations: starterPlan?.limitations,
+          agentChatEnabled: freeSupport.chatEnabled,
+          planLimitations: freePlan?.limitations,
         }),
       };
     }
@@ -870,7 +1049,14 @@ export class SubscriptionService {
       String(sub.planId || ""),
       String(sub.planCode || ""),
     );
-    const planQuotas = parsePlanLimitations(planRow?.limitations);
+    const snapshotted = await this.persistCatalogSnapshotIfNeeded(
+      effective.ref,
+      sub as Record<string, unknown>,
+      planRow,
+      now,
+    );
+    const entitlingLimitations = limitationsFromRowOrPlan(snapshotted, planRow);
+    const planQuotas = parsePlanLimitations(entitlingLimitations ?? planRow?.limitations);
     const catalogLookup = await this.fetchAddonCatalogLookup();
     const addonBoosts = resolveAddonLimitBoostsFromLines(
       sub as Record<string, unknown>,
@@ -882,6 +1068,12 @@ export class SubscriptionService {
       addonBoosts.staffRider,
       addonBoosts.staffAdmin,
     );
+    const containersDailyMax =
+      boostedQuotas?.containersDailyMax ?? boostedQuotas?.transactionsDailyMax ?? null;
+    const containersDailyUsed =
+      containersDailyMax === null ?
+        0 :
+        await ContainerDailyLimitService.countUsedToday(businessId);
     const onlineOrdersUsed = planQuotas?.onlineOrders ?
       await OnlineOrderLimitService.countOnlineOrdersInPeriod(
         businessId,
@@ -898,7 +1090,7 @@ export class SubscriptionService {
       ordersAcceptedThisMonth: await readCommunityOrdersAcceptedThisMonth(businessId),
     };
     const planSupport = parsePlanSupportAccess(
-      planRow?.limitations,
+      entitlingLimitations ?? planRow?.limitations,
       String(sub.planCode || ""),
     );
     const supportAccess = resolveEffectiveSupportAccess({
@@ -927,6 +1119,7 @@ export class SubscriptionService {
     return {
       ...sub,
       status,
+      trialEligible,
       isExpired: view.isExpired,
       isGracePeriod: view.isGracePeriod,
       sessionResetRequired: lifecycle.graceEnded && lifecycle.downgradedToStarter,
@@ -936,11 +1129,18 @@ export class SubscriptionService {
           (expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
         ),
       ),
+      capabilities: capabilitiesFromRowOrPlan(snapshotted, planRow),
+      trialTeamChatPreviewDays:
+        typeof snapshotted.trialTeamChatPreviewDays === "number" ?
+          snapshotted.trialTeamChatPreviewDays :
+          undefined,
       limitations: {
         staffLimit,
         currentStaffCount,
         customersMax: boostedQuotas?.customersMax ?? null,
-        transactionsDailyMax: boostedQuotas?.transactionsDailyMax ?? null,
+        transactionsDailyMax: containersDailyMax,
+        containersDailyMax,
+        containersDailyUsed,
         aiToolsMonthlyMax: boostedQuotas?.aiToolsMonthlyMax ?? null,
         onlineOrdersMax: boostedQuotas?.onlineOrders?.max ?? null,
         onlineOrdersFrequency: boostedQuotas?.onlineOrders?.frequency ?? null,
@@ -956,7 +1156,7 @@ export class SubscriptionService {
         status,
         isExpired: view.isExpired,
         agentChatEnabled: supportAccess.chatEnabled,
-        planLimitations: planRow?.limitations,
+        planLimitations: entitlingLimitations ?? planRow?.limitations,
       }),
       pendingRenewal,
       pendingUpgrade: pendingPaidUpgrade ?
@@ -971,7 +1171,7 @@ export class SubscriptionService {
   }
 
   /**
-   * Helper to handle automatic downgrade to starter plan.
+   * Helper to handle automatic downgrade to the Free plan.
    * @param {string} businessId The business ID.
    * @return {Promise<void>}
    */
@@ -991,27 +1191,34 @@ export class SubscriptionService {
       if (effective) {
         const code = String(effective.data.planCode || "").toLowerCase();
         const view = computeDatesView(effective.data, now);
-        if (code === "starter" || code === "free") return;
+        if (isFreePlan(code)) return;
+        if (isLegacyUnpaidStarterRow(effective.data)) {
+          await this.migrateLegacyUnpaidStarterRowsInBusiness(businessId);
+          return;
+        }
         if (!view.isExpired) return;
       }
 
       const latest = rows[0];
       const row = (latest?.data ?? {}) as unknown as SubscriptionRecord;
-      const code = String(row.planCode || "").toLowerCase();
-      if (code === "starter") {
+      if (isFreePlan(String(row.planCode || ""))) {
+        return;
+      }
+      if (isLegacyUnpaidStarterRow(row as unknown as Record<string, unknown>)) {
+        await this.migrateLegacyUnpaidStarterRowsInBusiness(businessId);
         return;
       }
 
       await this.transitionSubscription(
         businessId,
         "SYSTEM",
-        "starter",
+        "free",
         "DOWNGRADE",
       );
       await NotificationService.broadcastToBusiness(businessId, {
-        title: "Subscription Expired",
+        title: "Moved to Free plan",
         message:
-          "Your subscription has been automatically downgraded to the Starter plan.",
+          "Your paid access ended. This station is now on Free. Active sukis were set inactive so you can turn on up to 100.",
         type: "warning",
       });
     } catch (error) {

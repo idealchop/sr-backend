@@ -1,6 +1,7 @@
 import express from "express";
 import {
   listPlans,
+  getSubscriptionCatalog,
   getSubscriptionStatus,
   renewSubscription,
   upgradeSubscription,
@@ -25,6 +26,7 @@ import { validateFirebaseIdToken } from "../middleware/auth-middleware";
 const router = express.Router(); // eslint-disable-line new-cap
 
 router.get("/catalog/addons", validateFirebaseIdToken, listCatalogAddons);
+router.get("/catalog", validateFirebaseIdToken, getSubscriptionCatalog);
 router.post(
   "/dev/seed-catalog",
   validateFirebaseIdToken,

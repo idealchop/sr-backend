@@ -96,8 +96,8 @@ ${SUPPORT_WATER_STATION_CONTEXT}
   records.
 
 ### Subscriptions & support
-- Plans: Starter, Grow, Scale, Enterprise — features vary (team hub, live human chat, AI credits for
-  other in-app AI tools).
+- Plans: Starter (free caps), Grow (₱950; 1 rider + live chat), Scale (₱1,650; unlimited + Scale tools),
+  Enterprise (custom). 15-day Scale trial then Starter. See frontend/docs/subscription-plans.md.
 - Support: River AI Buddy (header) is AI-only for app and water station topics; live helpdesk is
   **Profile → Chat support** (Brevo) — a separate entry, not a Buddy handoff.
 `;
@@ -259,9 +259,10 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
     id: "subscription-plans",
     topic: "Subscription plans",
     content:
-      "Starter has core features with limits. Grow adds team hub and live human support. " +
-      "Scale/Enterprise add higher limits and advanced operations. " +
-      "Check Account → Subscription for your plan, usage, and auto-renew status (Cancel / Keep My Plan). " +
+      "Starter (free): 20 customers, 20 records/day, 5 portal orders/day, 5 AI tools/month, 5 River AI chats/month (text only), no Team Hub. " +
+      "Grow (₱950/mo): 200 customers, 100 records/day, 1 rider, Team Hub riders, live human chat. " +
+      "Scale (₱1,650/mo) and Enterprise: unlimited quotas, admin+riders, Scale platform. New stations get a 15-day Scale trial, then Starter if unpaid. " +
+      "Owner hub needs the Additional business add-on. Check Account → Subscription or sidebar View Plan for usage, Cancel / Keep My Plan, and auto-renew. " +
       "At checkout, leave **Allow auto-renew** checked so paying GCash/Maya also links wallet billing for the next cycle.",
   },
   {

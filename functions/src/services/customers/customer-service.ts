@@ -132,6 +132,8 @@ export interface Customer {
   /** Denormalized 0–100 suki health (API write-path + nightly backfill). */
   healthScore?: number;
   healthScoreUpdatedAt?: any;
+  /** Rolling last-4 Forecast accuracy by delivery/collection. */
+  forecastAccuracyRollup?: import("../../utils/forecast-accuracy").ForecastAccuracyRollup;
   /** ISO timestamp when owner logged a payment reminder call (BL-39). */
   lastRemindedAt?: any;
   /** ISO timestamp — hide suki from dormant win-back until this date (BL-12). */

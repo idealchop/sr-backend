@@ -18,6 +18,10 @@ import { buildSubscriptionLifecycleSnapshot } from "../../utils/subscription-lif
 import { ProductionShiftService } from "../plant/production-shift-service";
 import { escapeHtmlForEmail } from "../../utils/auth-transactional-email";
 import {
+  buildSmartRefillEmailLegalFooterHtml,
+  buildSmartRefillEmailLegalFooterPlainText,
+} from "../../utils/smartrefill-email-legal-footer";
+import {
   coerceToDate,
   isManilaMonday,
   isManilaSunday,
@@ -31,6 +35,22 @@ import type { Customer } from "../customers/customer-service";
 const TX_LIMIT = 2000;
 
 type EmailTpl = { subject: string; html: string; text: string; brevoTag: string };
+
+function attachLegalFooter(tpl: Pick<EmailTpl, "html" | "text">): {
+  html: string;
+  text: string;
+} {
+  const html = tpl.html.includes("Privacy Policy") ?
+    tpl.html :
+    tpl.html.replace(
+      "</body></html>",
+      `${buildSmartRefillEmailLegalFooterHtml()}</body></html>`,
+    );
+  const text = tpl.text.includes("Privacy Policy:") ?
+    tpl.text :
+    `${tpl.text}\n\n${buildSmartRefillEmailLegalFooterPlainText()}`;
+  return { html, text };
+}
 
 function ownerSendHourOk(
   uiConfig: Record<string, unknown>,
@@ -70,8 +90,9 @@ async function sendOwnerEmail(
   sendSmtpEmail.sender = { name: "Smart Refill", email: "no-reply@smartrefill.io" };
   sendSmtpEmail.to = [{ email: recipient.email, name: recipient.name }];
   sendSmtpEmail.subject = tpl.subject;
-  sendSmtpEmail.htmlContent = tpl.html;
-  sendSmtpEmail.textContent = tpl.text;
+  const footered = attachLegalFooter(tpl);
+  sendSmtpEmail.htmlContent = footered.html;
+  sendSmtpEmail.textContent = footered.text;
   sendSmtpEmail.tags = [tpl.brevoTag];
   await api.sendTransacEmail(sendSmtpEmail);
 
@@ -481,8 +502,9 @@ export async function sendAdvancePaymentReceiptEmail(args: {
     name: args.customerName,
   }];
   sendSmtpEmail.subject = subject;
-  sendSmtpEmail.htmlContent = html;
-  sendSmtpEmail.textContent = text;
+  const footered = attachLegalFooter({ html, text });
+  sendSmtpEmail.htmlContent = footered.html;
+  sendSmtpEmail.textContent = footered.text;
   sendSmtpEmail.tags = ["advance_payment_receipt"];
   await api.sendTransacEmail(sendSmtpEmail);
   return { sent: true };

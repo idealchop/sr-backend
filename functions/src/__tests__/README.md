@@ -40,10 +40,12 @@ Google OAuth runs in the **frontend only** (Firebase Auth). The API receives the
 ### Subscription lifecycle
 
 - **Unit:** `unit/services/subscriptions/subscription-effective.unit.test.ts`
+- **Unit:** `unit/utils/subscription-plan-codes.unit.test.ts` — unpaid Starter rows migrate to Free; paid Starter does not
 - **Unit:** `unit/utils/staff-seat-limit.unit.test.ts` — staff cap = rider + admin (owner excluded); add-on boosts
 - **Unit:** `unit/services/team/team-hub-staff-count.unit.test.ts` — occupied count excludes owner
 - **Unit:** `unit/services/team/workspace-member-access.unit.test.ts` — `isActiveStaffMemberForLimit`
 - **Unit:** `unit/utils/subscription-addon-limit-boosts.unit.test.ts` — includes `extra_business` boosts
+- **Unit:** `unit/utils/container-daily-count.unit.test.ts` — daily water-container cap sums gallon **quantities** (not tickets) using product-icon `waterContainer`; skips bottle icons, collections, and cancelled stops
 - **Unit:** `unit/utils/extra-business-addon-access.unit.test.ts` — Owner hub add-on slot reader
 - **Unit:** `unit/services/support/support-ai-usage-service.unit.test.ts`
 - **BDD:** `bdd/subscription.spec.ts`, `bdd/subscription-lifecycle.spec.ts`
@@ -51,17 +53,22 @@ Google OAuth runs in the **frontend only** (Firebase Auth). The API receives the
 - **Docs:** `frontend/docs/subscription-lifecycle.md`, `subscription-lifecycle-test-summary.md`
 - **Catalog sync:** `npm run sync:subscription-plans` — writes `limitations.support` on `subscription_plans`
 
-### Getting started sync
-
-- **Unit:** `unit/getting-started-sync-service.test.ts` — collection detection (`payment_info`, inventory, etc.), patch merge
-- **Integration:** `integration/getting-started-sync.bdd.test.ts` — `GET /business/:id/getting-started/sync`
-- **Schema:** `frontend/docs/firestore_schema.md` (`gettingStarted`, `payment_info`)
-
 ### Platform feedback (`apps_feedback`)
 
 - **Unit:** `unit/services/platform/platform-feedback-service.unit.test.ts` — `appId: smartrefill`, legacy `smartrefill-v3` normalization, `userFeedback` merge
 - **Routes:** `POST /business/:businessId/platform-feedback`, `GET …/platform-feedback/me?appId=smartrefill`
 - **Manual QA:** `frontend/docs/platform-feedback-test-summary.md`
+
+### Webinar invite feedback
+
+- **Unit:** `unit/services/events-training/webinar-feedback.unit.test.ts`, `guest-webinar-join.unit.test.ts`, `guest-webinar-reminder.unit.test.ts` — ratings CTA + `webinarFeedbackDocId`
+- **Public:** `POST /public/resources/webinar-join/:token/feedback`, `POST /public/resources/webinar-events/:eventId/feedback`
+
+### Getting started sync
+
+- **Unit:** `unit/getting-started-sync-service.test.ts` — collection detection (`payment_info`, inventory, etc.), patch merge
+- **Integration:** `integration/getting-started-sync.bdd.test.ts` — `GET /business/:id/getting-started/sync`
+- **Schema:** `frontend/docs/firestore_schema.md` (`gettingStarted`, `payment_info`)
 
 ### Portal orders & active suki limit
 
@@ -117,7 +124,8 @@ Google OAuth runs in the **frontend only** (Firebase Auth). The API receives the
 - **Usage goals:** `unit/utils/usage-goals.unit.test.ts` — normalize `businesses.usageGoals`, ranked intel tool recommendations
 - **Unit:** `unit/services/ai/ai-tool-run-service.unit.test.ts` — snapshot includes `ownerUsageGoals`; prompts reference owner priorities
 - **Integration BDD:** `integration/ai-tool-flow.bdd.test.ts` — `POST/GET /business/:id/ai-tools/runs`, fallback when `GEMINI_API_KEY` is unset; `POST …/duplicates/detect` and `POST …/duplicates/dismiss`
-- **Duplicate suki:** `unit/services/ai/duplicate-customers-service.unit.test.ts` — heuristic clustering (phone, email, name; numeric phone coercion); `duplicate-customers-ai-validation-service.unit.test.ts` — Gemini filter; `duplicate-dismissals-service.unit.test.ts` — `dismissedDuplicateCustomerIds`, legacy group keys, `dismissDuplicateCustomer`
+- **Duplicate suki:** `unit/services/ai/duplicate-customers-service.unit.test.ts` — detailed comparison (phone, email, name; numeric phone coercion); `duplicate-customers-ai-validation-service.unit.test.ts` — Gemini filter (Scale/Enterprise `validate-ai`); `duplicate-dismissals-service.unit.test.ts` — `dismissedDuplicateCustomerIds`, legacy group keys, `dismissDuplicateCustomer`; `unit/utils/subscription-plan-codes.unit.test.ts` — `planAllowsDuplicateAiValidation` / `planAllowsForecastAi` off for Free–Grow
+- **AI Forecast week:** `unit/services/ai/proactive-week-ai-service.unit.test.ts` — habit weekday summary; LLM overlay can add/move visits (`source: history`)
 - **Local:** `GEMINI_API_KEY` in `functions/.env` (see `functions/.env.example`)
 
 ### River AI Buddy (support chat preflow)

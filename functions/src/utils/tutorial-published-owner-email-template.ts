@@ -1,4 +1,8 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
+import {
+  buildSmartRefillEmailLegalFooterHtml,
+  buildSmartRefillEmailLegalFooterPlainText,
+} from "./smartrefill-email-legal-footer";
 
 export type TutorialPublishedOwnerEmailInput = {
   ownerName: string;
@@ -29,6 +33,7 @@ export function buildTutorialPublishedOwnerEmail(
       <p style="margin:8px 0 0;font-size:13px;line-height:1.45;color:#64748b;">Open Tutorial videos in your dashboard to follow along while you work.</p>
     </div>
     <a href="${escapeHtmlForEmail(input.watchUrl)}" style="display:inline-block;background:#44c1ba;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 20px;border-radius:12px;">Watch tutorial</a>
+    ${buildSmartRefillEmailLegalFooterHtml()}
   </div>
 </body>
 </html>`;
@@ -40,6 +45,8 @@ export function buildTutorialPublishedOwnerEmail(
     `${tutorialName} is now available for ${input.businessName}.`,
     "",
     `Watch: ${input.watchUrl}`,
+    "",
+    buildSmartRefillEmailLegalFooterPlainText(),
   ].join("\n");
 
   return { subject, html, text, brevoTag: "tutorial_published_owner_email" };

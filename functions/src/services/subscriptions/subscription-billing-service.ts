@@ -6,8 +6,8 @@ import { PaymentIntentService } from "../payments/payment-intent-service";
 import { resolvePaymentProvider } from "../payments/resolve-payment-provider";
 import {
   fetchRecentSubscriptionRows,
+  isFreePlan,
   isPaidBillingCycle,
-  isStarterPlan,
   pickEffectiveEntitling,
 } from "./subscription-effective";
 
@@ -239,7 +239,7 @@ export class SubscriptionBillingService {
 
     const planCode = String(effective.data.planCode || "").toLowerCase();
     const cycle = String(effective.data.billingCycle || "monthly").toLowerCase();
-    if (isStarterPlan(planCode) || !isPaidBillingCycle(cycle)) {
+    if (isFreePlan(planCode) || !isPaidBillingCycle(cycle)) {
       throw new Error("PLAN_NOT_ELIGIBLE");
     }
 

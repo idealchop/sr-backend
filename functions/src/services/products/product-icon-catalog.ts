@@ -37,6 +37,70 @@ export const SEEDED_PRODUCT_ICONS: ProductIcon[] = [
   },
 ];
 
+export type CanonicalGallonIconId = "round-gallon" | "slim-gallon";
+
+const GALLON_ICON_ALIAS_IDS: Record<string, CanonicalGallonIconId> = {
+  roundgallon: "round-gallon",
+  roundicon: "round-gallon",
+  slimgallon: "slim-gallon",
+  slimicon: "slim-gallon",
+};
+
+function compactIconKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function inferGallonProductIconId(name?: string | null): CanonicalGallonIconId | undefined {
+  if (!name) return undefined;
+  const key = name.trim().toLowerCase();
+  if (/\bslim\b/.test(key) || key.includes("slim-gallon")) return "slim-gallon";
+  if (/\bround\b/.test(key) || key.includes("round-gallon")) return "round-gallon";
+  return undefined;
+}
+
+export function canonicalGallonIconId(
+  id?: string | null,
+  name?: string | null,
+  imageUrl?: string | null,
+): CanonicalGallonIconId | undefined {
+  const compactId = compactIconKey(id || "");
+  if (compactId && GALLON_ICON_ALIAS_IDS[compactId]) {
+    return GALLON_ICON_ALIAS_IDS[compactId];
+  }
+  const url = (imageUrl || "").toLowerCase();
+  if (/(?:\/|%2f)slim\.svg/.test(url)) return "slim-gallon";
+  if (/(?:\/|%2f)round\.svg/.test(url)) return "round-gallon";
+  return inferGallonProductIconId(name) ?? inferGallonProductIconId(id);
+}
+
+function seededGallonIcon(id: CanonicalGallonIconId): ProductIcon {
+  return SEEDED_PRODUCT_ICONS.find((icon) => icon.id === id) ?? SEEDED_PRODUCT_ICONS[0];
+}
+
+function collapseGallonDuplicates(icons: ProductIcon[]): ProductIcon[] {
+  const seen = new Set<CanonicalGallonIconId>();
+  const next: ProductIcon[] = [];
+  for (const icon of icons) {
+    const canonical = canonicalGallonIconId(icon.id, icon.name, icon.imageUrl);
+    if (!canonical) {
+      next.push(icon);
+      continue;
+    }
+    if (seen.has(canonical)) continue;
+    seen.add(canonical);
+    const seeded = seededGallonIcon(canonical);
+    next.push({
+      ...icon,
+      id: canonical,
+      name: seeded.name,
+      imageUrl: icon.imageUrl || seeded.imageUrl,
+      waterContainer: true,
+      sortOrder: seeded.sortOrder,
+    });
+  }
+  return next;
+}
+
 /** Sales Portal `product_icons` are image assets — Lucide placeholders are not in that catalog. */
 export function isSalesPortalProductIcon(icon: Pick<ProductIcon, "imageUrl">): boolean {
   return Boolean(icon.imageUrl?.trim());
@@ -69,7 +133,7 @@ export function mergeProductIcons(cmsRows: ProductIcon[]): ProductIcon[] {
     (icon) => icon.active && isSalesPortalProductIcon(icon),
   );
 
-  return source.slice().sort(
+  return collapseGallonDuplicates(source).sort(
     (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
   );
 }
@@ -79,5 +143,9 @@ export function iconUrlForId(
   iconId: string | undefined,
 ): string | undefined {
   if (!iconId) return undefined;
-  return icons.find((icon) => icon.id === iconId)?.imageUrl;
+  const direct = icons.find((icon) => icon.id === iconId)?.imageUrl;
+  if (direct) return direct;
+  const canonical = canonicalGallonIconId(iconId);
+  if (!canonical || canonical === iconId) return undefined;
+  return icons.find((icon) => icon.id === canonical)?.imageUrl;
 }

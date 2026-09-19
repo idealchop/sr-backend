@@ -118,11 +118,11 @@ describe("subscription-effective", () => {
       expect(defer?.toISOString()).toBe(expires.toISOString());
     });
 
-    it("does not defer UPGRADE from Starter", () => {
-      const current = row("starter", {
+    it("does not defer UPGRADE from Free", () => {
+      const current = row("free", {
         billingCycle: "monthly",
         status: "active",
-        planCode: "starter",
+        planCode: "free",
         dates: {
           expiresAt: new Date("2026-05-28T00:00:00Z"),
           gracePeriodExpiresAt: new Date("2026-06-04T00:00:00Z"),
@@ -131,6 +131,25 @@ describe("subscription-effective", () => {
       expect(
         shouldDeferRenewalToPeriodEnd("UPGRADE", current, new Date("2026-05-20T00:00:00Z")),
       ).toBeNull();
+    });
+
+    it("defers UPGRADE from paid Starter until period end", () => {
+      const expires = new Date("2026-05-28T00:00:00Z");
+      const current = row("starter", {
+        billingCycle: "monthly",
+        status: "active",
+        planCode: "starter",
+        dates: {
+          expiresAt: expires,
+          gracePeriodExpiresAt: new Date("2026-06-04T00:00:00Z"),
+        },
+      });
+      const defer = shouldDeferRenewalToPeriodEnd(
+        "UPGRADE",
+        current,
+        new Date("2026-05-20T00:00:00Z"),
+      );
+      expect(defer?.toISOString()).toBe(expires.toISOString());
     });
 
     it("defers DOWNGRADE while paid period is still active", () => {
@@ -326,6 +345,25 @@ describe("subscription-effective", () => {
         },
       });
       expect(isEntitlingRow(pendingScale.data, now)).toBe(false);
+    });
+
+    it("entitles voucher Scale at ₱0 when payment is verified", () => {
+      const now = new Date("2026-09-19T12:00:00Z");
+      const voucherScale = row("scale-voucher", {
+        billingCycle: "monthly",
+        status: "active",
+        planCode: "scale",
+        price: 0,
+        paymentStatus: "verified",
+        dates: {
+          expiresAt: new Date("2026-10-13T00:15:45.257Z"),
+          gracePeriodExpiresAt: new Date("2026-10-20T00:15:45.257Z"),
+        },
+      });
+      expect(isEntitlingRow(voucherScale.data, now)).toBe(true);
+      expect(pickEffectiveEntitling([voucherScale], now)?.id).toBe(
+        "scale-voucher",
+      );
     });
 
     it("does not entitle pending checkout row", () => {

@@ -131,7 +131,8 @@ function resolveSupportAiPlanLimitsByTier(input: {
   const cycle = (input.billingCycle || "").toLowerCase();
   const status = (input.status || "").toLowerCase();
   const isTrial = cycle === "trial" || status === "trial";
-  const isStarter = code === "starter" || code === "free";
+  const isFree = code === "free";
+  const isPaidStarter = code === "starter";
   const isGrow = code === "grow" || code === "pro";
   const isScale = code === "scale";
   const isEnterprise = code === "enterprise";
@@ -148,30 +149,20 @@ function resolveSupportAiPlanLimitsByTier(input: {
 
   if (isTrial && isScale) {
     return {
-      chatMax: 50,
+      chatMax: 5,
       chatFrequency: "daily",
-      attachmentsMax: 50,
+      attachmentsMax: 5,
       attachmentsAllowed: true,
       agentChatEnabled: input.agentChatEnabled,
     };
   }
 
-  if (isStarter) {
+  if (isFree || isPaidStarter || isGrow) {
     return {
-      chatMax: 5,
+      chatMax: 0,
       chatFrequency: "monthly",
       attachmentsMax: null,
       attachmentsAllowed: false,
-      agentChatEnabled: false,
-    };
-  }
-
-  if (isGrow) {
-    return {
-      chatMax: 10,
-      chatFrequency: "monthly",
-      attachmentsMax: null,
-      attachmentsAllowed: true,
       agentChatEnabled: input.agentChatEnabled,
     };
   }
