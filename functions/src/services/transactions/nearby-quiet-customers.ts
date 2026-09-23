@@ -56,7 +56,6 @@ function fulfilledOperationalDate(tx: Transaction): Date | null {
   if (!fulfilledOperationalType(tx)) return null;
   return (
     parseDate((tx as { deliveredAt?: unknown }).deliveredAt) ||
-    parseDate(tx.updatedAt) ||
     parseDate(tx.scheduledAt) ||
     parseDate(tx.createdAt)
   );

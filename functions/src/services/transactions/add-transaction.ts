@@ -84,6 +84,22 @@ export async function addTransaction(
       FieldValue.serverTimestamp();
 
     const txType = transaction.type || "delivery";
+    const deliveryStatus = transaction.deliveryStatus || "pending";
+    const isFulfilledOnCreate =
+      deliveryStatus === "delivered" ||
+      deliveryStatus === "collected" ||
+      deliveryStatus === "completed" ||
+      txType === "walkin" ||
+      txType === "direct_sale";
+    const deliveredAtRaw = transaction.deliveredAt;
+    const deliveredAt =
+      deliveredAtRaw ?
+        typeof deliveredAtRaw === "string" ?
+          new Date(deliveredAtRaw) :
+          deliveredAtRaw :
+        isFulfilledOnCreate && scheduledAt instanceof Date ?
+          scheduledAt :
+          undefined;
     let resolvedRiderId = transaction.riderId;
     if (
       (txType === "delivery" || txType === "collection") &&
@@ -195,7 +211,7 @@ export async function addTransaction(
       paymentStatus: paymentStatus as any,
       paymentMethod: transaction.paymentMethod || "cash",
       payments: payments,
-      deliveryStatus: transaction.deliveryStatus || "pending",
+      deliveryStatus: deliveryStatus,
       riderId: syncedRiderId,
       riderName: syncedRiderName,
       ...(syncedAssigned ? { assignedRiders: syncedAssigned } : {}),
@@ -212,6 +228,7 @@ export async function addTransaction(
         } :
         {}),
       scheduledAt: scheduledAt,
+      ...(deliveredAt ? { deliveredAt } : {}),
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       ...(clientMutationId ? { clientMutationId } : {}),
@@ -490,6 +507,7 @@ export async function addTransaction(
       customerId: newTransaction.customerId,
       type: newTransaction.type,
       deliveryStatus: newTransaction.deliveryStatus,
+      deliveredAt: newTransaction.deliveredAt,
       scheduledAt: newTransaction.scheduledAt,
       createdAt: newTransaction.createdAt,
     });
