@@ -1,4 +1,8 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
+import {
+  buildSmartRefillEmailFooterPlainText,
+  wrapSmartRefillLetterHtml,
+} from "./smartrefill-email-html";
 
 const BRAND_COLOR = "#44c1ba";
 
@@ -47,17 +51,17 @@ export function buildCustomerEmailMastheadHtml(
   const name = escapeHtmlForEmail(brand.businessName.trim() || "Your water station");
   const eyebrowHtml = escapeHtmlForEmail(eyebrow);
   return `
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 20px;">
   <tr>
-    <td style="padding:24px 28px 20px;border-bottom:3px solid ${BRAND_COLOR};background-color:#fbfcfd;">
+    <td>
       <table role="presentation" cellspacing="0" cellpadding="0" border="0">
         <tr>
           <td style="vertical-align:middle;padding-right:14px;">
             ${logoOrInitialHtml(brand)}
           </td>
           <td style="vertical-align:middle;">
-            <p style="margin:0;font-size:20px;font-weight:700;color:#0f172a;">${name}</p>
-            <p style="margin:6px 0 0;font-size:10px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#64748b;">
+            <p style="margin:0;font-size:16px;font-weight:700;color:#172b4d;">${name}</p>
+            <p style="margin:4px 0 0;font-size:12px;color:#5e6c84;">
               ${eyebrowHtml}
             </p>
           </td>
@@ -91,12 +95,10 @@ export function buildCustomerEmailFooterHtml(brand: CustomerEmailBrand): string 
 
 /** Plain-text footer for customer transactional emails. */
 export function buildCustomerEmailFooterPlainText(businessName: string): string {
-  const year = new Date().getFullYear();
   return (
     `—\n${businessName.trim() || "Your water station"}\n` +
     "Powered by Smart Refill\n" +
-    "River Tech Inc. · https://riverph.com/\n" +
-    `© ${year} · All rights reserved`
+    buildSmartRefillEmailFooterPlainText()
   );
 }
 
@@ -107,37 +109,17 @@ export function wrapCustomerLifecycleEmailHtml(args: {
   preheader: string;
   bodyHtml: string;
 }): string {
-  const preheader = escapeHtmlForEmail(args.preheader);
-  return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${escapeHtmlForEmail(args.brand.businessName)}</title>
-</head>
-<body style="margin:0;padding:0;background-color:#e8eef4;font-family:'Segoe UI',Arial,sans-serif;">
-  <div style="display:none;max-height:0;overflow:hidden;">${preheader}</div>
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#e8eef4;">
-    <tr>
-      <td align="center" style="padding:28px 14px 40px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-          style="max-width:600px;background-color:#ffffff;border:1px solid #d8e2ec;border-radius:14px;overflow:hidden;">
-          <tr>
-            <td style="padding:0;">
-              ${buildCustomerEmailMastheadHtml(args.brand, args.eyebrow)}
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:32px 32px 28px;">
-              ${args.bodyHtml}
-            </td>
-          </tr>
-          ${buildCustomerEmailFooterHtml(args.brand)}
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+  const name = args.brand.businessName.trim() || "Your water station";
+  return wrapSmartRefillLetterHtml({
+    title: name,
+    headline: args.eyebrow,
+    preheader: args.preheader,
+    omitHeadline: true,
+    includeSignOff: false,
+    bodyHtml: `${buildCustomerEmailMastheadHtml(args.brand, args.eyebrow)}${args.bodyHtml}
+      <p style="margin:28px 0 0;font-size:15px;line-height:1.6;color:#172b4d;">Cheers,<br />${escapeHtmlForEmail(name)}</p>`,
+    notice:
+      `Powered by Smart Refill. You are receiving this email because you have an order or account with ${name}. ` +
+      "If you have questions about this order, contact the station directly.",
+  });
 }

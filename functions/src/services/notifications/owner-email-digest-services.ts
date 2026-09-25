@@ -17,6 +17,7 @@ import { listLowStockItems } from "../../utils/inventory-reorder-alert";
 import { buildSubscriptionLifecycleSnapshot } from "../../utils/subscription-lifecycle-alert";
 import { ProductionShiftService } from "../plant/production-shift-service";
 import { escapeHtmlForEmail } from "../../utils/auth-transactional-email";
+import { wrapSmartRefillLetterHtml } from "../../utils/smartrefill-email-html";
 import {
   coerceToDate,
   isManilaMonday,
@@ -185,15 +186,26 @@ export async function sendWeeklyPerformanceEmailForBusiness(
   const topLines = top
     .map((row) => `<li>${escapeHtmlForEmail(row.name)} — ₱${Math.round(row.amount).toLocaleString("en-PH")}</li>`)
     .join("");
-  const html = `
-<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;padding:24px;">
-  <h1 style="font-size:20px;">Weekly performance</h1>
-  <p>Revenue this week: <strong>₱${Math.round(thisWeek).toLocaleString("en-PH")}</strong> (${deltaPct >= 0 ? "+" : ""}${deltaPct}% vs prior week)</p>
-  <p>Peak hour: ${escapeHtmlForEmail(peak.busiestHourLabel || "—")} · Unpaid total: ₱${Math.round(unpaidTotal).toLocaleString("en-PH")}</p>
-  <p>Dormant sukis: ${Number(dormant.dormantCount) || 0} · Revenue at risk: ₱${Math.round(Number(dormant.revenueAtRiskPhp) || 0).toLocaleString("en-PH")}</p>
-  <p><strong>Top sukis</strong></p><ul>${topLines || "<li>—</li>"}</ul>
-  <p><a href="${escapeHtmlForEmail(`${resolveAppBaseUrlForEmail()}/dashboard`)}">Open Command Center</a></p>
-</body></html>`;
+  const html = wrapSmartRefillLetterHtml({
+    title: subject,
+    headline: "Weekly performance",
+    greetingName: String(data.ownerName || "there"),
+    bodyHtml: `
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.65;color:#253858;">
+        Revenue this week: <strong>₱${Math.round(thisWeek).toLocaleString("en-PH")}</strong>
+        (${deltaPct >= 0 ? "+" : ""}${deltaPct}% vs prior week)
+      </p>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.65;color:#253858;">
+        Peak hour: ${escapeHtmlForEmail(peak.busiestHourLabel || "—")} · Unpaid total: ₱${Math.round(unpaidTotal).toLocaleString("en-PH")}
+      </p>
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.65;color:#253858;">
+        Dormant sukis: ${Number(dormant.dormantCount) || 0} · Revenue at risk: ₱${Math.round(Number(dormant.revenueAtRiskPhp) || 0).toLocaleString("en-PH")}
+      </p>
+      <p style="margin:0 0 8px;font-size:15px;font-weight:700;color:#172b4d;">Top sukis</p>
+      <ul>${topLines || "<li>—</li>"}</ul>
+    `,
+    cta: { label: "Open Command Center", url: `${resolveAppBaseUrlForEmail()}/dashboard` },
+  });
   const text = [
     `Weekly performance — ${businessName}`,
     `Revenue: ₱${thisWeek.toFixed(2)} (${deltaPct}% vs prior week)`,
@@ -238,12 +250,13 @@ export async function sendSubscriptionLifecycleEmailForBusiness(
 
   const businessName = String(data.name || "Your station");
   const subject = `Billing update · ${businessName}`;
-  const html = `
-<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;padding:24px;">
-  <h1 style="font-size:20px;">Subscription update</h1>
-  <p>${escapeHtmlForEmail(lifecycle.headline)}</p>
-  <p><a href="${escapeHtmlForEmail(`${resolveAppBaseUrlForEmail()}/account`)}">Manage plan</a></p>
-</body></html>`;
+  const html = wrapSmartRefillLetterHtml({
+    title: subject,
+    headline: "Subscription update",
+    greetingName: String(data.ownerName || "there"),
+    bodyHtml: `<p style="margin:0;font-size:15px;line-height:1.65;color:#253858;">${escapeHtmlForEmail(lifecycle.headline)}</p>`,
+    cta: { label: "Manage plan", url: `${resolveAppBaseUrlForEmail()}/account` },
+  });
   const text = `${lifecycle.headline}\nAccount: ${resolveAppBaseUrlForEmail()}/account`;
 
   const sent = await sendOwnerEmail(
@@ -288,12 +301,13 @@ export async function sendProductionVarianceEmailForBusiness(
 
   const businessName = String(data.name || "Your station");
   const subject = `Plant vs sales mismatch · ${businessName}`;
-  const html = `
-<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;padding:24px;">
-  <h1 style="font-size:20px;">Production variance alert</h1>
-  <p>${escapeHtmlForEmail(alert.headline)}</p>
-  <p><a href="${escapeHtmlForEmail(`${resolveAppBaseUrlForEmail()}/dashboard`)}">Review dashboard</a></p>
-</body></html>`;
+  const html = wrapSmartRefillLetterHtml({
+    title: subject,
+    headline: "Production variance alert",
+    greetingName: String(data.ownerName || "there"),
+    bodyHtml: `<p style="margin:0;font-size:15px;line-height:1.65;color:#253858;">${escapeHtmlForEmail(alert.headline)}</p>`,
+    cta: { label: "Review dashboard", url: `${resolveAppBaseUrlForEmail()}/dashboard` },
+  });
   const text = `${alert.headline}\n${resolveAppBaseUrlForEmail()}/dashboard`;
 
   const sent = await sendOwnerEmail(
@@ -345,12 +359,13 @@ export async function sendLowStockDigestEmailForBusiness(
     .join("");
 
   const subject = `Low stock digest · ${lowStock.length} SKU${lowStock.length === 1 ? "" : "s"}`;
-  const html = `
-<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;padding:24px;">
-  <h1 style="font-size:20px;">Items below minimum</h1>
-  <table width="100%" cellspacing="0">${rows}</table>
-  <p><a href="${escapeHtmlForEmail(`${resolveAppBaseUrlForEmail()}/inventory`)}">Open Inventory</a></p>
-</body></html>`;
+  const html = wrapSmartRefillLetterHtml({
+    title: subject,
+    headline: "Items below minimum",
+    greetingName: String(data.ownerName || "there"),
+    bodyHtml: `<table width="100%" cellspacing="0">${rows}</table>`,
+    cta: { label: "Open Inventory", url: `${resolveAppBaseUrlForEmail()}/inventory` },
+  });
   const text = lowStock
     .map((r) => `${r.name}: ${r.current}/${r.min} ${r.unit}`)
     .join("\n");
@@ -410,15 +425,18 @@ export async function sendTeamActivityDigestEmailForBusiness(
 
   const businessName = String(data.name || "Your station");
   const subject = `Team activity digest · ${businessName}`;
-  const html = `
-<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;padding:24px;">
-  <h1 style="font-size:20px;">Last 7 days</h1>
-  <ul>
-    <li>New sukis onboarded: <strong>${newCustomers}</strong></li>
-    <li>Deliveries / collections completed: <strong>${completedDeliveries}</strong></li>
-  </ul>
-  <p><a href="${escapeHtmlForEmail(`${resolveAppBaseUrlForEmail()}/dashboard`)}">Open Command Center</a></p>
-</body></html>`;
+  const html = wrapSmartRefillLetterHtml({
+    title: subject,
+    headline: "Last 7 days",
+    greetingName: String(data.ownerName || "there"),
+    bodyHtml: `
+      <ul>
+        <li>New sukis onboarded: <strong>${newCustomers}</strong></li>
+        <li>Deliveries / collections completed: <strong>${completedDeliveries}</strong></li>
+      </ul>
+    `,
+    cta: { label: "Open Command Center", url: `${resolveAppBaseUrlForEmail()}/dashboard` },
+  });
   const text = `New sukis: ${newCustomers}\nCompleted stops: ${completedDeliveries}`;
 
   const sent = await sendOwnerEmail(
@@ -447,14 +465,23 @@ export async function sendAdvancePaymentReceiptEmail(args: {
   const amountLabel = `₱${Math.round(args.amount).toLocaleString("en-PH")}`;
   const paidWhen = formatFirestorePhilippineDateTime(args.paidAt ?? new Date());
   const subject = `Payment received ${args.referenceId} · ${args.businessName}`;
-  const html = `
-<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;padding:24px;">
-  <h1 style="font-size:20px;">Advance payment received</h1>
-  <p>Hi ${escapeHtmlForEmail(args.customerName)},</p>
-  <p>We received your payment of <strong>${amountLabel}</strong> on ${escapeHtmlForEmail(paidWhen)}.</p>
-  <p>Reference: <strong>${escapeHtmlForEmail(args.referenceId)}</strong></p>
-  <p><a href="${escapeHtmlForEmail(args.trackUrl)}">Track order</a></p>
-</body></html>`;
+  const html = wrapSmartRefillLetterHtml({
+    title: subject,
+    headline: "Advance payment received",
+    greetingName: args.customerName,
+    includeSignOff: false,
+    bodyHtml: `
+      <p style="margin:0 0 12px;font-size:15px;line-height:1.65;color:#253858;">
+        We received your payment of <strong>${amountLabel}</strong> on ${escapeHtmlForEmail(paidWhen)}.
+      </p>
+      <p style="margin:0;font-size:15px;line-height:1.65;color:#253858;">
+        Reference: <strong>${escapeHtmlForEmail(args.referenceId)}</strong>
+      </p>
+      <p style="margin:28px 0 0;font-size:15px;line-height:1.6;color:#172b4d;">Cheers,<br />${escapeHtmlForEmail(args.businessName)}</p>
+    `,
+    cta: { label: "Track order", url: args.trackUrl },
+    notice: `You are receiving this email because you have an order or account with ${args.businessName}.`,
+  });
   const text = [
     `Payment received: ${amountLabel}`,
     `Reference: ${args.referenceId}`,

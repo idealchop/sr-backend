@@ -1,9 +1,8 @@
 /* eslint-disable max-len */
 import { escapeHtmlForEmail } from "./auth-transactional-email";
 import {
-  buildCustomerEmailFooterHtml,
   buildCustomerEmailFooterPlainText,
-  buildCustomerEmailMastheadHtml,
+  wrapCustomerLifecycleEmailHtml,
   type CustomerEmailBrand,
 } from "./customer-email-branding";
 
@@ -108,66 +107,32 @@ export function getPortalCompletionReceiptEmail(
     "Thank you for your business.\n\n" +
     buildCustomerEmailFooterPlainText(input.businessName);
 
-  const html = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Order complete</title>
-</head>
-<body style="margin:0;padding:0;background-color:#e8eef4;font-family:'Segoe UI',Arial,sans-serif;">
-  <div style="display:none;max-height:0;overflow:hidden;">
-    Your order ${ref} with ${business} is complete. Receipt attached.
-  </div>
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#e8eef4;">
-    <tr>
-      <td align="center" style="padding:28px 14px 40px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-          style="max-width:600px;background-color:#ffffff;border:1px solid #d8e2ec;border-radius:14px;overflow:hidden;">
-          <tr>
-            <td style="padding:0;">
-              ${buildCustomerEmailMastheadHtml(brand, "Order confirmation")}
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:32px 32px 28px;">
-              <p style="margin:0;font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#64748b;">
-                Receipt notification
-              </p>
-              <h1 style="margin:10px 0 0;font-size:18px;font-weight:700;color:#0f172a;line-height:1.35;">
-                Your order is complete
-              </h1>
-              <p style="margin:22px 0 0;font-size:14px;line-height:1.68;color:#475569;">
-                Dear <strong style="color:#0f172a;">${name}</strong>,
-              </p>
-              <p style="margin:14px 0 0;font-size:14px;line-height:1.68;color:#475569;">
-                We are pleased to confirm that your order with
-                <strong style="color:#0f172a;">${business}</strong> has been completed
-                and recorded. Please find your official receipt attached to this email.
-              </p>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-                style="margin:26px 0 0;background-color:#f1f5f9;border:1px solid #e2e8f0;border-radius:12px;">
-                <tr>
-                  <td style="padding:0;">
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                      ${detailCardHtml(detailRows)}
-                    </table>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:24px 0 0;font-size:13px;line-height:1.65;color:#64748b;">
-                If you have any questions about this order, please contact ${business} directly.
-              </p>
-            </td>
-          </tr>
-          ${buildCustomerEmailFooterHtml(brand)}
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+  const html = wrapCustomerLifecycleEmailHtml({
+    brand,
+    eyebrow: "Order confirmation",
+    preheader: `Your order ${input.referenceId} with ${input.businessName} is complete. Receipt attached.`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:22px;line-height:1.35;font-weight:700;color:#172b4d;">
+        Your order is complete
+      </h1>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#253858;">
+        Hi ${name}, your order with <strong>${business}</strong> is done. Your official receipt is attached.
+      </p>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
+        style="margin:0 0 16px;background-color:#f4f5f7;border:1px solid #dfe1e6;border-radius:6px;">
+        <tr>
+          <td style="padding:0;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+              ${detailCardHtml(detailRows)}
+            </table>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:0;font-size:13px;line-height:1.65;color:#5e6c84;">
+        Questions about this order? Contact ${business} directly.
+      </p>
+    `,
+  });
 
   return {
     subject,

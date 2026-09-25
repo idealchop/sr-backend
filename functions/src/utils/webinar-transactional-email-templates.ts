@@ -1,4 +1,8 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
+import {
+  smartRefillEmailWhenHtml,
+  wrapSmartRefillLetterHtml,
+} from "./smartrefill-email-html";
 
 export type WebinarTransactionalEmailInput = {
   displayName: string;
@@ -19,23 +23,19 @@ function shell(opts: {
   ctaUrl?: string | null;
   footerHtml?: string;
 }): string {
-  const cta =
-    opts.ctaUrl && opts.ctaLabel ?
-      `<a href="${escapeHtmlForEmail(opts.ctaUrl)}" style="display:inline-block;background:#44c1ba;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 20px;border-radius:12px;">${escapeHtmlForEmail(opts.ctaLabel)}</a>` :
-      "";
-  return `
-<!DOCTYPE html>
-<html>
-<body style="margin:0;padding:24px;background:#f8fafc;font-family:system-ui,sans-serif;">
-  <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:16px;padding:24px;border:1px solid #e2e8f0;">
-    <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">${escapeHtmlForEmail(opts.eyebrow)}</p>
-    <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a;">${escapeHtmlForEmail(opts.title)}</h1>
-    ${opts.bodyHtml}
-    ${cta}
-    ${opts.footerHtml || ""}
-  </div>
-</body>
-</html>`;
+  return wrapSmartRefillLetterHtml({
+    title: opts.title,
+    headline: opts.title,
+    bodyHtml: `
+      <p style="margin:0 0 12px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#5e6c84;">${escapeHtmlForEmail(opts.eyebrow)}</p>
+      ${opts.bodyHtml}
+      ${opts.footerHtml || ""}
+    `,
+    cta:
+      opts.ctaUrl && opts.ctaLabel ?
+        { label: opts.ctaLabel, url: opts.ctaUrl } :
+        null,
+  });
 }
 
 export function buildMemberWebinarConfirmationEmail(
@@ -55,14 +55,10 @@ export function buildMemberWebinarConfirmationEmail(
     eyebrow: "Webinar registration",
     title: eventName,
     bodyHtml: `
-    <p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#334155;">
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#253858;">
       Hi ${escapeHtmlForEmail(name)}, ${escapeHtmlForEmail(statusLine)}
     </p>
-    <div style="margin:0 0 20px;padding:16px;border-radius:12px;background:#f1f5f9;border:1px solid #e2e8f0;">
-      <p style="margin:0;font-size:13px;color:#64748b;">When</p>
-      <p style="margin:4px 0 0;font-size:15px;font-weight:700;color:#0f172a;">${escapeHtmlForEmail(input.startsAtLabel)}</p>
-      <p style="margin:8px 0 0;font-size:12px;color:#64748b;">Timezone: ${escapeHtmlForEmail(input.timezone)}</p>
-    </div>`,
+    ${smartRefillEmailWhenHtml(input.startsAtLabel, input.timezone)}`,
     ctaLabel: "Open webinars hub",
     ctaUrl: input.hubUrl,
   });
@@ -94,14 +90,10 @@ export function buildWebinarApprovedEmail(
     eyebrow: "Registration approved",
     title: eventName,
     bodyHtml: `
-    <p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#334155;">
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#253858;">
       Hi ${escapeHtmlForEmail(name)}, your registration was approved. ${escapeHtmlForEmail(joinHint)}
     </p>
-    <div style="margin:0 0 20px;padding:16px;border-radius:12px;background:#f1f5f9;border:1px solid #e2e8f0;">
-      <p style="margin:0;font-size:13px;color:#64748b;">When</p>
-      <p style="margin:4px 0 0;font-size:15px;font-weight:700;color:#0f172a;">${escapeHtmlForEmail(input.startsAtLabel)}</p>
-      <p style="margin:8px 0 0;font-size:12px;color:#64748b;">Timezone: ${escapeHtmlForEmail(input.timezone)}</p>
-    </div>`,
+    ${smartRefillEmailWhenHtml(input.startsAtLabel, input.timezone)}`,
     ctaLabel: input.joinUrl ? "Join webinar" : "Open webinars hub",
     ctaUrl: input.joinUrl || input.hubUrl,
     footerHtml: input.cancelUrl ?
@@ -134,14 +126,10 @@ export function buildMemberWebinarReminderEmail(
     eyebrow: "Reminder",
     title: `${eventName} starts in about an hour`,
     bodyHtml: `
-    <p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#334155;">
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#253858;">
       Hi ${escapeHtmlForEmail(name)}, this is your reminder for today’s webinar.
     </p>
-    <div style="margin:0 0 20px;padding:16px;border-radius:12px;background:#f1f5f9;border:1px solid #e2e8f0;">
-      <p style="margin:0;font-size:13px;color:#64748b;">When</p>
-      <p style="margin:4px 0 0;font-size:15px;font-weight:700;color:#0f172a;">${escapeHtmlForEmail(input.startsAtLabel)}</p>
-      <p style="margin:8px 0 0;font-size:12px;color:#64748b;">Timezone: ${escapeHtmlForEmail(input.timezone)}</p>
-    </div>`,
+    ${smartRefillEmailWhenHtml(input.startsAtLabel, input.timezone)}`,
     ctaLabel: "Open webinars hub",
     ctaUrl: input.hubUrl,
   });
