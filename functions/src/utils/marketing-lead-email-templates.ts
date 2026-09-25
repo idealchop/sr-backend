@@ -1,14 +1,14 @@
 /* eslint-disable max-len */
 import {
   escapeHtmlForEmail,
-  SMART_REFILL_EMAIL_LOGO_SRC,
 } from "./auth-transactional-email";
 import {
-  buildSmartRefillEmailLegalFooterPlainText,
-  buildSmartRefillEmailLegalFooterRowHtml,
-} from "./smartrefill-email-legal-footer";
+  buildSmartRefillEmailFooterPlainText,
+  SMART_REFILL_BRAND_TEAL,
+  wrapSmartRefillLetterHtml,
+} from "./smartrefill-email-html";
 
-const BRAND_COLOR = "#44c1ba";
+const BRAND_COLOR = SMART_REFILL_BRAND_TEAL;
 
 export interface MarketingLeadEmailInput {
   eyebrow: string;
@@ -71,12 +71,10 @@ export function buildMarketingLeadEmail(
   brevoTag: string;
 } {
   const eyebrow = escapeHtmlForEmail(input.eyebrow);
-  const headline = escapeHtmlForEmail(input.headline);
-  const preheader = escapeHtmlForEmail(input.preheader);
 
   const detailBlock = `
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-      style="margin:26px 0 0;background-color:#f1f5f9;border:1px solid #e2e8f0;border-radius:12px;">
+      style="margin:8px 0 0;background-color:#f4f5f7;border:1px solid #dfe1e6;border-radius:6px;">
       <tr>
         <td style="padding:0;">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
@@ -91,47 +89,21 @@ export function buildMarketingLeadEmail(
   const text =
     `${input.subject}\n\n` +
     `${textLines.join("\n")}\n\n` +
-    `${buildSmartRefillEmailLegalFooterPlainText()}`;
+    buildSmartRefillEmailFooterPlainText();
 
-  const html = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${headline}</title>
-</head>
-<body style="margin:0;padding:0;background-color:#e8eef4;font-family:'Segoe UI',Arial,sans-serif;">
-  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${preheader}</div>
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#e8eef4;">
-    <tr>
-      <td align="center" style="padding:28px 14px 40px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-          style="max-width:600px;background-color:#ffffff;border:1px solid #d8e2ec;border-radius:14px;">
-          <tr>
-            <td style="padding:24px 28px;border-bottom:3px solid ${BRAND_COLOR};">
-              <img src="${SMART_REFILL_EMAIL_LOGO_SRC}" width="44" height="44" alt="Smart Refill" style="vertical-align:middle;margin-right:12px;" />
-              <span style="font-size:20px;font-weight:700;color:#0f172a;vertical-align:middle;">Smart Refill</span>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:32px;">
-              <p style="margin:0;font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#64748b;">${eyebrow}</p>
-              <h1 style="margin:10px 0 0;font-size:18px;font-weight:700;color:#0f172a;">${headline}</h1>
-              <p style="margin:18px 0 0;font-size:14px;line-height:1.65;color:#475569;">
-                A new submission was received from the website. Details are below.
-              </p>
-              ${detailBlock}
-              <p style="margin:24px 0 0;font-size:12px;color:#64748b;">Reply directly to the lead using the email address above.</p>
-            </td>
-          </tr>
-              ${buildSmartRefillEmailLegalFooterRowHtml()}
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+  const html = wrapSmartRefillLetterHtml({
+    title: input.headline,
+    headline: input.headline,
+    preheader: input.preheader,
+    greetingName: "team",
+    bodyHtml: `
+      <p style="margin:0 0 12px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#5e6c84;">${eyebrow}</p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#253858;">
+        A new website submission just came in. Details are below — reply directly to the lead using the email in this message.
+      </p>
+      ${detailBlock}
+    `,
+  });
 
   return {
     subject: input.subject,
@@ -185,9 +157,9 @@ export function getRequestDemoConfirmEmail(data: RequestDemoEmailContext): {
   text: string;
   brevoTag: string;
 } {
-  const name = escapeHtmlForEmail(data.name.trim() || "there");
-  const business = escapeHtmlForEmail(data.businessName.trim() || "your station");
-  const slot = escapeHtmlForEmail(data.demoSlotLabel ?? "to be confirmed");
+  const name = data.name.trim() || "there";
+  const business = data.businessName.trim() || "your station";
+  const slot = data.demoSlotLabel ?? "to be confirmed";
   const meetRaw = data.meetLink?.trim() || "";
   const meetHtml = meetRaw ?
     `<a href="${escapeHtmlForEmail(meetRaw)}" style="color:${BRAND_COLOR};font-weight:600;">${escapeHtmlForEmail(meetRaw)}</a>` :
@@ -196,76 +168,41 @@ export function getRequestDemoConfirmEmail(data: RequestDemoEmailContext): {
 
   const subject = `Your Smart Refill demo is scheduled — ${data.businessName.trim() || "WRS"}`;
   const text =
-    `Hi ${data.name.trim() || "there"},\n\n` +
-    `Thanks for requesting a Smart Refill demo for ${data.businessName.trim() || "your station"}.\n\n` +
-    `When: ${data.demoSlotLabel ?? "to be confirmed"}\n` +
+    `Hi ${name},\n\n` +
+    `Thanks for requesting a Smart Refill demo for ${business}.\n\n` +
+    `When: ${slot}\n` +
     "Duration: 1 hour\n" +
     `Google Meet: ${meetPlain}\n\n` +
     "We've also invited our team. A calendar invite (.ics) is attached.\n\n" +
-    `${buildSmartRefillEmailLegalFooterPlainText()}`;
+    `${buildSmartRefillEmailFooterPlainText()}`;
 
-  const html = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${escapeHtmlForEmail(subject)}</title>
-</head>
-<body style="margin:0;padding:0;background-color:#e8eef4;font-family:'Segoe UI',Arial,sans-serif;">
-  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">Your 1-hour Smart Refill demo details</div>
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#e8eef4;">
-    <tr>
-      <td align="center" style="padding:28px 14px 40px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-          style="max-width:600px;background-color:#ffffff;border:1px solid #d8e2ec;border-radius:14px;">
-          <tr>
-            <td style="padding:24px 28px;border-bottom:3px solid ${BRAND_COLOR};">
-              <img src="${SMART_REFILL_EMAIL_LOGO_SRC}" width="44" height="44" alt="Smart Refill" style="vertical-align:middle;margin-right:12px;" />
-              <span style="font-size:20px;font-weight:700;color:#0f172a;vertical-align:middle;">Smart Refill</span>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:32px;">
-              <p style="margin:0;font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#64748b;">Demo confirmation</p>
-              <h1 style="margin:10px 0 0;font-size:18px;font-weight:700;color:#0f172a;">You're booked for a 1-hour demo</h1>
-              <p style="margin:18px 0 0;font-size:14px;line-height:1.65;color:#475569;">
-                Hi ${name}, thanks for requesting a demo for <strong>${business}</strong>.
-                Here are your details:
-              </p>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-                style="margin:26px 0 0;background-color:#f1f5f9;border:1px solid #e2e8f0;border-radius:12px;">
-                <tr>
-                  <td style="padding:14px 16px;border-bottom:1px solid #e2e8f0;">
-                    <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;">When</span><br />
-                    <span style="font-size:13px;font-weight:600;color:#0f172a;">${slot}</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:14px 16px;border-bottom:1px solid #e2e8f0;">
-                    <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;">Duration</span><br />
-                    <span style="font-size:13px;font-weight:600;color:#0f172a;">1 hour</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:14px 16px;">
-                    <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;">Google Meet</span><br />
-                    <span style="font-size:13px;font-weight:600;color:#0f172a;">${meetHtml}</span>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:24px 0 0;font-size:13px;line-height:1.65;color:#475569;">
-                A calendar invite (.ics) is attached. Our team will join from the Smart Refill calendar invite.
-              </p>
-            </td>
-          </tr>
-              ${buildSmartRefillEmailLegalFooterRowHtml()}
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+  const html = wrapSmartRefillLetterHtml({
+    title: subject,
+    headline: "You're booked for a 1-hour demo",
+    preheader: "Your 1-hour Smart Refill demo details",
+    greetingName: name,
+    bodyHtml: `
+      <p style="margin:0 0 12px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#5e6c84;">Demo confirmation</p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#253858;">
+        Thanks for requesting a demo for <strong>${escapeHtmlForEmail(business)}</strong>. Here are your details:
+      </p>
+      <p style="margin:16px 0 0;font-size:15px;line-height:1.65;color:#253858;">
+        <strong style="display:block;margin:0 0 4px;font-size:13px;font-weight:600;color:#5e6c84;">When</strong>
+        ${escapeHtmlForEmail(slot)}
+      </p>
+      <p style="margin:12px 0 0;font-size:15px;line-height:1.65;color:#253858;">
+        <strong style="display:block;margin:0 0 4px;font-size:13px;font-weight:600;color:#5e6c84;">Duration</strong>
+        1 hour
+      </p>
+      <p style="margin:12px 0 0;font-size:15px;line-height:1.65;color:#253858;">
+        <strong style="display:block;margin:0 0 4px;font-size:13px;font-weight:600;color:#5e6c84;">Google Meet</strong>
+        ${meetHtml}
+      </p>
+      <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#5e6c84;">
+        A calendar invite (.ics) is attached. Our team will join from the Smart Refill calendar invite.
+      </p>
+    `,
+  });
 
   return {
     subject,

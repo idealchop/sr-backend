@@ -1,14 +1,13 @@
 /* eslint-disable max-len */
 import {
+  buildSmartRefillEmailFooterPlainText,
   escapeHtmlForEmail,
-  SMART_REFILL_EMAIL_LOGO_SRC,
-} from "./auth-transactional-email";
-import {
-  buildSmartRefillEmailLegalFooterPlainText,
-  buildSmartRefillEmailLegalFooterRowHtml,
-} from "./smartrefill-email-legal-footer";
+  SMART_REFILL_BRAND_TEAL,
+  smartRefillEmailPasteUrlHtml,
+  wrapSmartRefillLetterHtml,
+} from "./smartrefill-email-html";
 
-const BRAND_COLOR = "#44c1ba";
+const BRAND_COLOR = SMART_REFILL_BRAND_TEAL;
 
 export interface StaffEmailVerificationInput {
   displayName: string;
@@ -109,9 +108,7 @@ export function getStaffEmailVerificationEmail(
   const emailPlain = input.email.trim();
   const emailEsc = escapeHtmlForEmail(emailPlain);
   const mailtoHrefEsc = escapeHtmlForEmail(`mailto:${emailPlain}`);
-  const name = escapeHtmlForEmail(input.displayName.trim() || "there");
   const url = input.verificationLink.trim();
-  const urlEsc = escapeHtmlForEmail(url);
   const workspacePlain = (input.workspaceName || "").trim() || "Your Smart Refill workspace";
   const workspaceEsc = escapeHtmlForEmail(workspacePlain);
   const rolePlain = staffRoleLabel(input.memberRole);
@@ -122,10 +119,10 @@ export function getStaffEmailVerificationEmail(
     `Verify ${emailPlain} to activate your Smart Refill team access for ${workspacePlain}.`;
   const intro =
     `You were added to ${workspacePlain} on Smart Refill as ${rolePlain}. ` +
-    "Please confirm this email address so we can verify your identity before granting workspace access.";
+    "Confirm this email so we can verify your identity before granting workspace access.";
 
   const text =
-    `${input.displayName.trim() ? `${input.displayName.trim()},` : "Good day,"}\n\n` +
+    `Hi ${input.displayName.trim() || "there"},\n\n` +
     `${intro}\n\n` +
     "— Account details —\n" +
     `Email: ${emailPlain}\n` +
@@ -138,153 +135,44 @@ export function getStaffEmailVerificationEmail(
     `Confirm your email:\n${url}\n\n` +
     "If you did not expect a team invitation, you may ignore this message. " +
     "Contact your station administrator if you need a new link.\n\n" +
-    buildSmartRefillEmailLegalFooterPlainText();
+    buildSmartRefillEmailFooterPlainText();
 
-  const html = `
-      <!DOCTYPE html>
-      <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml"
-        xmlns:o="urn:schemas-microsoft-com:office:office">
-      <head>
-          <meta charset="UTF-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <meta name="x-apple-disable-message-reformatting" />
-          <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-          <title>Confirm your workspace email</title>
-          <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
-          <style type="text/css">
-              #outlook a { padding: 0; }
-              body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
-              table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
-              img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none;
-                text-decoration: none; max-width: 100%; }
-              @media only screen and (max-width: 620px) {
-                .outer-pad { padding-left: 16px !important; padding-right: 16px !important; }
-                .content-pad { padding: 24px 20px !important; }
-                .detail-stack td { display: block !important; width: 100% !important; text-align: left !important;
-                  padding-bottom: 4px !important; }
-                .detail-stack td.val-cell { padding-top: 0 !important; padding-bottom: 14px !important; }
-              }
-          </style>
-      </head>
-      <body style="margin:0;padding:0;background-color:#e8eef4;font-family:'Manrope','Segoe UI',Arial,sans-serif;">
-      <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#e8eef4;">
-        ${escapeHtmlForEmail(preheader)}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;
-      </div>
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#e8eef4;">
-        <tr>
-          <td align="center" class="outer-pad" style="padding:28px 14px 40px;">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-              style="max-width:600px;background-color:#ffffff;border:1px solid #d8e2ec;border-radius:14px;
-                overflow:hidden;box-shadow:0 4px 24px rgba(15,23,42,0.06);">
-              <tr>
-                <td style="padding:0;border-bottom:3px solid ${BRAND_COLOR};background-color:#fbfcfd;">
-                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                    <tr>
-                      <td style="padding:24px 28px 20px;vertical-align:middle;">
-                        <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-                          <tr>
-                            <td style="vertical-align:middle;padding-right:14px;">
-                              <img src="${SMART_REFILL_EMAIL_LOGO_SRC}" width="44" height="44"
-                                alt="Smart Refill" style="display:block;border-radius:10px;" />
-                            </td>
-                            <td style="vertical-align:middle;">
-                              <p style="margin:0;font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.02em;
-                                line-height:1.2;">Smart&nbsp;Refill</p>
-                              <p style="margin:6px 0 0;font-size:10px;font-weight:600;letter-spacing:0.14em;
-                                text-transform:uppercase;color:#64748b;line-height:1.4;">
-                                Your operating system for business essentials.
-                              </p>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-              <tr>
-                <td class="content-pad" style="padding:32px 32px 28px;">
-                  <p style="margin:0;font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;
-                    color:#64748b;">Team workspace · Email verification</p>
-                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:14px;">
-                    <tr>
-                      <td width="4" style="width:4px;background-color:${BRAND_COLOR};border-radius:2px;font-size:0;">&nbsp;</td>
-                      <td style="padding-left:14px;">
-                        <h1 style="margin:0;font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.02em;line-height:1.35;">
-                          Confirm your workspace email
-                        </h1>
-                      </td>
-                    </tr>
-                  </table>
-                  <p style="margin:22px 0 0;font-size:14px;line-height:1.65;color:#475569;">
-                    <strong style="color:#0f172a;">${name}</strong>
-                  </p>
-                  <p style="margin:14px 0 0;font-size:14px;line-height:1.68;color:#475569;">
-                    ${escapeHtmlForEmail(intro)}
-                  </p>
-                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-                    style="margin:26px 0 0;background-color:#f1f5f9;border:1px solid #e2e8f0;border-radius:12px;">
-                    <tr><td style="padding:0;">
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                        ${staffDetailRowsHtml(emailEsc, mailtoHrefEsc, workspaceEsc, roleEsc)}
-                      </table>
-                    </td></tr>
-                  </table>
-                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-                    style="margin:24px 0 0;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
-                    <tr>
-                      <td style="padding:16px 18px;">
-                        <p style="margin:0 0 12px;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;
-                          color:#64748b;">What happens next</p>
-                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-                          ${staffOnboardingStepsHtml()}
-                        </table>
-                      </td>
-                    </tr>
-                  </table>
-                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:32px 0 0;">
-                    <tr>
-                      <td align="center">
-                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" bgcolor="${BRAND_COLOR}">
-                          <tr>
-                            <td align="center" style="border-radius:10px;mso-padding-alt:12px 28px;background-color:${BRAND_COLOR};">
-                              <a href="${urlEsc}" target="_blank" rel="noopener noreferrer"
-                                title="Confirm email address"
-                                style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;color:#ffffff !important;
-                                  text-decoration:none;line-height:1.35;mso-line-height-rule:exactly;">
-                                Confirm email address
-                              </a>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                  </table>
-                  <p style="margin:22px 0 0;font-size:12px;line-height:1.65;color:#64748b;">
-                    This confirmation link is single-use. If you did not expect a team invitation, you may disregard this notice.
-                    Contact your station administrator if you need a new link.
-                  </p>
-                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-                    style="margin:18px 0 0;background-color:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;">
-                    <tr>
-                      <td style="padding:12px 14px;">
-                        <p style="margin:0 0 6px;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;
-                          color:#94a3b8;">Paste in browser if the button does not open</p>
-                        <p style="margin:0;font-size:11px;line-height:1.55;color:#475569;font-family:ui-monospace,Consolas,
-                          'Courier New',monospace;word-break:break-all;">${urlEsc}</p>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-              ${buildSmartRefillEmailLegalFooterRowHtml()}
-            </table>
-          </td>
-        </tr>
-      </table>
-      </body>
-      </html>
-    `.trim();
+  const bodyHtml = `
+    <p style="margin:0 0 12px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#5e6c84;">
+      Team workspace · Email verification
+    </p>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#253858;">
+      ${escapeHtmlForEmail(intro)}
+    </p>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
+      style="margin:0 0 16px;background-color:#f4f5f7;border:1px solid #dfe1e6;border-radius:6px;">
+      <tr><td style="padding:0;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+          ${staffDetailRowsHtml(emailEsc, mailtoHrefEsc, workspaceEsc, roleEsc)}
+        </table>
+      </td></tr>
+    </table>
+    <p style="margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#5e6c84;">
+      What happens next
+    </p>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+      ${staffOnboardingStepsHtml()}
+    </table>
+    <p style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#5e6c84;">
+      This confirmation link is single-use. If you did not expect a team invitation, you may disregard this notice.
+      Contact your station administrator if you need a new link.
+    </p>
+    ${smartRefillEmailPasteUrlHtml(url)}
+  `;
+
+  const html = wrapSmartRefillLetterHtml({
+    title: "Confirm your workspace email",
+    headline: "Confirm your workspace email",
+    preheader,
+    greetingName: input.displayName.trim() || "there",
+    bodyHtml,
+    cta: { label: "Confirm email address", url },
+  });
 
   return {
     subject,

@@ -1,9 +1,9 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
-import type { PaymentReminderQueueRow } from "./payment-reminder-queue";
 import {
-  buildSmartRefillEmailLegalFooterHtml,
-  buildSmartRefillEmailLegalFooterPlainText,
-} from "./smartrefill-email-legal-footer";
+  buildSmartRefillEmailFooterPlainText,
+  wrapSmartRefillLetterHtml,
+} from "./smartrefill-email-html";
+import type { PaymentReminderQueueRow } from "./payment-reminder-queue";
 
 export type PaymentReminderOwnerEmailInput = {
   ownerName: string;
@@ -35,29 +35,27 @@ export function buildPaymentReminderOwnerEmail(
     })
     .join("");
 
-  const html = `
-<!DOCTYPE html>
-<html>
-<body style="margin:0;padding:24px;background:#f8fafc;font-family:system-ui,sans-serif;">
-  <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:16px;padding:24px;border:1px solid #e2e8f0;">
-    <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">Collections</p>
-    <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a;">Call today — ${count} ${escapeHtmlForEmail(sukiLabel)}</h1>
-    <p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#334155;">Hi ${escapeHtmlForEmail(input.ownerName)}, ito ang mga suki na naka-queue para sa payment reminder ngayong araw.</p>
-    <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:20px;">
-      <thead>
-        <tr>
-          <th align="left" style="padding:8px 12px;font-size:10px;text-transform:uppercase;color:#64748b;">Suki</th>
-          <th align="right" style="padding:8px 12px;font-size:10px;text-transform:uppercase;color:#64748b;">Utang</th>
-          <th align="right" style="padding:8px 12px;font-size:10px;text-transform:uppercase;color:#64748b;">Aging</th>
-        </tr>
-      </thead>
-      <tbody>${rowsHtml}</tbody>
-    </table>
-    <a href="${escapeHtmlForEmail(input.dashboardUrl)}" style="display:inline-block;background:#44c1ba;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 20px;border-radius:12px;">Open Command Center</a>
-    ${buildSmartRefillEmailLegalFooterHtml()}
-  </div>
-</body>
-</html>`;
+  const html = wrapSmartRefillLetterHtml({
+    title: `Call today — ${count} ${sukiLabel}`,
+    headline: `Call today — ${count} ${sukiLabel}`,
+    greetingName: input.ownerName,
+    bodyHtml: `
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#253858;">
+        These sukis at ${escapeHtmlForEmail(input.businessName)} are queued for a payment reminder today.
+      </p>
+      <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:8px;">
+        <thead>
+          <tr>
+            <th align="left" style="padding:8px 12px;font-size:10px;text-transform:uppercase;color:#5e6c84;">Suki</th>
+            <th align="right" style="padding:8px 12px;font-size:10px;text-transform:uppercase;color:#5e6c84;">Utang</th>
+            <th align="right" style="padding:8px 12px;font-size:10px;text-transform:uppercase;color:#5e6c84;">Aging</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    `,
+    cta: { label: "Open Command Center", url: input.dashboardUrl },
+  });
 
   const text = [
     `Call today — ${count} ${sukiLabel}`,
@@ -67,7 +65,7 @@ export function buildPaymentReminderOwnerEmail(
     ),
     `Dashboard: ${input.dashboardUrl}`,
     "",
-    buildSmartRefillEmailLegalFooterPlainText(),
+    buildSmartRefillEmailFooterPlainText(),
   ].join("\n");
 
   return { subject, html, text, brevoTag: "payment_reminder_owner_email" };

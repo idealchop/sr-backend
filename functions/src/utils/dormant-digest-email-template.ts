@@ -1,8 +1,8 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
 import {
-  buildSmartRefillEmailLegalFooterHtml,
-  buildSmartRefillEmailLegalFooterPlainText,
-} from "./smartrefill-email-legal-footer";
+  buildSmartRefillEmailFooterPlainText,
+  wrapSmartRefillLetterHtml,
+} from "./smartrefill-email-html";
 
 export type DormantDigestEmailInput = {
   businessName: string;
@@ -31,61 +31,31 @@ export function buildDormantDigestEmail(
       </p>` :
     "";
 
-  const bodyStyle =
-    "margin:0;padding:24px;background:#f8fafc;" +
-    "font-family:system-ui,-apple-system,sans-serif;";
-  const cardStyle =
-    "max-width:560px;margin:0 auto;background:#fff;border-radius:16px;" +
-    "border:1px solid #e2e8f0;padding:28px 24px;";
-  const kickerStyle =
-    "margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:0.08em;" +
-    "text-transform:uppercase;color:#64748b;";
-  const h1Style = "margin:0 0 12px;font-size:22px;color:#0f172a;";
-  const bodyTextStyle = "margin:0;font-size:15px;line-height:1.55;color:#334155;";
-  const tableStyle = "margin:20px 0 0;width:100%;border-collapse:collapse;font-size:14px;";
-  const labelCell = "padding:8px 0;color:#64748b;";
-  const revenueCell =
-    "padding:8px 0;text-align:right;font-weight:700;color:#e11d48;";
-  const cadenceCell =
-    "padding:8px 0;text-align:right;font-weight:600;color:#0f172a;";
-  const ctaStyle =
-    "display:inline-block;background:#44c1ba;color:#fff;text-decoration:none;" +
-    "font-weight:700;font-size:14px;padding:12px 20px;border-radius:12px;";
-  const footerStyle = "margin:20px 0 0;font-size:12px;color:#94a3b8;";
-
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<body style="${bodyStyle}">
-  <div style="${cardStyle}">
-    <p style="${kickerStyle}">Weekly retention</p>
-    <h1 style="${h1Style}">Hi ${escapeHtmlForEmail(input.ownerName)},</h1>
-    <p style="${bodyTextStyle}">
-      <strong>${input.dormantCount}</strong> active ${escapeHtmlForEmail(sukiLabel)} at
-      <strong>${escapeHtmlForEmail(input.businessName)}</strong> have not ordered recently.
-    </p>
-    <table style="${tableStyle}">
-      <tr>
-        <td style="${labelCell}">Revenue at risk</td>
-        <td style="${revenueCell}">${escapeHtmlForEmail(revenueLine)}</td>
-      </tr>
-      <tr>
-        <td style="${labelCell}">Late vs usual cadence</td>
-        <td style="${cadenceCell}">${input.cadenceLateCount}</td>
-      </tr>
-    </table>
-    ${briefBlock}
-    <p style="margin:24px 0 0;">
-      <a href="${escapeHtmlForEmail(input.dashboardUrl)}" style="${ctaStyle}">
-        Open Forecast
-      </a>
-    </p>
-    <p style="${footerStyle}">
-      You receive this because weekly email summary is on in Account → Alerts.
-    </p>
-    ${buildSmartRefillEmailLegalFooterHtml()}
-  </div>
-</body>
-</html>`;
+  const html = wrapSmartRefillLetterHtml({
+    title: subject,
+    headline: `${input.dormantCount} dormant ${sukiLabel}`,
+    greetingName: input.ownerName,
+    notice:
+      "You receive this because weekly email summary is on in Account → Alerts.",
+    bodyHtml: `
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#253858;">
+        <strong>${input.dormantCount}</strong> active ${escapeHtmlForEmail(sukiLabel)} at
+        <strong>${escapeHtmlForEmail(input.businessName)}</strong> have not ordered recently.
+      </p>
+      <table style="margin:0;width:100%;border-collapse:collapse;font-size:14px;">
+        <tr>
+          <td style="padding:8px 0;color:#5e6c84;">Revenue at risk</td>
+          <td style="padding:8px 0;text-align:right;font-weight:700;color:#e11d48;">${escapeHtmlForEmail(revenueLine)}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;color:#5e6c84;">Late vs usual cadence</td>
+          <td style="padding:8px 0;text-align:right;font-weight:600;color:#172b4d;">${input.cadenceLateCount}</td>
+        </tr>
+      </table>
+      ${briefBlock}
+    `,
+    cta: { label: "Open Forecast", url: input.dashboardUrl },
+  });
 
   const textLines = [
     `Hi ${input.ownerName},`,
@@ -98,7 +68,7 @@ export function buildDormantDigestEmail(
     textLines.push("", `River AI brief: ${input.morningBriefSummary.trim()}`);
   }
   textLines.push("", `Open Forecast: ${input.dashboardUrl}`);
-  textLines.push("", buildSmartRefillEmailLegalFooterPlainText());
+  textLines.push("", buildSmartRefillEmailFooterPlainText());
 
   return {
     subject,

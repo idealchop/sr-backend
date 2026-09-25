@@ -1,8 +1,8 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
 import {
-  buildSmartRefillEmailLegalFooterHtml,
-  buildSmartRefillEmailLegalFooterPlainText,
-} from "./smartrefill-email-legal-footer";
+  buildSmartRefillEmailFooterPlainText,
+  wrapSmartRefillLetterHtml,
+} from "./smartrefill-email-html";
 
 export type MorningBriefEmailInput = {
   ownerName: string;
@@ -41,23 +41,19 @@ export function buildMorningBriefEmail(
     `<p style="margin:16px 0 0;font-size:13px;"><a href="${escapeHtmlForEmail(input.historyUrl)}" style="color:#0d9488;font-weight:600;">View full River AI brief history</a></p>` :
     "";
 
-  const html = `
-<!DOCTYPE html>
-<html>
-<body style="margin:0;padding:24px;background:#f8fafc;font-family:system-ui,sans-serif;">
-  <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:16px;padding:24px;border:1px solid #e2e8f0;">
-    <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">Morning brief</p>
-    <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a;">${escapeHtmlForEmail(input.briefTitle)}</h1>
-    <p style="margin:0 0 16px;font-size:14px;line-height:1.55;color:#334155;">${escapeHtmlForEmail(input.briefSummary)}</p>
-    ${highlightHtml ? `<ul style="margin:0 0 20px;padding-left:20px;">${highlightHtml}</ul>` : ""}
-    ${actionHtml ? `<p style="margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">Today's actions</p><ul style="margin:0 0 20px;padding-left:20px;">${actionHtml}</ul>` : ""}
-    <a href="${escapeHtmlForEmail(input.dashboardUrl)}" style="display:inline-block;background:#44c1ba;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 20px;border-radius:12px;">Open dashboard</a>
-    ${historyBlock}
-    <p style="margin:20px 0 0;font-size:12px;color:#64748b;">Good morning, ${escapeHtmlForEmail(input.ownerName)} — bukas ang full River AI history sa app.</p>
-    ${buildSmartRefillEmailLegalFooterHtml()}
-  </div>
-</body>
-</html>`;
+  const html = wrapSmartRefillLetterHtml({
+    title: input.briefTitle,
+    headline: input.briefTitle,
+    greetingName: input.ownerName,
+    preheader: `${input.briefTitle} — ${input.businessName}`,
+    bodyHtml: `
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#253858;">${escapeHtmlForEmail(input.briefSummary)}</p>
+      ${highlightHtml ? `<ul style="margin:0 0 20px;padding-left:20px;">${highlightHtml}</ul>` : ""}
+      ${actionHtml ? `<p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#5e6c84;">Today's actions</p><ul style="margin:0 0 8px;padding-left:20px;">${actionHtml}</ul>` : ""}
+      ${historyBlock}
+    `,
+    cta: { label: "Open dashboard", url: input.dashboardUrl },
+  });
 
   const text = [
     input.briefTitle,
@@ -68,7 +64,7 @@ export function buildMorningBriefEmail(
     input.historyUrl ? `History: ${input.historyUrl}` : "",
   ]
     .filter(Boolean)
-    .join("\n") + "\n\n" + buildSmartRefillEmailLegalFooterPlainText();
+    .join("\n") + "\n\n" + buildSmartRefillEmailFooterPlainText();
 
   return { subject, html, text, brevoTag: "morning_brief_email" };
 }
