@@ -63,8 +63,9 @@ ${SUPPORT_WATER_STATION_CONTEXT}
 - Customer QR portal lets customers place orders, track deliveries, and request collections.
 
 ### Transactions (deliveries & collections)
-- Add Delivery: schedule refill delivery to a customer, assign rider, set payment method.
-- Add Collection: schedule container pickup with expected quantities.
+- Add Delivery: schedule refill delivery to a customer, assign rider, set payment method. The customer can stay blank for a plain ticket. Gallons going out still need a suki.
+- Add Collection: schedule container pickup with expected quantities. Collect with no suki still records empties back to warehouse stock and does not change a suki's container count.
+- Bulk record on Daily Operation (owners and admins) saves several tickets. Customers → More actions → Bulk new customer adds several sukis. A suki profile → Orders → Bulk order records deliveries and collections for that suki.
 - Transaction list: filter by status (pending, in transit, delivered, collected, completed).
 - Update status as riders progress; collection dialog records good/damaged/missing quantities.
 
