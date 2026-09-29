@@ -8,6 +8,7 @@ import {
   otherDefaultProductIds,
   parseProductWrite,
   ProductValidationError,
+  defaultStarterProducts,
   seedProductsFromWaterTypes,
   serializeProduct,
 } from "./product-catalog";
@@ -49,8 +50,8 @@ export class ProductService {
     if (existing.length > 0) return existing;
 
     const biz = await db.collection("businesses").doc(businessId).get();
-    const seeds = seedProductsFromWaterTypes(biz.data()?.waterTypes);
-    if (seeds.length === 0) return [];
+    const fromWaterTypes = seedProductsFromWaterTypes(biz.data()?.waterTypes);
+    const seeds = fromWaterTypes.length > 0 ? fromWaterTypes : defaultStarterProducts();
 
     const batch = db.batch();
     const now = FieldValue.serverTimestamp();
@@ -63,7 +64,12 @@ export class ProductService {
       });
     }
     await batch.commit();
-    logger.info(`Seeded ${seeds.length} products from waterTypes`, { businessId });
+    logger.info(
+      fromWaterTypes.length > 0
+        ? `Seeded ${seeds.length} products from waterTypes`
+        : `Seeded ${seeds.length} starter products`,
+      { businessId },
+    );
     return this.listItems(businessId);
   }
 
