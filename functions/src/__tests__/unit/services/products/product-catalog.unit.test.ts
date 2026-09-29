@@ -8,6 +8,7 @@ import {
   otherDefaultProductIds,
   parseProductWrite,
   ProductValidationError,
+  defaultStarterProducts,
   resolveDeliveryCatalog,
   seedProductsFromWaterTypes,
   slugifyProductKey,
@@ -15,6 +16,16 @@ import {
 } from "../../../../services/products/product-catalog";
 
 describe("product catalog helpers", () => {
+  it("builds Round and Slim starters with no inventory link", () => {
+    const seeded = defaultStarterProducts();
+    expect(seeded.map((row) => row.name)).toEqual(["Round", "Slim"]);
+    expect(seeded.map((row) => row.iconId)).toEqual(["round-gallon", "slim-gallon"]);
+    expect(seeded.every((row) => row.components.length === 0 && row.itemOnly === false)).toBe(
+      true,
+    );
+    expect(seeded.every((row) => row.unitPrice === 30)).toBe(true);
+  });
+
   it("seeds products from mixed waterTypes shapes", () => {
     const seeded = seedProductsFromWaterTypes([
       "Purified",

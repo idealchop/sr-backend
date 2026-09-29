@@ -96,6 +96,48 @@ describe("applyUpdatePaymentFields", () => {
     expect(updates.payments?.[0]?.date).toEqual(new Date("2026-08-01T00:00:00.000Z"));
   });
 
+  it("applies a new payment even when amountPaid is omitted or stale", () => {
+    const current = baseTx({
+      amountPaid: 40,
+      balanceDue: 60,
+      paymentStatus: "partial",
+      payments: [
+        { id: "p1", amount: 40, date: "2026-01-01", method: "cash" },
+      ],
+    });
+    const updates: Partial<Transaction> = {
+      payments: [
+        { id: "p1", amount: 40, date: "2026-01-01", method: "cash" },
+        { id: "p2", amount: 60, date: "2026-01-02", method: "cash" },
+      ],
+    };
+    applyUpdatePaymentFields(current, updates);
+    expect(updates.amountPaid).toBe(100);
+    expect(updates.balanceDue).toBe(0);
+    expect(updates.paymentStatus).toBe("paid");
+  });
+
+  it("reduces outstanding when credit payment rows are edited", () => {
+    const current = baseTx({
+      amountPaid: 30,
+      balanceDue: 70,
+      paymentStatus: "partial",
+      payments: [
+        { id: "p1", amount: 30, date: "2026-01-01", method: "cash" },
+      ],
+    });
+    const updates: Partial<Transaction> = {
+      payments: [
+        { id: "p1", amount: 80, date: "2026-01-01", method: "cash" },
+      ],
+      amountPaid: 30,
+    };
+    applyUpdatePaymentFields(current, updates);
+    expect(updates.amountPaid).toBe(80);
+    expect(updates.balanceDue).toBe(20);
+    expect(updates.paymentStatus).toBe("partial");
+  });
+
   it("syncs expense payment dates when only scheduledAt is patched", () => {
     const current = baseTx({
       type: "expense",

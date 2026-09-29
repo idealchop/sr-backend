@@ -76,6 +76,16 @@ export function normalizeWaterTypeRows(raw: unknown): WaterTypeRow[] {
   return out;
 }
 
+/** Round and Slim, used only when a station has no products and no water types. */
+export const DEFAULT_STARTER_WATER_TYPES: WaterTypeRow[] = [
+  { water: "Round", price: DEFAULT_PRODUCT_PRICE, iconId: "round-gallon" },
+  { water: "Slim", price: DEFAULT_PRODUCT_PRICE, iconId: "slim-gallon" },
+];
+
+export function defaultStarterProducts(): Omit<DeliveryProduct, "id">[] {
+  return seedProductsFromWaterTypes(DEFAULT_STARTER_WATER_TYPES);
+}
+
 export function seedProductsFromWaterTypes(
   waterTypes: unknown,
 ): Omit<DeliveryProduct, "id">[] {

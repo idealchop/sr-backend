@@ -1,7 +1,7 @@
 import { FieldValue } from "../../config/firebase-admin";
 import {
   derivePaymentFields,
-  getActiveAmountPaid,
+  sumActivePayments,
 } from "./payment-status";
 import type { Transaction, TransactionPayment } from "./transaction-types";
 
@@ -75,11 +75,52 @@ export function applyUpdatePaymentFields(
   current: Transaction,
   updates: PaymentPrepUpdates,
 ): void {
+  if (updates.amountPaid !== undefined && updates.payments === undefined) {
+    const paid = Math.max(0, Number(updates.amountPaid) || 0);
+    const currentPaid = current.amountPaid || 0;
+    if (paid > currentPaid) {
+      const delta = paid - currentPaid;
+      const currentPayments = current.payments || [];
+
+      if (currentPayments.length === 0 && currentPaid > 0) {
+        updates.payments = [
+          {
+            id: `pay-init-${Date.now()}`,
+            amount: currentPaid,
+            date:
+              current.scheduledAt ||
+              current.createdAt ||
+              FieldValue.serverTimestamp(),
+            method: current.paymentMethod || "cash",
+            notes: "Initial payment (migrated)",
+          },
+          {
+            id: `pay-upd-${Date.now()}`,
+            amount: delta,
+            date: FieldValue.serverTimestamp(),
+            method: updates.paymentMethod || current.paymentMethod || "cash",
+            notes: "Additional payment",
+          },
+        ];
+      } else {
+        updates.payments = [
+          ...currentPayments,
+          {
+            id: `pay-upd-${Date.now()}`,
+            amount: delta,
+            date: FieldValue.serverTimestamp(),
+            method: updates.paymentMethod || current.paymentMethod || "cash",
+            notes: "Additional payment",
+          },
+        ];
+      }
+    }
+  }
+
   if (updates.payments !== undefined) {
-    updates.amountPaid = getActiveAmountPaid({
-      payments: updates.payments,
-      amountPaid: updates.amountPaid ?? current.amountPaid ?? 0,
-    });
+    // Explicit payments[] is the ledger. Do not cap to a stale amountPaid —
+    // that discarded new / edited rows and left outstanding unchanged.
+    updates.amountPaid = sumActivePayments(updates.payments);
   }
 
   if (
@@ -89,48 +130,6 @@ export function applyUpdatePaymentFields(
   ) {
     const total = updates.totalAmount ?? current.totalAmount ?? 0;
     const paid = updates.amountPaid ?? current.amountPaid ?? 0;
-
-    if (updates.amountPaid !== undefined && updates.payments === undefined) {
-      const currentPaid = current.amountPaid || 0;
-      if (paid > currentPaid) {
-        const delta = paid - currentPaid;
-        const currentPayments = current.payments || [];
-
-        if (currentPayments.length === 0 && currentPaid > 0) {
-          updates.payments = [
-            {
-              id: `pay-init-${Date.now()}`,
-              amount: currentPaid,
-              date:
-                current.scheduledAt ||
-                current.createdAt ||
-                FieldValue.serverTimestamp(),
-              method: current.paymentMethod || "cash",
-              notes: "Initial payment (migrated)",
-            },
-            {
-              id: `pay-upd-${Date.now()}`,
-              amount: delta,
-              date: FieldValue.serverTimestamp(),
-              method: updates.paymentMethod || current.paymentMethod || "cash",
-              notes: "Additional payment",
-            },
-          ];
-        } else {
-          updates.payments = [
-            ...currentPayments,
-            {
-              id: `pay-upd-${Date.now()}`,
-              amount: delta,
-              date: FieldValue.serverTimestamp(),
-              method: updates.paymentMethod || current.paymentMethod || "cash",
-              notes: "Additional payment",
-            },
-          ];
-        }
-      }
-    }
-
     const derived = derivePaymentFields(total, paid);
     updates.balanceDue = derived.balanceDue;
     updates.paymentStatus = derived.paymentStatus;

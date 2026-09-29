@@ -9,9 +9,21 @@ export function isActivePayment(
   return !payment?.voided;
 }
 
+/** Sum of non-voided payment rows. Use this when applying an explicit payments[] patch. */
+export function sumActivePayments(
+  payments: Array<Pick<TransactionPayment, "amount" | "voided">> | null | undefined,
+): number {
+  if (!payments?.length) return 0;
+  return payments.reduce((sum, payment) => {
+    if (!isActivePayment(payment)) return sum;
+    return sum + Math.max(0, Number(payment.amount) || 0);
+  }, 0);
+}
+
 /**
  * Sum of non-voided payment rows; falls back to `amountPaid` when payments[] is absent.
  * Matches FE `getActiveAmountPaid` (legacy cap when a single oversized payment exceeds recorded).
+ * Do not use this cap when writing a client payments[] update — use `sumActivePayments`.
  */
 export function getActiveAmountPaid(
   tx: Pick<Transaction, "payments" | "amountPaid">,
@@ -19,10 +31,7 @@ export function getActiveAmountPaid(
   const payments = tx.payments ?? [];
   const recorded = Math.max(0, Number(tx.amountPaid) || 0);
   if (payments.length > 0) {
-    const fromPayments = payments.reduce((sum, payment) => {
-      if (!isActivePayment(payment)) return sum;
-      return sum + Math.max(0, Number(payment.amount) || 0);
-    }, 0);
+    const fromPayments = sumActivePayments(payments);
     // Legacy rows can store a lower amountPaid than a single oversized payment line.
     if (recorded > 0 && fromPayments > recorded + 0.0001) {
       return recorded;

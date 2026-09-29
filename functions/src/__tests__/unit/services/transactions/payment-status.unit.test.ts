@@ -4,6 +4,7 @@ import {
   derivePaymentFieldsFromTransaction,
   getActiveAmountPaid,
   isActivePayment,
+  sumActivePayments,
 } from "../../../../services/transactions/payment-status";
 
 describe("derivePaymentFields", () => {
@@ -78,6 +79,26 @@ describe("getActiveAmountPaid", () => {
 
   it("falls back to amountPaid when payments are absent", () => {
     expect(getActiveAmountPaid({ amountPaid: 75, payments: [] })).toBe(75);
+  });
+});
+
+describe("sumActivePayments", () => {
+  it("sums active rows even when recorded amountPaid is lower", () => {
+    expect(
+      sumActivePayments([
+        { amount: 40 },
+        { amount: 60 },
+      ]),
+    ).toBe(100);
+  });
+
+  it("skips voided rows", () => {
+    expect(
+      sumActivePayments([
+        { amount: 40, voided: true },
+        { amount: 25 },
+      ]),
+    ).toBe(25);
   });
 });
 
