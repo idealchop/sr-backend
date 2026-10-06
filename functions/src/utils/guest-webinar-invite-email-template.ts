@@ -42,12 +42,12 @@ export function buildGuestWebinarInviteEmail(
       </p>
       ${smartRefillEmailWhenHtml(input.startsAtLabel, input.timezone)}
       ${input.feedbackUrl ?
-        webinarEmailActionButtonsHtml({
-          primaryUrl: input.joinUrl,
-          primaryLabel: "Join webinar",
-          feedbackUrl: input.feedbackUrl,
-        }) :
-        ""}
+    webinarEmailActionButtonsHtml({
+      primaryUrl: input.joinUrl,
+      primaryLabel: "Join webinar",
+      feedbackUrl: input.feedbackUrl,
+    }) :
+    ""}
       <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#5e6c84;">
         Join opens about 30 minutes before start. Keep this email — the link is personal to your registration.
       </p>
@@ -109,12 +109,12 @@ export function buildGuestWebinarReminderEmail(
       </p>
       ${smartRefillEmailWhenHtml(input.startsAtLabel, input.timezone)}
       ${input.feedbackUrl ?
-        webinarEmailActionButtonsHtml({
-          primaryUrl: input.joinUrl,
-          primaryLabel: "Join webinar",
-          feedbackUrl: input.feedbackUrl,
-        }) :
-        ""}
+    webinarEmailActionButtonsHtml({
+      primaryUrl: input.joinUrl,
+      primaryLabel: "Join webinar",
+      feedbackUrl: input.feedbackUrl,
+    }) :
+    ""}
       <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#5e6c84;">
         <a href="${escapeHtmlForEmail(input.cancelUrl)}" style="color:#0052cc;">Cancel registration</a>
       </p>

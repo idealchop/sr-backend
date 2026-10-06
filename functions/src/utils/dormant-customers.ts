@@ -4,6 +4,7 @@ import { isWalkInCustomerName } from "../services/ai/ledger-scan-customer-match"
 import {
   isTransactionFulfilledForReceivable,
   isUnpaidReceivableTransaction,
+  outstandingBalanceDue,
 } from "./unpaid-receivable";
 
 export const DEFAULT_DORMANT_THRESHOLD_DAYS = 15;
@@ -143,7 +144,7 @@ export function buildDormantCustomerRows(
     if (!tx.customerId || !isUnpaidReceivableTransaction(tx)) continue;
     unpaidByCustomer.set(
       tx.customerId,
-      (unpaidByCustomer.get(tx.customerId) || 0) + (Number(tx.balanceDue) || 0),
+      (unpaidByCustomer.get(tx.customerId) || 0) + outstandingBalanceDue(tx),
     );
   }
 

@@ -37,6 +37,12 @@ vi.mock("../../services/portal/raw-submission-service", () => ({
   computeStockCheckPreview: vi.fn(),
 }));
 
+vi.mock("../../services/products/product-service", () => ({
+  ProductService: {
+    ensureSeeded: vi.fn(async () => []),
+  },
+}));
+
 vi.mock("../../services/observability/logging/logger", () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }));
