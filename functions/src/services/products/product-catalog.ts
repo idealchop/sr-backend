@@ -2,6 +2,7 @@ import { DEFAULT_PRODUCT_ICON_ID } from "./product-icon-catalog";
 import type {
   DeliveryProduct,
   ProductComponent,
+  ProductKind,
   ProductWriteInput,
   WaterTypeRow,
 } from "./product-types";
@@ -140,6 +141,22 @@ export function isVirtualProductId(productId: string | undefined): boolean {
   return Boolean(productId?.startsWith(VIRTUAL_PRODUCT_PREFIX));
 }
 
+export function inferProductKind(
+  product: Pick<DeliveryProduct, "kind" | "components">,
+): ProductKind {
+  if (product.kind === "stock" || product.kind === "bundle" || product.kind === "service") {
+    return product.kind;
+  }
+  const linked = product.components?.length ?? 0;
+  if (linked >= 2) return "bundle";
+  if (linked === 1) return "stock";
+  return "service";
+}
+
+function optionalLabel(value: unknown): string {
+  return String(value || "").trim();
+}
+
 export function parseProductComponents(raw: unknown): ProductComponent[] {
   if (!Array.isArray(raw)) return [];
   const out: ProductComponent[] = [];
@@ -204,6 +221,21 @@ export function parseProductWrite(
     const iconId = String(input.iconId || "").trim();
     out.iconId = iconId || undefined;
   }
+  if (input.kind !== undefined) {
+    const kind = String(input.kind || "").trim();
+    if (kind !== "stock" && kind !== "bundle" && kind !== "service") {
+      throw new ProductValidationError("Product kind must be sold as-is, bundle, or no stock item.");
+    }
+    out.kind = kind;
+  }
+  if (input.family !== undefined) out.family = optionalLabel(input.family);
+  if (input.variantLabel !== undefined) out.variantLabel = optionalLabel(input.variantLabel);
+  if (input.containerItemId !== undefined) {
+    out.containerItemId = optionalLabel(input.containerItemId);
+  }
+  if (input.sourceInventoryItemId !== undefined) {
+    out.sourceInventoryItemId = optionalLabel(input.sourceInventoryItemId);
+  }
   if (input.components !== undefined) {
     out.components = parseProductComponents(input.components);
   }
@@ -217,6 +249,30 @@ export function parseProductWrite(
   }
 
   return out;
+}
+
+/** Align stored links with the product kind. Empty strings mean the field should be cleared. */
+export function applyProductKindRules(parsed: Partial<DeliveryProduct>): void {
+  if (!parsed.kind) return;
+  const components = parsed.components ?? [];
+  if (parsed.kind === "stock") {
+    if (components.length !== 1) {
+      throw new ProductValidationError("Sold as-is needs one warehouse item.");
+    }
+    parsed.sourceInventoryItemId = components[0].inventoryItemId;
+    parsed.containerItemId = "";
+  } else if (parsed.kind === "bundle") {
+    if (components.length < 2) {
+      throw new ProductValidationError("A bundle needs at least two warehouse items.");
+    }
+    parsed.sourceInventoryItemId = "";
+    parsed.containerItemId = "";
+  } else if (components.length > 0) {
+    throw new ProductValidationError("A product with no warehouse item cannot deduct stock.");
+  } else {
+    parsed.components = [];
+    parsed.sourceInventoryItemId = "";
+  }
 }
 
 export function listCustomerOrderProducts<
@@ -321,6 +377,23 @@ export function serializeProduct(
     defaultForOrder: row.defaultForOrder === true,
     itemOnly: row.itemOnly === true,
     iconId: typeof row.iconId === "string" && row.iconId.trim() ? row.iconId.trim() : undefined,
+    kind:
+      row.kind === "stock" || row.kind === "bundle" || row.kind === "service" ?
+        row.kind :
+        undefined,
+    family: typeof row.family === "string" && row.family.trim() ? row.family.trim() : undefined,
+    variantLabel:
+      typeof row.variantLabel === "string" && row.variantLabel.trim() ?
+        row.variantLabel.trim() :
+        undefined,
+    containerItemId:
+      typeof row.containerItemId === "string" && row.containerItemId.trim() ?
+        row.containerItemId.trim() :
+        undefined,
+    sourceInventoryItemId:
+      typeof row.sourceInventoryItemId === "string" && row.sourceInventoryItemId.trim() ?
+        row.sourceInventoryItemId.trim() :
+        undefined,
     components: parseProductComponents(row.components),
     legacyWaterName:
       typeof row.legacyWaterName === "string" && row.legacyWaterName.trim() ?

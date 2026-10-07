@@ -160,6 +160,27 @@ export function possessionDeliveryItemsFromOrder(
     });
 
     let target: { id: string; name: string } | null = null;
+    if (product?.kind === "stock" || product?.kind === "bundle") {
+      for (const component of product.components || []) {
+        const row = inventoryById.get(component.inventoryItemId);
+        if (!row?.id) continue;
+        if (!isContainerPossessionInventory(row.name, row.inventoryRole)) continue;
+        add(component.inventoryItemId, row.name, qty * Math.max(1, component.quantity || 1));
+      }
+      continue;
+    }
+    if (product?.kind === "service") {
+      const named = product.containerItemId ?
+        inventoryById.get(product.containerItemId) :
+        undefined;
+      if (
+        named?.id &&
+        isContainerPossessionInventory(named.name, named.inventoryRole)
+      ) {
+        add(named.id, named.name, qty);
+      }
+      continue;
+    }
     if (product) {
       for (const component of product.components || []) {
         const row = inventoryById.get(component.inventoryItemId);

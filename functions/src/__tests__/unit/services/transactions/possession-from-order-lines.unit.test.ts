@@ -85,6 +85,49 @@ describe("possessionDeliveryItemsFromOrder", () => {
       expect.objectContaining({ inventoryId: "inv-shell", quantity: 4 }),
     ]);
   });
+
+  it("holds the container named on a service product and skips stock products", () => {
+    const lines = possessionDeliveryItemsFromOrder(
+      [],
+      [
+        {
+          waterTypeId: "slim_purified",
+          productId: "p-slim",
+          name: "Slim purified",
+          quantity: 2,
+          unitPrice: 25,
+          subtotal: 50,
+        },
+        {
+          waterTypeId: "bottle_500",
+          productId: "p-bottle",
+          name: "500 ml",
+          quantity: 3,
+          unitPrice: 15,
+          subtotal: 45,
+        },
+      ],
+      inventory,
+      [
+        { ...slimProduct, kind: "service", containerItemId: "inv-slim" },
+        {
+          id: "p-bottle",
+          name: "500 ml",
+          unitPrice: 15,
+          active: true,
+          showInCustomerOrder: true,
+          defaultForOrder: false,
+          itemOnly: true,
+          kind: "stock",
+          components: [{ inventoryItemId: "inv-cap", quantity: 1 }],
+        },
+      ],
+      "wrs_rotation",
+    );
+    expect(lines).toEqual([
+      expect.objectContaining({ inventoryId: "inv-slim", quantity: 2 }),
+    ]);
+  });
 });
 
 describe("netPossessionFromOrders", () => {

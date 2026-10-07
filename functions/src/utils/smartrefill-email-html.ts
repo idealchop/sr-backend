@@ -136,7 +136,7 @@ export function buildSmartRefillEmailFooterHtml(notice?: string): string {
     footerLink("Resources", SMART_REFILL_EMAIL_PAGES.resources),
     footerLink("Community", SMART_REFILL_EMAIL_PAGES.community),
   ].join(
-    '<span style="color:#c1c7d0;padding:0 8px;font-size:13px;">·</span>',
+    "<span style=\"color:#c1c7d0;padding:0 8px;font-size:13px;\">·</span>",
   );
 
   return `
@@ -202,7 +202,7 @@ export function wrapSmartRefillLetterHtml(
   const signOff =
     input.includeSignOff === false ?
       "" :
-      `<p style="margin:28px 0 0;font-size:15px;line-height:1.6;color:#172b4d;">Cheers,<br />The Smart Refill team</p>`;
+      "<p style=\"margin:28px 0 0;font-size:15px;line-height:1.6;color:#172b4d;\">Cheers,<br />The Smart Refill team</p>";
 
   return `
 <!DOCTYPE html>
@@ -243,12 +243,12 @@ export function wrapSmartRefillLetterHtml(
             <td class="sr-inner" style="padding:8px 40px 8px;">
               <hr style="border:none;border-top:1px solid #dfe1e6;margin:0 0 28px;" />
               ${
-                input.omitHeadline ?
-                  "" :
-                  `<h1 style="margin:0 0 24px;font-size:22px;line-height:1.35;font-weight:700;color:${SMART_REFILL_INK};">
+  input.omitHeadline ?
+    "" :
+    `<h1 style="margin:0 0 24px;font-size:22px;line-height:1.35;font-weight:700;color:${SMART_REFILL_INK};">
                 ${headline}
               </h1>`
-              }
+}
               ${greetingHtml}
               <div style="font-size:15px;line-height:1.65;color:#253858;">
                 ${input.bodyHtml}

@@ -9,7 +9,10 @@ import {
   type CustomerContainerPolicy,
 } from "./container-policy";
 import { normalizeRefillBonus } from "./refill-bonus";
-import { isUnpaidReceivableTransaction } from "../../utils/unpaid-receivable";
+import {
+  isUnpaidReceivableTransaction,
+  outstandingBalanceDue,
+} from "../../utils/unpaid-receivable";
 
 /** Containers-on: explicit toggle or WRS rotation policy (lend gallons). */
 function customerPersistsContainerTracking(
@@ -423,8 +426,9 @@ export class CustomerService {
         if (data.type !== "expense") {
           totalOrders++;
           totalRevenue += data.totalAmount || 0;
-          if (isUnpaidReceivableTransaction({ id: doc.id, ...data })) {
-            balanceDue += data.balanceDue || 0;
+          const tx = { id: doc.id, ...data };
+          if (isUnpaidReceivableTransaction(tx)) {
+            balanceDue += outstandingBalanceDue(tx);
           }
 
           const scheduledAt = data.scheduledAt?.toDate ?

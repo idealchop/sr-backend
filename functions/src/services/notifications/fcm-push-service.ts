@@ -85,7 +85,13 @@ export async function sendFcmMulticast(
       body: payload.body,
     },
     data: payload.data ?? {},
-    android: { priority: "high" },
+    android: {
+      priority: "high",
+      notification: {
+        channelId: "smartrefill_alerts",
+        sound: "default",
+      },
+    },
     apns: {
       payload: {
         aps: {
