@@ -1,5 +1,8 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
-import { wrapSmartRefillLetterHtml } from "./smartrefill-email-html";
+import {
+  buildSmartRefillEmailFooterPlainText,
+  wrapSmartRefillLetterHtml,
+} from "./smartrefill-email-html";
 
 export type TutorialPublishedOwnerEmailInput = {
   ownerName: string;
@@ -23,10 +26,8 @@ export function buildTutorialPublishedOwnerEmail(
       <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#253858;">
         A new Smart Refill tutorial is available for ${escapeHtmlForEmail(input.businessName)}.
       </p>
-      <div style="margin:0;padding:16px;border-radius:6px;background:#f4f5f7;border:1px solid #dfe1e6;">
-        <p style="margin:0;font-size:15px;font-weight:700;color:#172b4d;">${escapeHtmlForEmail(tutorialName)}</p>
-        <p style="margin:8px 0 0;font-size:13px;line-height:1.45;color:#5e6c84;">Open Tutorial videos in your dashboard to follow along while you work.</p>
-      </div>
+      <p style="margin:0 0 8px;font-size:15px;font-weight:700;color:#172b4d;">${escapeHtmlForEmail(tutorialName)}</p>
+      <p style="margin:0;font-size:13px;line-height:1.45;color:#5e6c84;">Open Tutorial videos in your dashboard to follow along while you work.</p>
     `,
     cta: { label: "Watch tutorial", url: input.watchUrl },
   });
@@ -38,6 +39,8 @@ export function buildTutorialPublishedOwnerEmail(
     `${tutorialName} is now available for ${input.businessName}.`,
     "",
     `Watch: ${input.watchUrl}`,
+    "",
+    buildSmartRefillEmailFooterPlainText(),
   ].join("\n");
 
   return { subject, html, text, brevoTag: "tutorial_published_owner_email" };

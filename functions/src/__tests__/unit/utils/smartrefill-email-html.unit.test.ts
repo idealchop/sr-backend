@@ -38,9 +38,9 @@ describe("smartrefill letter email chrome", () => {
     expect(html).toContain(SMART_REFILL_SOCIAL.facebook);
     expect(html).toContain(SMART_REFILL_SOCIAL.linkedin);
     expect(html).toContain(SMART_REFILL_SOCIAL.tiktok);
-    expect(html).toContain('alt="Facebook"');
-    expect(html).toContain('alt="LinkedIn"');
-    expect(html).toContain('alt="TikTok"');
+    expect(html).toContain("alt=\"Facebook\"");
+    expect(html).toContain("alt=\"LinkedIn\"");
+    expect(html).toContain("alt=\"TikTok\"");
     expect(html).toContain("cdn-images.mailchimp.com/icons/social-block-v2/dark-facebook-48.png");
     expect(html).toContain("cdn-images.mailchimp.com/icons/social-block-v2/dark-linkedin-48.png");
     expect(html).toContain("cdn-images.mailchimp.com/icons/social-block-v2/dark-tiktok-48.png");

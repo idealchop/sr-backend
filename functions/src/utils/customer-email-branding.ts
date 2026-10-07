@@ -72,23 +72,15 @@ export function buildCustomerEmailMastheadHtml(
 </table>`;
 }
 
-/** Footer: business name + platform attribution. */
+/** Footer: station name + Smart Refill legal links. */
 export function buildCustomerEmailFooterHtml(brand: CustomerEmailBrand): string {
   const name = escapeHtmlForEmail(brand.businessName.trim() || "Your water station");
-  const year = new Date().getFullYear();
   return `
 <tr>
-  <td style="padding:20px 32px 28px;border-top:1px solid #e2e8f0;background-color:#f8fafc;text-align:center;">
+  <td style="padding:20px 32px 8px;text-align:center;">
     <p style="margin:0;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">
-      ${name}
+      ${name} · Powered by Smart Refill
     </p>
-    <p style="margin:10px 0 0;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">
-      Powered by Smart Refill
-    </p>
-    <p style="margin:8px 0 0;font-size:11px;color:#94a3b8;">
-      River Tech Inc. · <a href="https://riverph.com/" style="color:#0f766e;text-decoration:none;">riverph.com</a>
-    </p>
-    <p style="margin:8px 0 0;font-size:10px;color:#cbd5e1;">© ${year} · All rights reserved</p>
   </td>
 </tr>`;
 }

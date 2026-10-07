@@ -105,7 +105,6 @@ function staffOnboardingStepsHtml(): string {
 export function getStaffEmailVerificationEmail(
   input: StaffEmailVerificationInput,
 ): { subject: string; html: string; text: string; brevoTag: string } {
-
   const emailPlain = input.email.trim();
   const emailEsc = escapeHtmlForEmail(emailPlain);
   const mailtoHrefEsc = escapeHtmlForEmail(`mailto:${emailPlain}`);

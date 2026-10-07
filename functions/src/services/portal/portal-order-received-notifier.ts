@@ -1,10 +1,6 @@
-import { db, FieldValue } from "../../config/firebase-admin";
+import { db } from "../../config/firebase-admin";
 import { logger } from "firebase-functions";
-import { brevo, getBrevoApi } from "../../utils/brevo";
 import { resolveAppBaseUrlForEmail } from "../../utils/app-base-url";
-import { buildPortalOrderReceivedEmail } from "../../utils/portal-order-received-email-template";
-import { resolveBusinessEmailLogoUrl } from "../../utils/customer-email-branding";
-import { formatPhilippineDateTime } from "../../utils/philippine-datetime";
 import { maybeSendPortalOrderReceivedWebPush } from "./customer-web-push-notifier";
 import { CustomerService } from "../customers/customer-service";
 import type { RawSubmissionPayload, RawSubmissionType } from "./raw-submission-types";
@@ -28,13 +24,6 @@ function customerWantsOrderEmail(
   return false;
 }
 
-function formatScheduledLabel(payload: RawSubmissionPayload): string | undefined {
-  const scheduled = payload.scheduledAt;
-  if (typeof scheduled !== "string" || !scheduled.trim()) return undefined;
-  const formatted = formatPhilippineDateTime(scheduled);
-  return formatted === "—" ? scheduled : formatted;
-}
-
 function buildTrackUrl(
   businessId: string,
   customerId: string,
@@ -47,7 +36,8 @@ function buildTrackUrl(
 }
 
 /**
- * NT-31 — email customer when portal PLACE_ORDER is submitted (opt-in).
+ * NT-31 — order-received email is retired. Only a completion PDF receipt is emailed.
+ * Web push still fires when the suki opted in.
  */
 export async function maybeSendPortalOrderReceivedEmail(params: {
   businessId: string;
@@ -69,69 +59,13 @@ export async function maybeSendPortalOrderReceivedEmail(params: {
   const email = resolveCustomerEmail(payload, customer?.email);
   if (!email) return { sent: false };
 
-  const idempotencyKey = `order_received:${referenceId}`;
   const businessRef = db.collection("businesses").doc(businessId);
   const businessDoc = await businessRef.get();
   if (!businessDoc.exists) return { sent: false };
 
-  const sentFlags = (businessDoc.data()?.customerEmailSentFlags ?? {}) as Record<
-    string,
-    boolean
-  >;
-  if (sentFlags[idempotencyKey]) return { sent: false };
-
   const businessName = String(businessDoc.data()?.name || "Your water station");
-  const businessLogoUrl = resolveBusinessEmailLogoUrl(businessDoc.data()?.logo);
-  const customerName =
-    String(payload.profile?.name || customer?.name || "Suki").trim() || "Suki";
-  const tpl = buildPortalOrderReceivedEmail({
-    customerName,
-    businessName,
-    businessLogoUrl,
-    referenceId,
-    trackUrl: buildTrackUrl(businessId, customerId, referenceId),
-    scheduledLabel: formatScheduledLabel(payload),
-  });
 
-  if (process.env.FUNCTIONS_EMULATOR) {
-    logger.info("EMULATOR: portal order received email", {
-      businessId,
-      referenceId,
-      email,
-    });
-    await businessRef.set(
-      {
-        [`customerEmailSentFlags.${idempotencyKey}`]: true,
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-    return { sent: true };
-  }
-
-  const api = getBrevoApi();
-  const sendSmtpEmail = new brevo.SendSmtpEmail();
-  sendSmtpEmail.sender = {
-    name: businessName.slice(0, 60),
-    email: "no-reply@smartrefill.io",
-  };
-  sendSmtpEmail.to = [{ email, name: customerName }];
-  sendSmtpEmail.subject = tpl.subject;
-  sendSmtpEmail.htmlContent = tpl.html;
-  sendSmtpEmail.textContent = tpl.text;
-  sendSmtpEmail.tags = [tpl.brevoTag];
-
-  await api.sendTransacEmail(sendSmtpEmail);
-
-  await businessRef.set(
-    {
-      [`customerEmailSentFlags.${idempotencyKey}`]: true,
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true },
-  );
-
-  logger.info("portal_order_received_email_sent", {
+  logger.info("portal_order_received_email_skipped_completion_only", {
     businessId,
     referenceId,
     email,
@@ -151,5 +85,5 @@ export async function maybeSendPortalOrderReceivedEmail(params: {
     });
   });
 
-  return { sent: true };
+  return { sent: false };
 }

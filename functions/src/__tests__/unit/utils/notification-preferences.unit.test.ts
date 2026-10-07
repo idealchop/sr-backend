@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   mergeUiConfigPatch,
   sanitizeNotificationUiConfigPatch,
+  resolveNotificationPreferencesFromUiConfig,
+  withStationAlertsPlanGate,
 } from "../../../utils/notification-preferences";
 
 describe("notification-preferences (backend)", () => {
@@ -23,6 +25,33 @@ describe("notification-preferences (backend)", () => {
     expect(merged.dormantPushHour).toBe(7);
     expect(merged.dormantPushEnabled).toBe(true);
     expect(merged.theme).toBe("dark");
+  });
+
+  it("turns boolean owner-alert prefs off below Scale", () => {
+    const gated = withStationAlertsPlanGate(
+      {
+        newOrderPushEnabled: true,
+        paymentReminderEnabled: true,
+        dormantPushHour: 7,
+      },
+      false,
+    );
+    expect(gated.newOrderPushEnabled).toBe(false);
+    expect(gated.paymentReminderEnabled).toBe(false);
+    expect(gated.dormantPushHour).toBe(7);
+  });
+
+  it("ignores stored River AI brief and collections pulse prefs", () => {
+    const prefs = resolveNotificationPreferencesFromUiConfig({
+      autoMorningBriefEnabled: true,
+      morningBriefEmailEnabled: true,
+      autoCollectionsPulseEnabled: true,
+      paymentReminderEmailEnabled: true,
+    });
+    expect(prefs.autoMorningBriefEnabled).toBe(false);
+    expect(prefs.morningBriefEmailEnabled).toBe(false);
+    expect(prefs.autoCollectionsPulseEnabled).toBe(false);
+    expect(prefs.paymentReminderEmailEnabled).toBe(true);
   });
 
   it("sanitizes plant ops and reorder push keys", () => {

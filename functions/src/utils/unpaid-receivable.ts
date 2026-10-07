@@ -1,3 +1,4 @@
+import { getActiveAmountPaid } from "../services/transactions/payment-status";
 import type { Transaction } from "../services/transactions/transaction-service";
 
 const FULFILLED_DELIVERY_STATUSES = new Set([
@@ -41,11 +42,30 @@ export function isTransactionFulfilledForReceivable(tx: Transaction): boolean {
   return false;
 }
 
-/** Fulfilled income with outstanding balance (partial or unpaid). */
+/**
+ * Outstanding pesos on one order.
+ * Collected cash wins over a stored balanceDue. A zero or missing balanceDue
+ * must not hide a billed total that was never collected. A legacy partial that
+ * only wrote balanceDue (no amountPaid) still uses that stored remainder.
+ */
+export function outstandingBalanceDue(tx: Transaction): number {
+  const activePaid = getActiveAmountPaid(tx);
+  const total = Number(tx.totalAmount);
+  const derived = Number.isFinite(total) ? Math.max(0, total - activePaid) : null;
+  const storedRaw = Number(tx.balanceDue);
+  const stored = Number.isFinite(storedRaw) ? Math.max(0, storedRaw) : null;
+
+  if (activePaid > 0.009 && derived != null) return derived;
+  if (stored != null && stored > 0.009) return stored;
+  if (tx.paymentStatus === "paid") return 0;
+  if (derived != null) return derived;
+  return stored ?? 0;
+}
+
+/** Fulfilled income that still has pesos to collect. */
 export function isUnpaidReceivableTransaction(tx: Transaction): boolean {
   if (tx.type === "expense" || tx.type === "collection") return false;
   if (!isTransactionFulfilledForReceivable(tx)) return false;
-  const unpaid =
-    tx.paymentStatus === "unpaid" || tx.paymentStatus === "partial";
-  return unpaid && (Number(tx.balanceDue) || 0) > 0;
+  if (tx.paymentStatus === "N/A") return false;
+  return outstandingBalanceDue(tx) > 0.009;
 }

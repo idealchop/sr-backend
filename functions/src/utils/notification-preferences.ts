@@ -115,8 +115,8 @@ export function resolveNotificationPreferencesFromUiConfig(
     dormantEmailDigestEnabled: cfg.dormantEmailDigestEnabled === true,
     dormantEmailFrequency:
       cfg.dormantEmailFrequency === "daily" ? "daily" : "weekly",
-    autoMorningBriefEnabled: cfg.autoMorningBriefEnabled === true,
-    autoCollectionsPulseEnabled: cfg.autoCollectionsPulseEnabled === true,
+    autoMorningBriefEnabled: false,
+    autoCollectionsPulseEnabled: false,
     newOrderPushEnabled: cfg.newOrderPushEnabled !== false,
     incomingRequestReminderPushEnabled:
       cfg.incomingRequestReminderPushEnabled === true,
@@ -129,7 +129,7 @@ export function resolveNotificationPreferencesFromUiConfig(
     maintenanceOverdueEmailEnabled: cfg.maintenanceOverdueEmailEnabled === true,
     productionVariancePushEnabled: cfg.productionVariancePushEnabled === true,
     reorderPushEnabled: cfg.reorderPushEnabled === true,
-    morningBriefEmailEnabled: cfg.morningBriefEmailEnabled === true,
+    morningBriefEmailEnabled: false,
     paymentReminderEmailEnabled: cfg.paymentReminderEmailEnabled === true,
     slaBreachPushEnabled: cfg.slaBreachPushEnabled === true,
     portalStatusEmailsEnabled: cfg.portalStatusEmailsEnabled !== false,
@@ -173,16 +173,26 @@ export function resolveOwnerMorningAlertsEnabled(
 ): boolean {
   const prefs = resolveNotificationPreferencesFromUiConfig(uiConfig);
   return (
-    prefs.autoMorningBriefEnabled === true ||
     prefs.dormantEmailDigestEnabled === true ||
-    prefs.morningBriefEmailEnabled === true ||
     prefs.paymentReminderEmailEnabled === true ||
     prefs.maintenanceOverdueEmailEnabled === true ||
-    prefs.autoCollectionsPulseEnabled === true ||
     prefs.weeklyPerformanceEmailEnabled === true ||
     prefs.subscriptionEmailEnabled === true ||
     prefs.productionVarianceEmailEnabled === true ||
     prefs.lowStockEmailEnabled === true ||
     prefs.teamDigestEmailEnabled === true
   );
+}
+
+/** Force every boolean owner-alert pref off (hours stay for Scale upgrade restore). */
+export function withStationAlertsPlanGate(
+  prefs: Record<string, unknown>,
+  allowed: boolean,
+): Record<string, unknown> {
+  if (allowed) return prefs;
+  const next: Record<string, unknown> = { ...prefs };
+  for (const [key, value] of Object.entries(next)) {
+    if (typeof value === "boolean") next[key] = false;
+  }
+  return next;
 }

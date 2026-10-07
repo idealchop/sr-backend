@@ -1,8 +1,8 @@
 /* eslint-disable max-len */
 /**
  * Product documentation knowledge for River AI support chat.
- * Keep in sync with `smartrefill-v3/docs/` (especially README, architecture-overview,
- * auth-flow, release-notes-business, frontend-documentation).
+ * Keep in sync with `frontend/docs/` (especially README, architecture-overview,
+ * auth-flow, subscription-plans, release-notes-business, frontend-documentation).
  */
 /** Narrative block injected into every support prompt (summarized from official docs). */
 export const SUPPORT_PRODUCT_DOCUMENTATION = `
@@ -21,8 +21,9 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
   Owners can **Delete** a product from the list or Edit product after a confirm; past orders keep names and prices. Admins do not see Delete.
   Products flags **No item linked**, a missing linked warehouse item, not enough / low stock on that item, or **No price**.
   Turn on **Default** for one product so QR, Record order, Walk-in sale, and Counter POS start with it when the suki has no preferred / special-price
-  products. On the customer QR order, overflowing product pills use **More** / **Back** to slide between sets. **Review & Accept** shows a Products list (not Water refills + Item dispatch) when lines match Products; old water-type orders still show Item dispatch. Store items skip gallon dispatch. Walk-in and Counter POS **Water refill** show refill products; **Store items** show products marked Store item only (Walk-in also lists warehouse stock). Inactive products stay off new orders; old refill names on past deliveries do not change. **Record order** uses Products; turn on **Collect**
-  to record returning items. If products failed to load, are missing, or are all inactive, Record order
+  products. On the customer QR order, overflowing product pills use **More** / **Back** to slide between sets. **Review & Accept** shows a Products list (not Water refills + Item dispatch) when lines match Products; old water-type orders still show Item dispatch. Store items skip gallon dispatch. Walk-in and Counter POS **Water refill** show refill products; **Store items** show products marked Store item only (Walk-in also lists warehouse stock). Inactive products stay off new orders; old refill names on past deliveries do not change.   **Record order** uses Products. The customer can stay blank for a plain delivery. Turn on **Collect**
+  to record returning items, including when there is no suki. Those empties return to warehouse stock and do not change a suki's container count. Gallons going out still need a suki.
+  Daily Operation **Bulk record** (owners and admins) saves several tickets at once. Customers → More actions → **Bulk new customer** adds several sukis (name and phone required; refill bonus and schedules follow the plan). A suki profile → Orders → **Bulk order** records deliveries and collections for that suki only. If products failed to load, are missing, or are all inactive, Record order
   shows an inline note to update them on Products (not shown on customer QR). The note waits until products finish loading. Catalog no longer has **Delivery add-on items**; leftover \`deliveryInventorySalesEnabled\` may still attach priced Round/Slim/supplies
   on the customer QR portal and auto-fill the gap when refills exceed the suki's owned Round/Slim count.
   Per-suki **Containers** can be turned on with no quantity. Preferred products such as Slim Purified show Slim or Round; the suki list and profile still show them at 0 pcs. Orders can add gallons later. Each container row with a quantity has **Deduct from stock**. Container agreement is on the suki profile, not the Add/Update form.
@@ -141,8 +142,13 @@ Use this section as authoritative Smart Refill product truth. Do not contradict 
 - More consistent My Area for riders; refresh after completing a stop when needed.
 
 ### Plans & support channels
-- **Starter / Grow / Scale / Enterprise** — team hub and live human chat on higher tiers.
-- **Subscription billing (July 2026)** — Account → Subscription or Pricing checkout: pay with **GCash or Maya** online; **Allow auto-renew** (default on) links the payment account during that pay so the next cycle can charge automatically; without vaulting, we send a payment link before the period ends. Manual bank transfer + proof still available. Renew checkout **includes current add-ons by default**; stacked renewals schedule the next period if you already paid ahead.
+- **Starter (₱0)** — 20 customers, 20 ledger rows/day, 5 portal orders/day, 5 AI tools/month, 5 River AI chats/month (text only). No Team Hub, no live human chat, locate-only map.
+- **Grow (₱950/mo, ₱9,500/yr)** — 200 customers, 100 ledger rows/day, 25 portal orders/day, 20 AI tools/month, 10 River AI chats/month with photo/video, 1 rider seat, Team Hub riders, live helpdesk, full map. No Scale platform / Community Messenger.
+- **Scale (₱1,650/mo, ₱16,500/yr)** — unlimited customers/ledger/portal/AI/River AI; 1 admin + 2 rider seats; Scale platform tools; Community Messenger when the station has a map pin. **15-day Scale trial** is full Scale except Team Chat (first 3 days only) and Owner hub (needs Additional business add-on). Trial has **no grace**; paid Scale has **7-day grace** then Starter.
+- **Enterprise** — custom / contact sales; treated like Scale for platform gates.
+- **Add-ons (not bundled):** Additional rider (₱299), AI Operations Boost (₱450 / +500 AI credits), Additional business / Owner hub (₱990), Plant ops (separate SKU — not on any base plan).
+- **Owner hub / station clone** requires the Additional business add-on on any tier, including Scale.
+- **Subscription billing** — Account → Subscription or Pricing checkout: pay with **GCash or Maya** online; **Allow auto-renew** (default on) links the payment account during that pay so the next cycle can charge automatically; without vaulting, we send a payment link before the period ends. Manual bank transfer + proof still available. Renew checkout **includes current add-ons by default**; stacked renewals schedule the next period if you already paid ahead.
 - **Header River AI** (orb on desktop/tablet; mobile bottom-nav Buddy orb): AI-only Buddy for Smart Refill app + water station operations (plan chat caps). Common greetings, FAQs, and how-tos may answer without calling Gemini; live sales numbers and screenshots still use Gemini.
 - **Profile → Chat support**: live Brevo helpdesk for billing and account issues (Grow+ when enabled)—
   completely separate from River AI Buddy (no handoff from Buddy into Brevo).
@@ -298,6 +304,18 @@ export const SUPPORT_PRODUCT_DOC_ENTRIES: Array<{
       "Kung nabayaran mo na ang susunod na buwan, ang bagong renew ay **sunod na period** (hindi duplicate month). " +
       "Manual transfer: i-expand ang **Pay manually instead** at mag-upload ng proof. " +
       "Online checkout ay **subscription lang** — hindi para sa portal order payments o ledger collections.",
+  },
+  {
+    id: "doc-subscription-plans",
+    topic: "Ano ang difference ng Free, Starter, Grow, at Scale?",
+    content:
+      "Bagong station: **15-day Scale trial** (buong Scale features; Team Chat first 3 days lang). Pag tapos at walang bayad → **Free** (₱0): 100 suki, 50 gallons/araw, walang QR portal, walang Team Hub, chat support kasama. " +
+      "**Starter** ₱399/buwan: unlimited suki, 150 gallons/araw, 10 portal orders/araw, owner-only. " +
+      "**Grow** ₱950/buwan: 350 gallons/araw, 25 portal orders, 1 rider, advanced customer data (groups, import, refill bonus). " +
+      "**Scale** ₱1,650/buwan: unlimited gallons at portal, 1 admin + 2 riders, Customer App, automated email, River AI Buddy (trial 5 prompts/araw; paid unlimited). " +
+      "Downgrade to Free: lahat ng active suki magiging inactive — i-activate ulit hanggang 100. " +
+      "Owner hub / pangalawang station: **Additional business** add-on (Grow/Scale). Plant ops: hiwalay na add-on. " +
+      "Tingnan ang usage sa sidebar **View Plan** o Account → Subscription. Upgrade/renew: Pricing o Subscription checkout.",
   },
   {
     id: "doc-video-tutorials",

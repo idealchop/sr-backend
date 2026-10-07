@@ -2,7 +2,7 @@
  * Canonical sources River AI knowledge must stay aligned with.
  * Updated by `npm run audit:river-ai-knowledge` and the river-ai-knowledge-curator agent.
  */
-export const RIVER_AI_KNOWLEDGE_MANIFEST_VERSION = "2026-09-08";
+export const RIVER_AI_KNOWLEDGE_MANIFEST_VERSION = "2026-09-19";
 
 export type RiverAiKnowledgeSource = {
   id: string;
@@ -17,6 +17,15 @@ export const RIVER_AI_KNOWLEDGE_SOURCES: RiverAiKnowledgeSource[] = [
     id: "app-feature-capabilities",
     path: "frontend/docs/app-feature-capabilities.md",
     purpose: "Shipped feature list for encyclopedia + instructor roles",
+    codeHooks: [
+      "backend/functions/src/services/ai/product-documentation-knowledge.ts",
+      "backend/functions/src/services/ai/support-knowledge-catalog.ts",
+    ],
+  },
+  {
+    id: "subscription-plans",
+    path: "frontend/docs/subscription-plans.md",
+    purpose: "Plan prices, quotas, feature gates, and add-ons for owner billing questions",
     codeHooks: [
       "backend/functions/src/services/ai/product-documentation-knowledge.ts",
       "backend/functions/src/services/ai/support-knowledge-catalog.ts",

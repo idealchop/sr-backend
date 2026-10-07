@@ -27,7 +27,6 @@ export function subscriptionRowEligibleForLinkRenewal(
 
   if (
     !planCode ||
-    planCode === "starter" ||
     planCode === "free" ||
     cycle === "trial" ||
     !isPaidBillingCycle(cycle)

@@ -5,7 +5,7 @@ import {
   computeDatesView,
   fetchRecentSubscriptionRows,
   isPaidBillingCycle,
-  isStarterPlan,
+  isFreePlan,
   pickEffectiveEntitling,
   promoteDueScheduledSubscriptions,
 } from "./subscription-effective";
@@ -74,9 +74,9 @@ export async function runSubscriptionLifecycleMaintenance(
     );
     if (
       before &&
-      !isStarterPlan(String(before.data.planCode || "")) &&
+      !isFreePlan(String(before.data.planCode || "")) &&
       after &&
-      isStarterPlan(String(after.data.planCode || ""))
+      isFreePlan(String(after.data.planCode || ""))
     ) {
       result.graceEnded = true;
       result.downgradedToStarter = true;
@@ -104,7 +104,7 @@ export async function runSubscriptionLifecycleMaintenance(
   if (
     isPaidBillingCycle(String(current.data.billingCycle || "")) &&
     view.isExpired &&
-    !isStarterPlan(code)
+    !isFreePlan(code)
   ) {
     if (persisted !== "expired") {
       await current.ref.update({

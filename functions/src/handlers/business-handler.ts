@@ -17,6 +17,12 @@ import {
   mergeUiConfigPatch,
   resolveOwnerMorningAlertsEnabled,
 } from "../utils/notification-preferences";
+import { isBusinessEligibleForStationAlerts } from "../utils/scale-plan-access";
+import {
+  isWorkspaceInactivityDeactivated,
+  WORKSPACE_INACTIVE_DEACTIVATED_CODE,
+  WORKSPACE_INACTIVE_DEACTIVATED_MESSAGE,
+} from "../services/notifications/inactive-account-deactivation-service";
 
 const logDBMsg = (msg: string) => {
   logger.info(`${msg}`, {
@@ -232,6 +238,14 @@ export const updateBusiness = async (req: Request, res: Response) => {
       return;
     }
 
+    if (isWorkspaceInactivityDeactivated(businessDoc.data())) {
+      res.status(403).json({
+        error: WORKSPACE_INACTIVE_DEACTIVATED_MESSAGE,
+        code: WORKSPACE_INACTIVE_DEACTIVATED_CODE,
+      });
+      return;
+    }
+
     // Only owners can update business details
     if (role !== "owner") {
       res.status(403).json({
@@ -250,6 +264,10 @@ export const updateBusiness = async (req: Request, res: Response) => {
     delete updateData.ownerId;
     delete updateData.createdAt;
     delete updateData.id;
+    delete updateData.inactivityDeactivatedAt;
+    delete updateData.inactivityReason;
+    delete updateData.inactivityEmailSentAt;
+    delete updateData.inactivityReactivatedAt;
 
     // Disabled custody must clear the field so QR portal / CRM hide the agreement.
     if ("containerCustodyAgreement" in updateData) {
@@ -417,6 +435,14 @@ export const deleteBusiness = async (req: Request, res: Response) => {
       return;
     }
 
+    if (isWorkspaceInactivityDeactivated(businessDoc.data())) {
+      res.status(403).json({
+        error: WORKSPACE_INACTIVE_DEACTIVATED_MESSAGE,
+        code: WORKSPACE_INACTIVE_DEACTIVATED_CODE,
+      });
+      return;
+    }
+
     // Only owners can delete businesses
     if (role !== "owner") {
       res
@@ -539,6 +565,14 @@ export const updateBusinessUIConfig = async (req: Request, res: Response) => {
       return;
     }
 
+    if (isWorkspaceInactivityDeactivated(businessDoc.data())) {
+      res.status(403).json({
+        error: WORKSPACE_INACTIVE_DEACTIVATED_MESSAGE,
+        code: WORKSPACE_INACTIVE_DEACTIVATED_CODE,
+      });
+      return;
+    }
+
     if (role !== "owner") {
       res
         .status(403)
@@ -555,10 +589,12 @@ export const updateBusinessUIConfig = async (req: Request, res: Response) => {
     >;
     const incoming = (uiConfig || {}) as Record<string, unknown>;
     const merged = mergeUiConfigPatch(oldConfig, incoming);
+    const alertsAllowed = await isBusinessEligibleForStationAlerts(businessId);
 
     const updatePayload: Record<string, unknown> = {
       uiConfig: merged,
-      ownerMorningAlertsEnabled: resolveOwnerMorningAlertsEnabled(merged),
+      ownerMorningAlertsEnabled:
+        alertsAllowed && resolveOwnerMorningAlertsEnabled(merged),
       updatedAt: FieldValue.serverTimestamp(),
     };
 

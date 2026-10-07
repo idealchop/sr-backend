@@ -82,6 +82,7 @@ vi.mock("../../../../services/subscriptions/subscription-effective", () => ({
   pickEffectiveEntitling: (rows: unknown[]) => rows[0],
   isPaidBillingCycle: () => true,
   isStarterPlan: () => false,
+  isFreePlan: () => false,
 }));
 
 vi.mock("../../../../services/observability/logging/logger", () => ({

@@ -1,5 +1,8 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
-import { wrapSmartRefillLetterHtml } from "./smartrefill-email-html";
+import {
+  buildSmartRefillEmailFooterPlainText,
+  wrapSmartRefillLetterHtml,
+} from "./smartrefill-email-html";
 
 export type MaintenanceOverdueEmailInput = {
   ownerName: string;
@@ -46,6 +49,8 @@ export function buildMaintenanceOverdueOwnerEmail(
     `${input.overdueCount} overdue maintenance tasks`,
     ...input.overdueNames.slice(0, 12).map((n) => `• ${n}`),
     `Dashboard: ${input.dashboardUrl}`,
+    "",
+    buildSmartRefillEmailFooterPlainText(),
   ].join("\n");
 
   return { subject, html, text, brevoTag: "maintenance_overdue_email" };

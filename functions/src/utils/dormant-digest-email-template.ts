@@ -1,5 +1,8 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
-import { wrapSmartRefillLetterHtml } from "./smartrefill-email-html";
+import {
+  buildSmartRefillEmailFooterPlainText,
+  wrapSmartRefillLetterHtml,
+} from "./smartrefill-email-html";
 
 export type DormantDigestEmailInput = {
   businessName: string;
@@ -65,6 +68,7 @@ export function buildDormantDigestEmail(
     textLines.push("", `River AI brief: ${input.morningBriefSummary.trim()}`);
   }
   textLines.push("", `Open Forecast: ${input.dashboardUrl}`);
+  textLines.push("", buildSmartRefillEmailFooterPlainText());
 
   return {
     subject,

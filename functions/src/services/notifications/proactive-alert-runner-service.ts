@@ -1,12 +1,8 @@
-import { db } from "../../config/firebase-admin";
 import { sendProactiveInsightPushesForBusiness } from "./proactive-insight-push-service";
 import { sendPendingSubmissionReminderForBusiness } from "./pending-submission-reminder-service";
 import { sendDormantDigestEmailForBusiness } from "./dormant-digest-email-service";
-import { sendMorningBriefEmailForBusiness } from "./morning-brief-email-service";
 import { sendPaymentReminderOwnerEmailForBusiness } from "./payment-reminder-owner-email-service";
 import { sendMaintenanceOverdueEmailForBusiness } from "./maintenance-overdue-email-service";
-import { runAutoMorningBriefForBusiness } from "./morning-brief-scheduler-service";
-import { runAutoCollectionsPulseForBusiness } from "./collections-pulse-scheduler-service";
 import { runAutoDispatchHealthForBusiness } from "./dispatch-health-scheduler-service";
 import { runAutoWarehouseRiskForBusiness } from "./warehouse-risk-scheduler-service";
 import {
@@ -17,6 +13,7 @@ import {
   sendTeamActivityDigestEmailForBusiness,
 } from "./owner-email-digest-services";
 import { runPlantAlertsForBusiness } from "./plant-alert-service";
+import { isBusinessEligibleForStationAlerts } from "../../utils/scale-plan-access";
 import {
   AlertDeliveryLogService,
   mapContributorToDeliveryLog,
@@ -65,6 +62,9 @@ export async function runProactiveAlertsForBusiness(
   businessId: string,
   now = new Date(),
 ): Promise<AlertRunResult[]> {
+  if (!(await isBusinessEligibleForStationAlerts(businessId))) {
+    return [];
+  }
   const results: AlertRunResult[] = [];
 
   const push = await sendProactiveInsightPushesForBusiness(businessId, now);
@@ -91,20 +91,6 @@ export async function runProactiveAlertsForBusiness(
     detail: { pendingCount: pending.pendingCount },
   });
 
-  const brief = await runAutoMorningBriefForBusiness(businessId, now);
-  results.push({
-    contributorId: "morning_brief",
-    sent: brief.ran,
-    detail: brief.runId ? { runId: brief.runId } : {},
-  });
-
-  const collections = await runAutoCollectionsPulseForBusiness(businessId, now);
-  results.push({
-    contributorId: "collections_pulse",
-    sent: collections.ran,
-    detail: collections.runId ? { runId: collections.runId } : {},
-  });
-
   const dispatchHealth = await runAutoDispatchHealthForBusiness(businessId, now);
   results.push({
     contributorId: "dispatch_health_auto",
@@ -119,58 +105,9 @@ export async function runProactiveAlertsForBusiness(
     detail: warehouseRisk.runId ? { runId: warehouseRisk.runId } : {},
   });
 
-  let briefSummary: string | null = null;
-  let briefTitle = "Morning brief";
-  let briefHighlights: string[] = [];
-  let briefActionItems: Array<{ label: string; detail: string }> = [];
-
-  if (brief.ran && brief.runId) {
-    const runDoc = await db
-      .collection("businesses")
-      .doc(businessId)
-      .collection("ai_tool_runs")
-      .doc(brief.runId)
-      .get();
-    const runData = runDoc.data();
-    if (typeof runData?.summary === "string" && runData.summary.trim()) {
-      briefSummary = runData.summary.trim();
-    }
-    if (typeof runData?.title === "string" && runData.title.trim()) {
-      briefTitle = runData.title.trim();
-    }
-    if (Array.isArray(runData?.highlights)) {
-      briefHighlights = runData.highlights.filter(
-        (h): h is string => typeof h === "string" && h.trim().length > 0,
-      );
-    }
-    if (Array.isArray(runData?.actionItems)) {
-      briefActionItems = runData.actionItems.filter(
-        (item): item is { label: string; detail: string } =>
-          !!item &&
-          typeof item === "object" &&
-          typeof (item as { label?: string }).label === "string" &&
-          typeof (item as { detail?: string }).detail === "string",
-      );
-    }
-  }
-
-  if (briefSummary) {
-    const briefEmail = await sendMorningBriefEmailForBusiness(businessId, {
-      title: briefTitle,
-      summary: briefSummary,
-      highlights: briefHighlights,
-      actionItems: briefActionItems,
-      historyRunId: brief.runId,
-    }, now);
-    results.push({
-      contributorId: "morning_brief_email",
-      sent: briefEmail.sent,
-    });
-  }
-
   const dormantEmail = await sendDormantDigestEmailForBusiness(
     businessId,
-    briefSummary,
+    null,
     now,
   );
   results.push({

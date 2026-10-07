@@ -6,6 +6,7 @@ import {
   resolveNotificationPreferencesFromUiConfig,
   resolveQuietHoursFromUiConfig,
 } from "../../utils/notification-preferences";
+import { isBusinessEligibleForStationAlerts } from "../../utils/scale-plan-access";
 import { manilaDateKey, manilaHour } from "../../utils/philippine-datetime";
 import {
   deleteOwnerDevicesByTokens,
@@ -65,6 +66,9 @@ export async function sendDormantDigestForBusiness(
   businessId: string,
   now = new Date(),
 ): Promise<{ sent: boolean; dormantCount: number }> {
+  if (!(await isBusinessEligibleForStationAlerts(businessId))) {
+    return { sent: false, dormantCount: 0 };
+  }
   const businessRef = db.collection("businesses").doc(businessId);
   const businessDoc = await businessRef.get();
   if (!businessDoc.exists) {

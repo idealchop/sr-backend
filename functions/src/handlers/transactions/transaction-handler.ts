@@ -3,6 +3,7 @@ import {
   TransactionService,
   InsufficientStockError,
 } from "../../services/transactions/transaction-service";
+import { ContainerDailyLimitError } from "../../services/subscriptions/container-daily-limit-service";
 import { SyncConflictError } from "../../services/transactions/sync-conflict";
 import { logger } from "../../services/observability/logging/logger";
 import { maybeSendCustomerTxnNotification } from "../../services/portal/customer-transaction-notifier";
@@ -93,6 +94,15 @@ export const transactionHandler = {
           error: "INSUFFICIENT_STOCK",
           message: error.message,
           items: error.items,
+        });
+      }
+      if (error instanceof ContainerDailyLimitError) {
+        return res.status(403).json({
+          error: "CONTAINER_DAILY_LIMIT_EXCEEDED",
+          message: error.message,
+          used: error.used,
+          cap: error.cap,
+          adding: error.adding,
         });
       }
       logger.error("Error creating transaction", error);

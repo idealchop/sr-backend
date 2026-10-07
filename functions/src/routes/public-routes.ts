@@ -31,6 +31,7 @@ import {
   postRequestDemo,
 } from "../handlers/marketing-handler";
 import { getPlatformStats } from "../handlers/marketing-platform-stats-handler";
+import { getPublicSubscriptionCatalog } from "../handlers/subscription-catalog-public-handler";
 import { metaCommunityWebhook } from "../handlers/meta/meta-community-webhook-handler";
 import { metaCommunityWhatsappWebhook } from "../handlers/meta/meta-community-whatsapp-webhook-handler";
 import { viberCommunityWebhook } from "../handlers/viber/viber-community-webhook-handler";
@@ -43,6 +44,7 @@ import {
   getPublicResourceVideoById,
   getPublicWebinarEvent,
   getPublicWebinarEventComments,
+  getPublicWebinarEventFeedback,
   getPublicWebinarEvents,
   getPublicWebinarRecordings,
   getPublicWrsBlogById,
@@ -51,6 +53,8 @@ import {
   getPublicTutorials,
   getGuestWebinarJoin,
   postGuestWebinarCancel,
+  postGuestWebinarFeedbackByToken,
+  postPublicWebinarFeedback,
   postGuestWebinarCertificate,
   postGuestWebinarJoinByEmail,
   postGuestWebinarJoinByToken,
@@ -155,6 +159,11 @@ router.get(
   marketingStatsLimiter,
   getPlatformStats,
 );
+router.get(
+  "/subscription-catalog",
+  marketingStatsLimiter,
+  getPublicSubscriptionCatalog,
+);
 
 /** Public Events & Training marketing catalogs (published + visibility:public). */
 router.get("/resources/wrs-stories", resourcesLimiter, getPublicWrsStories);
@@ -170,6 +179,11 @@ router.get(
   "/resources/webinar-events/:eventId/comments",
   resourcesLimiter,
   getPublicWebinarEventComments,
+);
+router.get(
+  "/resources/webinar-events/:eventId/feedback",
+  resourcesLimiter,
+  getPublicWebinarEventFeedback,
 );
 router.post(
   "/resources/webinar-events/:eventId/comments",
@@ -225,6 +239,16 @@ router.post(
   "/resources/webinar-join/:token/cancel",
   marketingLimiter,
   postGuestWebinarCancel,
+);
+router.post(
+  "/resources/webinar-join/:token/feedback",
+  marketingLimiter,
+  postGuestWebinarFeedbackByToken,
+);
+router.post(
+  "/resources/webinar-events/:eventId/feedback",
+  marketingLimiter,
+  postPublicWebinarFeedback,
 );
 router.get("/resources/blogs", resourcesLimiter, getPublicWrsBlogs);
 router.get(

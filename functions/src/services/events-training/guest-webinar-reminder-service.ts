@@ -2,6 +2,7 @@ import { logger } from "firebase-functions";
 import { FieldValue } from "firebase-admin/firestore";
 import { brevo, getBrevoApi } from "../../utils/brevo";
 import { resolveMarketingSiteBaseUrl } from "../../utils/app-base-url";
+import { buildWebinarFeedbackPath } from "../../utils/webinar-email-cta";
 import { buildGuestWebinarReminderEmail } from "../../utils/guest-webinar-invite-email-template";
 import {
   webinarRegistrationsCollection,
@@ -78,6 +79,8 @@ async function sendReminderEmail(params: {
     `${resolveMarketingSiteBaseUrl()}/resources/webinars/join?t=${encodeURIComponent(params.joinToken)}`;
   const cancelUrl =
     `${resolveMarketingSiteBaseUrl()}/resources/webinars/cancel?t=${encodeURIComponent(params.joinToken)}`;
+  const feedbackUrl =
+    `${resolveMarketingSiteBaseUrl()}${buildWebinarFeedbackPath({ token: params.joinToken })}`;
   const timezone = params.timezone.trim() || "Asia/Manila";
   const tpl = buildGuestWebinarReminderEmail({
     displayName: params.displayName,
@@ -86,6 +89,7 @@ async function sendReminderEmail(params: {
     timezone,
     joinUrl,
     cancelUrl,
+    feedbackUrl,
   });
 
   if (process.env.FUNCTIONS_EMULATOR) {
@@ -204,6 +208,7 @@ export async function sendDueGuestWebinarReminders(limit = 40): Promise<{
             registrationId: regDoc.id,
             email,
             displayName: String(reg.displayName || "").trim() || email,
+            eventId: eventDoc.id,
             eventName,
             startsAt,
             timezone,

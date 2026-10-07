@@ -12,6 +12,9 @@ import {
   ProactiveScheduleWeekSnapshotService,
   type ProactiveScheduleSuggestionInput,
 } from "../services/proactive-schedule/proactive-schedule-week-snapshot-service";
+import { SubscriptionService } from "../services/subscriptions/subscription-service";
+import { planAllowsForecastAi } from "../utils/subscription-plan-codes";
+import { manilaDateKey } from "../utils/philippine-datetime";
 
 function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -44,7 +47,7 @@ function isValidSuggestionInput(x: unknown): x is ProactiveScheduleSuggestionInp
   );
 }
 
-/** AI-03 — POST proactive week LLM generation */
+/** AI-03 — POST on-demand LLM week; Scale/Enterprise; overrides `current`. */
 export async function postProactiveWeekAiGenerate(req: Request, res: Response) {
   const businessId = req.params.businessId as string;
   const windowLabel =
@@ -58,6 +61,15 @@ export async function postProactiveWeekAiGenerate(req: Request, res: Response) {
   ).filter(isValidSuggestionInput);
 
   try {
+    const sub = await SubscriptionService.getSubscriptionStatus(businessId);
+    if (!planAllowsForecastAi(String(sub.planCode || "free"))) {
+      res.status(403).json({
+        error: "FORECAST_AI_PLAN_REQUIRED",
+        message:
+          "AI Forecast is included on Scale and Enterprise. Grow uses the preferred-day list only.",
+      });
+      return;
+    }
     assertAiFeatureAvailable("proactive_week.generate");
     await assertInteractiveAiQuota(businessId);
     const result = await generateLlmProactiveWeek({
@@ -68,18 +80,23 @@ export async function postProactiveWeekAiGenerate(req: Request, res: Response) {
       deterministicSuggestions: deterministic,
     });
 
+    let snapshot = null;
     if (req.body?.persist === true && result.suggestions.length > 0) {
+      const existing =
+        await ProactiveScheduleWeekSnapshotService.getLatest(businessId);
       await ProactiveScheduleWeekSnapshotService.upsert(businessId, {
         windowLabel,
         suggestions: result.suggestions,
         aiSummary: result.summary,
+        source: "generate_ai",
+        windowStart: existing?.windowStart ?? manilaDateKey(windowStart),
+        windowEnd: existing?.windowEnd ?? manilaDateKey(windowEnd),
+        ...(existing?.lastWeekAccuracy ?
+          { lastWeekAccuracy: existing.lastWeekAccuracy } :
+          {}),
       });
+      snapshot = await ProactiveScheduleWeekSnapshotService.getLatest(businessId);
     }
-
-    const snapshot =
-      req.body?.persist === true ?
-        await ProactiveScheduleWeekSnapshotService.getLatest(businessId) :
-        null;
 
     res.json({
       data: {

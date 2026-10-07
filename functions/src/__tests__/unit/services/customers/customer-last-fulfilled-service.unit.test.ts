@@ -55,6 +55,17 @@ describe("resolveFulfilledActivity", () => {
     ).toBeNull();
   });
 
+  it("uses scheduledAt for a past delivery recorded today", () => {
+    const activity = resolveFulfilledActivity({
+      type: "delivery",
+      deliveryStatus: "completed",
+      scheduledAt: "2026-09-14T08:00:00.000Z",
+      updatedAt: "2026-09-23T08:00:00.000Z",
+      createdAt: "2026-09-23T08:00:00.000Z",
+    });
+    expect(activity?.at.toISOString()).toBe("2026-09-14T08:00:00.000Z");
+  });
+
   it("returns activity for walk-in", () => {
     const activity = resolveFulfilledActivity({
       type: "walkin",

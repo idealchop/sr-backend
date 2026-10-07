@@ -4,98 +4,146 @@
  *
  * River AI quotas and human agent access live under `limitations.support` only.
  */
-export const SUBSCRIPTION_PLAN_LIMITATION_PATCHES: Record<
+
+const CHANNELS_DISABLED = {
+  messenger: { max: 0, frequency: "monthly" },
+  whatsapp: { max: 0, frequency: "monthly" },
+  sms: { max: 0, frequency: "monthly" },
+  webhooks: { max: 0, frequency: "monthly" },
+} as const;
+
+const SUPPORT_CHAT_ONLY = {
+  chat: { max: 0, frequency: "monthly" },
+  attachments: false,
+  agentChat: true,
+} as const;
+
+export const SUBSCRIPTION_PLAN_CATALOG_ROWS: Record<
   string,
-  Record<string, unknown>
+  {
+    code: string;
+    name: string;
+    pricing: { monthly: number; yearly: number };
+    limitations: Record<string, unknown>;
+  }
 > = {
-  starter: {
-    customers: { max: 20 },
-    transactions: { frequency: "daily", max: 20 },
-    aiTools: { max: 5, frequency: "monthly" },
-    online_orders: { frequency: "daily", max: 5 },
-    channels: {
-      messenger: { max: 0, frequency: "monthly" },
-      whatsapp: { max: 0, frequency: "monthly" },
-      sms: { max: 0, frequency: "monthly" },
-      webhooks: { max: 0, frequency: "monthly" },
+  free: {
+    code: "free",
+    name: "Free",
+    pricing: { monthly: 0, yearly: 0 },
+    limitations: {
+      customers: { max: 100 },
+      containers: { frequency: "daily", max: 50 },
+      transactions: { frequency: "daily", max: 50 },
+      aiTools: { max: 0, frequency: "monthly" },
+      online_orders: { frequency: "daily", max: 0 },
+      channels: CHANNELS_DISABLED,
+      staff: { admin: 0, rider: 0 },
+      support: SUPPORT_CHAT_ONLY,
     },
-    staff: { admin: 0, rider: 0 },
-    support: {
-      chat: { max: 5, frequency: "monthly" },
-      attachments: false,
-      agentChat: false,
+  },
+  starter: {
+    code: "starter",
+    name: "Starter",
+    pricing: { monthly: 399, yearly: 3990 },
+    limitations: {
+      customers: "full",
+      containers: { frequency: "daily", max: 150 },
+      transactions: { frequency: "daily", max: 150 },
+      aiTools: { max: 0, frequency: "monthly" },
+      online_orders: { frequency: "daily", max: 10 },
+      channels: CHANNELS_DISABLED,
+      staff: { admin: 0, rider: 0 },
+      support: SUPPORT_CHAT_ONLY,
     },
   },
   grow: {
-    customers: { max: 200 },
-    transactions: { frequency: "daily", max: 100 },
-    aiTools: { max: 20, frequency: "monthly" },
-    online_orders: { frequency: "daily", max: 25 },
-    channels: {
-      messenger: { max: 25, frequency: "monthly" },
-      whatsapp: { max: 25, frequency: "monthly" },
-      sms: { max: 50, frequency: "monthly" },
-      webhooks: { max: 500, frequency: "monthly" },
-    },
-    staff: { admin: 0, rider: 1 },
-    support: {
-      chat: { max: 10, frequency: "monthly" },
-      attachments: true,
-      agentChat: true,
+    code: "grow",
+    name: "Grow",
+    pricing: { monthly: 950, yearly: 9500 },
+    limitations: {
+      customers: "full",
+      containers: { frequency: "daily", max: 350 },
+      transactions: { frequency: "daily", max: 350 },
+      aiTools: { max: 0, frequency: "monthly" },
+      online_orders: { frequency: "daily", max: 25 },
+      channels: CHANNELS_DISABLED,
+      staff: { admin: 0, rider: 1 },
+      support: SUPPORT_CHAT_ONLY,
     },
   },
   pro: {
-    customers: { max: 200 },
-    transactions: { frequency: "daily", max: 100 },
-    aiTools: { max: 20, frequency: "monthly" },
-    online_orders: { frequency: "daily", max: 25 },
-    channels: {
-      messenger: { max: 25, frequency: "monthly" },
-      whatsapp: { max: 25, frequency: "monthly" },
-      sms: { max: 50, frequency: "monthly" },
-      webhooks: { max: 500, frequency: "monthly" },
-    },
-    staff: { admin: 0, rider: 1 },
-    support: {
-      chat: { max: 10, frequency: "monthly" },
-      attachments: true,
-      agentChat: true,
+    code: "pro",
+    name: "Grow",
+    pricing: { monthly: 950, yearly: 9500 },
+    limitations: {
+      customers: "full",
+      containers: { frequency: "daily", max: 350 },
+      transactions: { frequency: "daily", max: 350 },
+      aiTools: { max: 0, frequency: "monthly" },
+      online_orders: { frequency: "daily", max: 25 },
+      channels: CHANNELS_DISABLED,
+      staff: { admin: 0, rider: 1 },
+      support: SUPPORT_CHAT_ONLY,
     },
   },
   scale: {
-    customers: "full",
-    transactions: "full",
-    aiTools: "full",
-    online_orders: "full",
-    channels: "full",
-    staff: { admin: 1, rider: 2 },
-    support: {
-      chat: "full",
-      attachments: true,
-      agentChat: true,
-      trial: {
-        chat: { max: 50, frequency: "daily" },
-        attachments: { enabled: true, max: 50, frequency: "daily" },
+    code: "scale",
+    name: "Scale",
+    pricing: { monthly: 1650, yearly: 16500 },
+    limitations: {
+      customers: "full",
+      containers: "full",
+      transactions: "full",
+      aiTools: "full",
+      online_orders: "full",
+      channels: CHANNELS_DISABLED,
+      staff: { admin: 1, rider: 2 },
+      support: {
+        chat: "full",
+        attachments: true,
         agentChat: true,
+        trial: {
+          chat: { max: 5, frequency: "daily" },
+          attachments: { enabled: true, max: 5, frequency: "daily" },
+          agentChat: true,
+        },
       },
     },
   },
   enterprise: {
-    customers: "full",
-    transactions: "full",
-    aiTools: "full",
-    online_orders: "full",
-    channels: "full",
-    support: {
-      chat: "full",
-      attachments: true,
-      agentChat: true,
+    code: "enterprise",
+    name: "Enterprise",
+    pricing: { monthly: 0, yearly: 0 },
+    limitations: {
+      customers: "full",
+      containers: "full",
+      transactions: "full",
+      aiTools: "full",
+      online_orders: "full",
+      channels: CHANNELS_DISABLED,
+      support: {
+        chat: "full",
+        attachments: true,
+        agentChat: true,
+      },
     },
   },
 };
 
+export const SUBSCRIPTION_PLAN_LIMITATION_PATCHES: Record<
+  string,
+  Record<string, unknown>
+> = Object.fromEntries(
+  Object.entries(SUBSCRIPTION_PLAN_CATALOG_ROWS).map(([code, row]) => [
+    code,
+    row.limitations,
+  ]),
+);
+
 /** Plan codes to attempt when syncing (covers docs located only by `code`). */
 export const SUBSCRIPTION_PLAN_SYNC_CODES = [
+  "free",
   "starter",
   "grow",
   "pro",

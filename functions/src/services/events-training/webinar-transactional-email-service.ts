@@ -1,7 +1,8 @@
 import { logger } from "firebase-functions";
 import { FieldValue } from "firebase-admin/firestore";
 import { brevo, getBrevoApi } from "../../utils/brevo";
-import { resolveAppBaseUrlForEmail } from "../../utils/app-base-url";
+import { resolveAppBaseUrlForEmail, resolveMarketingSiteBaseUrl } from "../../utils/app-base-url";
+import { buildWebinarFeedbackPath } from "../../utils/webinar-email-cta";
 import {
   buildMemberWebinarConfirmationEmail,
   buildMemberWebinarReminderEmail,
@@ -67,6 +68,7 @@ export async function sendMemberWebinarConfirmationEmail(input: {
   registrationId: string;
   email: string;
   displayName?: string | null;
+  eventId?: string | null;
   eventName: string;
   startsAt: string | null;
   timezone: string;
@@ -77,12 +79,16 @@ export async function sendMemberWebinarConfirmationEmail(input: {
 
   const hubUrl = `${resolveAppBaseUrlForEmail()}/webinars`;
   const timezone = input.timezone.trim() || "Asia/Manila";
+  const feedbackUrl = input.eventId ?
+    `${resolveMarketingSiteBaseUrl()}${buildWebinarFeedbackPath({ eventId: input.eventId })}` :
+    `${resolveMarketingSiteBaseUrl()}${buildWebinarFeedbackPath({})}`;
   const tpl = buildMemberWebinarConfirmationEmail({
     displayName: input.displayName || email,
     eventName: input.eventName,
     startsAtLabel: formatStartsAtLabel(input.startsAt, timezone),
     timezone,
     hubUrl,
+    feedbackUrl,
     requiresApproval: input.requiresApproval,
   });
 
@@ -170,12 +176,15 @@ export async function sendWebinarApprovalEmail(input: {
   }
 
   const hubUrl = `${resolveAppBaseUrlForEmail()}/webinars`;
+  const feedbackUrl =
+    `${resolveMarketingSiteBaseUrl()}${buildWebinarFeedbackPath({ eventId })}`;
   const tpl = buildWebinarApprovedEmail({
     displayName,
     eventName,
     startsAtLabel: formatStartsAtLabel(startsAt, timezone),
     timezone,
     hubUrl,
+    feedbackUrl,
   });
   const ok = await sendBrevo({
     email,
@@ -203,6 +212,7 @@ export async function sendMemberWebinarReminderEmail(input: {
   registrationId: string;
   email: string;
   displayName?: string | null;
+  eventId?: string | null;
   eventName: string;
   startsAt: string | null;
   timezone: string;
@@ -212,12 +222,16 @@ export async function sendMemberWebinarReminderEmail(input: {
 
   const hubUrl = `${resolveAppBaseUrlForEmail()}/webinars`;
   const timezone = input.timezone.trim() || "Asia/Manila";
+  const feedbackUrl = input.eventId ?
+    `${resolveMarketingSiteBaseUrl()}${buildWebinarFeedbackPath({ eventId: input.eventId })}` :
+    `${resolveMarketingSiteBaseUrl()}${buildWebinarFeedbackPath({})}`;
   const tpl = buildMemberWebinarReminderEmail({
     displayName: input.displayName || email,
     eventName: input.eventName,
     startsAtLabel: formatStartsAtLabel(input.startsAt, timezone),
     timezone,
     hubUrl,
+    feedbackUrl,
   });
 
   const ok = await sendBrevo({

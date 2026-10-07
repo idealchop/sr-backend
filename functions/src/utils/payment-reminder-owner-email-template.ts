@@ -1,5 +1,8 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
-import { wrapSmartRefillLetterHtml } from "./smartrefill-email-html";
+import {
+  buildSmartRefillEmailFooterPlainText,
+  wrapSmartRefillLetterHtml,
+} from "./smartrefill-email-html";
 import type { PaymentReminderQueueRow } from "./payment-reminder-queue";
 
 export type PaymentReminderOwnerEmailInput = {
@@ -61,6 +64,8 @@ export function buildPaymentReminderOwnerEmail(
         `${row.name}: ₱${row.amount.toFixed(2)} (${row.oldestDebtDays}d, ${row.reminderTier}+)`,
     ),
     `Dashboard: ${input.dashboardUrl}`,
+    "",
+    buildSmartRefillEmailFooterPlainText(),
   ].join("\n");
 
   return { subject, html, text, brevoTag: "payment_reminder_owner_email" };

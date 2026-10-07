@@ -1,6 +1,11 @@
 import { Request, Response, NextFunction } from "express";
 import { db } from "../config/firebase-admin";
 import { WORKSPACE_MEMBER_DEACTIVATED_MESSAGE } from "../services/team/workspace-member-access";
+import {
+  isWorkspaceInactivityDeactivated,
+  WORKSPACE_INACTIVE_DEACTIVATED_CODE,
+  WORKSPACE_INACTIVE_DEACTIVATED_MESSAGE,
+} from "../services/notifications/inactive-account-deactivation-service";
 
 export const validateBusinessAccess = async (
   req: Request,
@@ -36,6 +41,14 @@ export const validateBusinessAccess = async (
     }
 
     const data = businessDoc.data();
+    const requestPath = String(req.originalUrl || req.path || "");
+    const isInactivityRoute = requestPath.includes("/inactivity");
+    if (isWorkspaceInactivityDeactivated(data) && !isInactivityRoute) {
+      return res.status(403).json({
+        error: WORKSPACE_INACTIVE_DEACTIVATED_MESSAGE,
+        code: WORKSPACE_INACTIVE_DEACTIVATED_CODE,
+      });
+    }
 
     // Check if owner
     if (data?.ownerId === user.uid) {

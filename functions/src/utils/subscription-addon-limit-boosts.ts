@@ -106,6 +106,10 @@ export function applyAddonBoostsToQuotas(
       quotas.transactionsDailyMax,
       boosts.transactionsDaily,
     ),
+    containersDailyMax: addFiniteCap(
+      quotas.containersDailyMax ?? quotas.transactionsDailyMax,
+      boosts.transactionsDaily,
+    ),
     onlineOrders:
       quotas.onlineOrders && boosts.onlineOrders > 0 ?
         {

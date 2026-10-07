@@ -325,7 +325,7 @@ export function getOwnerEmailVerificationEmail(input: {
     cta: { label: cta, url },
   });
 
-  return { subject, html: html, text, brevoTag };
+  return { subject, html, text, brevoTag };
 }
 
 /**

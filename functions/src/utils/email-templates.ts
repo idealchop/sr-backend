@@ -143,7 +143,6 @@ export function getTeamWorkspaceInviteEmail(
     );
   };
 
-
   const html = wrapSmartRefillLetterHtml({
     title: "Workspace invitation",
     headline: "Workspace invitation",

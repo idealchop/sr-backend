@@ -3,6 +3,7 @@ import { getGeminiApiKey } from "./gemini-config";
 import { CustomerService } from "../customers/customer-service";
 import { TransactionService } from "../transactions/transaction-service";
 import type { ProactiveScheduleSuggestionInput } from "../proactive-schedule/proactive-schedule-week-snapshot-service";
+import { manilaDateKey, manilaPreferredDayNum } from "../../utils/philippine-datetime";
 
 export type LlmProactiveWeekRow = ProactiveScheduleSuggestionInput & {
   reason?: string;
@@ -149,7 +150,7 @@ export function mergeProactiveWeekSuggestions(
             existing.returnContainers,
         rationale: validated.rationale || existing.rationale,
         reason: validated.reason,
-        source: existing.source ?? "history",
+        source: "history",
       });
     } else {
       byKey.set(key, validated);
@@ -163,9 +164,135 @@ export function mergeProactiveWeekSuggestions(
   );
 }
 
+export type HabitCustomerInput = {
+  id?: string;
+  name: string;
+  isDeliveryEnabled?: boolean;
+  isCollectionEnabled?: boolean;
+  deliveryConfig?: { preferredDays?: number[] };
+  collectionConfig?: { preferredDays?: number[] };
+  lastFulfilledAt?: unknown;
+  lastFulfilledType?: string;
+  forecastAccuracyRollup?: {
+    delivery?: { hitCount?: number; missCount?: number };
+    collection?: { hitCount?: number; missCount?: number };
+  };
+};
+
+export type HabitTxInput = {
+  customerId?: string;
+  type: string;
+  scheduledAt?: unknown;
+  createdAt?: unknown;
+  waterRefills?: Array<{ quantity?: number; qty?: number }>;
+};
+
+export type CustomerHabitSample = {
+  id: string;
+  name: string;
+  isDeliveryEnabled: boolean;
+  isCollectionEnabled: boolean;
+  preferredDeliveryDays: number[];
+  preferredCollectionDays: number[];
+  lastFulfilledAt?: string;
+  lastFulfilledType?: string;
+  orderWeekdays: Record<string, number>;
+  typicalQty?: number;
+  forecastHitRate?: number;
+};
+
+function toInstant(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  if (typeof value === "object" && value !== null && "toDate" in value) {
+    try {
+      const parsed = (value as { toDate: () => Date }).toDate();
+      return parsed instanceof Date && !Number.isNaN(parsed.getTime()) ?
+        parsed :
+        null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function refillQty(tx: HabitTxInput): number {
+  if (!Array.isArray(tx.waterRefills) || tx.waterRefills.length === 0) return 0;
+  return tx.waterRefills.reduce(
+    (sum, line) => sum + Math.max(0, Number(line.quantity ?? line.qty) || 0),
+    0,
+  );
+}
+
+function median(values: number[]): number | undefined {
+  if (values.length === 0) return undefined;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ?
+    Math.round((sorted[mid - 1] + sorted[mid]) / 2) :
+    sorted[mid];
+}
+
+/** Weekday histogram + mix from recent orders (1 = Monday … 7 = Sunday). */
+export function summarizeCustomerOrderHabits(
+  customer: HabitCustomerInput,
+  transactions: HabitTxInput[],
+): CustomerHabitSample | null {
+  const id = typeof customer.id === "string" ? customer.id.trim() : "";
+  if (!id) return null;
+
+  const orderWeekdays: Record<string, number> = {};
+  const qtys: number[] = [];
+  for (const tx of transactions) {
+    if (tx.customerId !== id) continue;
+    if (tx.type === "expense") continue;
+    const at = toInstant(tx.scheduledAt) ?? toInstant(tx.createdAt);
+    if (at) {
+      const day = String(manilaPreferredDayNum(at));
+      orderWeekdays[day] = (orderWeekdays[day] || 0) + 1;
+    }
+    const qty = refillQty(tx);
+    if (qty > 0) qtys.push(qty);
+  }
+
+  const lastAt = toInstant(customer.lastFulfilledAt);
+  const deliveryHits = Number(customer.forecastAccuracyRollup?.delivery?.hitCount) || 0;
+  const deliveryMisses = Number(customer.forecastAccuracyRollup?.delivery?.missCount) || 0;
+  const collectionHits = Number(customer.forecastAccuracyRollup?.collection?.hitCount) || 0;
+  const collectionMisses =
+    Number(customer.forecastAccuracyRollup?.collection?.missCount) || 0;
+  const scored = deliveryHits + deliveryMisses + collectionHits + collectionMisses;
+  const hits = deliveryHits + collectionHits;
+
+  const typicalQty = median(qtys);
+  return {
+    id,
+    name: customer.name,
+    isDeliveryEnabled: Boolean(customer.isDeliveryEnabled),
+    isCollectionEnabled: Boolean(customer.isCollectionEnabled),
+    preferredDeliveryDays: customer.deliveryConfig?.preferredDays ?? [],
+    preferredCollectionDays: customer.collectionConfig?.preferredDays ?? [],
+    ...(lastAt ? { lastFulfilledAt: manilaDateKey(lastAt) } : {}),
+    ...(customer.lastFulfilledType ?
+      { lastFulfilledType: customer.lastFulfilledType } :
+      {}),
+    orderWeekdays,
+    ...(typicalQty != null ? { typicalQty } : {}),
+    ...(scored > 0 ? { forecastHitRate: Math.round((hits / scored) * 100) } : {}),
+  };
+}
+
 /**
- * AI-03 — LLM proactive week generation (augments deterministic build).
- * Falls back to deterministic rows when Gemini is unavailable.
+ * AI-03 — LLM proactive week from preferred-day seed + order habit.
+ * Persisted rows override the current week snapshot. Falls back to seed
+ * when Gemini is unavailable.
  */
 export async function generateLlmProactiveWeek(params: {
   businessId: string;
@@ -219,22 +346,24 @@ export async function generateLlmProactiveWeek(params: {
   }
 
   const historySample = transactions
-    .filter((t) => t.type !== "expense" && t.type !== "collection")
+    .filter((t) => t.type !== "expense")
     .slice(0, 50)
-    .map((t) => ({
-      customerId: t.customerId,
-      customerName: t.customerName,
-      type: t.type,
-      totalAmount: t.totalAmount,
-      scheduledAt: t.scheduledAt,
-    }));
+    .map((t) => {
+      const at = toInstant(t.scheduledAt) ?? toInstant(t.createdAt);
+      return {
+        customerId: t.customerId,
+        customerName: t.customerName,
+        type: t.type,
+        weekday: at ? manilaPreferredDayNum(at) : undefined,
+        qty: refillQty(t),
+        date: at ? manilaDateKey(at) : undefined,
+      };
+    });
 
-  const customerSample = customers.slice(0, 50).map((c) => ({
-    id: c.id,
-    name: c.name,
-    isDeliveryEnabled: c.isDeliveryEnabled,
-    isCollectionEnabled: c.isCollectionEnabled,
-  }));
+  const customerSample = customers
+    .slice(0, 50)
+    .map((c) => summarizeCustomerOrderHabits(c, transactions))
+    .filter((row): row is CustomerHabitSample => row != null);
 
   const system =
     "You plan a water refilling station's proactive delivery/collection week in the Philippines. " +
@@ -242,14 +371,16 @@ export async function generateLlmProactiveWeek(params: {
     "summary (one line), each suggestion with id, customerId, customerName, " +
     "scheduledDate (YYYY-MM-DD within window), kind (delivery|collection), " +
     "refillItems [{type, qty}], returnContainers [], rationale (≤200 chars), " +
-    "reason (one line why this date). Never invent customers. " +
-    "Refine deterministicSuggestions — adjust dates/qty when history supports it.";
+    "reason (one line why this date — cite habit, not only preferredDays). " +
+    "Never invent customers. Prefer order habit (orderWeekdays, lastFulfilledAt, typicalQty) " +
+    "over preferredDays when they disagree. You MAY move, add, or drop visits vs " +
+    "deterministicSuggestions (the current week forecast) so the saved list is the AI week.";
 
   const user =
     `Window: ${windowLabel} (${windowStart.toISOString()} to ${windowEnd.toISOString()})\n` +
-    `Deterministic seed (${deterministicSuggestions.length} rows):\n` +
+    `Current week forecast to override (${deterministicSuggestions.length} rows):\n` +
     `${JSON.stringify(deterministicSuggestions.slice(0, 25), null, 2)}\n\n` +
-    `Customers:\n${JSON.stringify(customerSample, null, 2)}\n\n` +
+    `Customer habits:\n${JSON.stringify(customerSample, null, 2)}\n\n` +
     `Recent orders:\n${JSON.stringify(historySample, null, 2)}`;
 
   const raw = await geminiGenerateJson<LlmWeekResponse>({
@@ -271,7 +402,7 @@ export async function generateLlmProactiveWeek(params: {
       typeof raw?.summary === "string" && raw.summary.trim() ?
         raw.summary.trim().slice(0, 400) :
         llmRows.length > 0 ?
-          "AI refined your week plan from order history." :
+          "AI replaced this week's list using order habits." :
           undefined,
   };
 }

@@ -4,8 +4,11 @@ import {
 } from "./auth-transactional-email";
 import {
   buildSmartRefillEmailFooterPlainText,
+  SMART_REFILL_BRAND_TEAL,
   wrapSmartRefillLetterHtml,
 } from "./smartrefill-email-html";
+
+const BRAND_COLOR = SMART_REFILL_BRAND_TEAL;
 
 export interface MarketingLeadEmailInput {
   eyebrow: string;
@@ -110,14 +113,19 @@ export function buildMarketingLeadEmail(
   };
 }
 
-export function getRequestDemoLeadEmail(data: {
+export type RequestDemoEmailContext = {
   name: string;
   email: string;
   phone: string;
   businessName: string;
   stationCount?: string;
   requestedDate?: string;
-}) {
+  requestedTime?: string;
+  demoSlotLabel?: string;
+  meetLink?: string | null;
+};
+
+export function getRequestDemoLeadEmail(data: RequestDemoEmailContext) {
   return buildMarketingLeadEmail({
     eyebrow: "Marketing",
     headline: "New demo request",
@@ -131,8 +139,77 @@ export function getRequestDemoLeadEmail(data: {
       row("Business", data.businessName),
       row("Stations", data.stationCount ?? "—"),
       row("Preferred date", data.requestedDate ?? "—"),
+      row("Preferred time", data.requestedTime ?? "—"),
+      row("Scheduled slot", data.demoSlotLabel ?? "—"),
+      row("Google Meet", data.meetLink?.trim() || "Pending — calendar invite follows"),
     ],
   });
+}
+
+/**
+ * Confirmation email to the inquiree after Request a Demo.
+ * @param {RequestDemoEmailContext} data Lead + schedule context.
+ * @return {Object} Compiled Brevo email payload.
+ */
+export function getRequestDemoConfirmEmail(data: RequestDemoEmailContext): {
+  subject: string;
+  html: string;
+  text: string;
+  brevoTag: string;
+} {
+  const name = data.name.trim() || "there";
+  const business = data.businessName.trim() || "your station";
+  const slot = data.demoSlotLabel ?? "to be confirmed";
+  const meetRaw = data.meetLink?.trim() || "";
+  const meetHtml = meetRaw ?
+    `<a href="${escapeHtmlForEmail(meetRaw)}" style="color:${BRAND_COLOR};font-weight:600;">${escapeHtmlForEmail(meetRaw)}</a>` :
+    "A Google Meet link will be shared with your calendar invite shortly.";
+  const meetPlain = meetRaw || "A Google Meet link will be shared with your calendar invite shortly.";
+
+  const subject = `Your Smart Refill demo is scheduled — ${data.businessName.trim() || "WRS"}`;
+  const text =
+    `Hi ${name},\n\n` +
+    `Thanks for requesting a Smart Refill demo for ${business}.\n\n` +
+    `When: ${slot}\n` +
+    "Duration: 1 hour\n" +
+    `Google Meet: ${meetPlain}\n\n` +
+    "We've also invited our team. A calendar invite (.ics) is attached.\n\n" +
+    `${buildSmartRefillEmailFooterPlainText()}`;
+
+  const html = wrapSmartRefillLetterHtml({
+    title: subject,
+    headline: "You're booked for a 1-hour demo",
+    preheader: "Your 1-hour Smart Refill demo details",
+    greetingName: name,
+    bodyHtml: `
+      <p style="margin:0 0 12px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#5e6c84;">Demo confirmation</p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#253858;">
+        Thanks for requesting a demo for <strong>${escapeHtmlForEmail(business)}</strong>. Here are your details:
+      </p>
+      <p style="margin:16px 0 0;font-size:15px;line-height:1.65;color:#253858;">
+        <strong style="display:block;margin:0 0 4px;font-size:13px;font-weight:600;color:#5e6c84;">When</strong>
+        ${escapeHtmlForEmail(slot)}
+      </p>
+      <p style="margin:12px 0 0;font-size:15px;line-height:1.65;color:#253858;">
+        <strong style="display:block;margin:0 0 4px;font-size:13px;font-weight:600;color:#5e6c84;">Duration</strong>
+        1 hour
+      </p>
+      <p style="margin:12px 0 0;font-size:15px;line-height:1.65;color:#253858;">
+        <strong style="display:block;margin:0 0 4px;font-size:13px;font-weight:600;color:#5e6c84;">Google Meet</strong>
+        ${meetHtml}
+      </p>
+      <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#5e6c84;">
+        A calendar invite (.ics) is attached. Our team will join from the Smart Refill calendar invite.
+      </p>
+    `,
+  });
+
+  return {
+    subject,
+    html,
+    text,
+    brevoTag: "marketing-request-demo-confirm",
+  };
 }
 
 export function getInquiryLeadEmail(data: {

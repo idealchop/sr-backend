@@ -1,6 +1,7 @@
 import { db } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
 import { resolveNotificationPreferencesFromUiConfig } from "../../utils/notification-preferences";
+import { isBusinessEligibleForStationAlerts } from "../../utils/scale-plan-access";
 import {
   deleteOwnerDevicesByTokens,
   listOwnerDevices,
@@ -37,6 +38,9 @@ export async function sendDeliveryMessengerChatPush(params: {
   referenceId: string;
   preview: string;
 }): Promise<{ sent: boolean }> {
+  if (!(await isBusinessEligibleForStationAlerts(params.businessId))) {
+    return { sent: false };
+  }
   const businessDoc = await db.collection("businesses").doc(params.businessId).get();
   if (!businessDoc.exists) return { sent: false };
 

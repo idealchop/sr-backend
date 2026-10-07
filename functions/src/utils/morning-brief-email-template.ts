@@ -1,5 +1,8 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
-import { wrapSmartRefillLetterHtml } from "./smartrefill-email-html";
+import {
+  buildSmartRefillEmailFooterPlainText,
+  wrapSmartRefillLetterHtml,
+} from "./smartrefill-email-html";
 
 export type MorningBriefEmailInput = {
   ownerName: string;
@@ -61,7 +64,7 @@ export function buildMorningBriefEmail(
     input.historyUrl ? `History: ${input.historyUrl}` : "",
   ]
     .filter(Boolean)
-    .join("\n");
+    .join("\n") + "\n\n" + buildSmartRefillEmailFooterPlainText();
 
   return { subject, html, text, brevoTag: "morning_brief_email" };
 }

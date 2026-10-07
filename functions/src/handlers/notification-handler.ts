@@ -137,6 +137,7 @@ export const listAlertDeliveryLog = async (req: Request, res: Response) => {
   const businessId = String(req.query.businessId || "").trim();
   const customerId = String(req.query.customerId || "").trim();
   const channelRaw = String(req.query.channel || "").trim();
+  const categoryRaw = String(req.query.category || "").trim();
   const limit = Number(req.query.limit) || 50;
 
   if (!user?.uid || !businessId) {
@@ -183,6 +184,7 @@ export const listAlertDeliveryLog = async (req: Request, res: Response) => {
           audience: "customer",
           customerEmail: customer.email,
           referenceIds,
+          ...(categoryRaw ? { categories: [categoryRaw] } : {}),
         },
       );
       res.json({ data });

@@ -16,6 +16,7 @@ export function mapCmsProductIcon(
     lucide: typeof data.lucide === "string" ? data.lucide : undefined,
     sortOrder: Number(data.sortOrder) || 99,
     active: data.active !== false,
+    waterContainer: data.waterContainer === true,
   };
 }
 

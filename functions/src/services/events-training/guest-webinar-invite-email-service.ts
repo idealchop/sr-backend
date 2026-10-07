@@ -2,6 +2,7 @@ import { logger } from "firebase-functions";
 import { FieldValue } from "firebase-admin/firestore";
 import { brevo, getBrevoApi } from "../../utils/brevo";
 import { resolveMarketingSiteBaseUrl } from "../../utils/app-base-url";
+import { buildWebinarFeedbackPath } from "../../utils/webinar-email-cta";
 import { buildGuestWebinarInviteEmail } from "../../utils/guest-webinar-invite-email-template";
 import { webinarRegistrationsCollection } from "./events-training-collections";
 
@@ -48,6 +49,8 @@ export async function sendGuestWebinarInviteEmail(
     `${resolveMarketingSiteBaseUrl()}/resources/webinars/join?t=${encodeURIComponent(token)}`;
   const cancelUrl =
     `${resolveMarketingSiteBaseUrl()}/resources/webinars/cancel?t=${encodeURIComponent(token)}`;
+  const feedbackUrl =
+    `${resolveMarketingSiteBaseUrl()}${buildWebinarFeedbackPath({ token })}`;
   const timezone = params.timezone.trim() || "Asia/Manila";
   const tpl = buildGuestWebinarInviteEmail({
     displayName: params.displayName,
@@ -56,6 +59,7 @@ export async function sendGuestWebinarInviteEmail(
     timezone,
     joinUrl,
     cancelUrl,
+    feedbackUrl,
     requiresApproval: params.requiresApproval,
   });
 

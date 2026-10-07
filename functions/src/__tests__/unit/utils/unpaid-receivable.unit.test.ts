@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isTransactionFulfilledForReceivable,
   isUnpaidReceivableTransaction,
+  outstandingBalanceDue,
 } from "../../../utils/unpaid-receivable";
 import { computeDebtAgingBreakdown } from "../../../utils/analytics-utils";
 
@@ -23,6 +24,31 @@ describe("unpaid-receivable", () => {
         } as any),
       ).toBe(false);
     }
+  });
+
+  it("uses the billed total when balanceDue was stored as zero", () => {
+    const tx = {
+      type: "delivery",
+      deliveryStatus: "completed",
+      paymentStatus: "unpaid",
+      totalAmount: 1000,
+      amountPaid: 0,
+      balanceDue: 0,
+    } as any;
+    expect(outstandingBalanceDue(tx)).toBe(1000);
+    expect(isUnpaidReceivableTransaction(tx)).toBe(true);
+  });
+
+  it("keeps a legacy partial that only stored balanceDue", () => {
+    const tx = {
+      type: "delivery",
+      deliveryStatus: "completed",
+      paymentStatus: "partial",
+      totalAmount: 100,
+      balanceDue: 20,
+    } as any;
+    expect(outstandingBalanceDue(tx)).toBe(20);
+    expect(isUnpaidReceivableTransaction(tx)).toBe(true);
   });
 
   it("counts completed unpaid deliveries as receivable", () => {

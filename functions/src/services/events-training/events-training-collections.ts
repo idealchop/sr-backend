@@ -14,6 +14,8 @@ export const EVENTS_TRAINING_COLLECTIONS = {
   blogEngagement: "blog_engagement",
   /** Guest + member likes / comments on live webinar events. */
   webinarEventEngagement: "webinar_event_engagement",
+  /** Public webinar ratings / feedback / recommendations from invite emails. */
+  webinarEventFeedback: "webinar_event_feedback",
 } as const;
 
 export function eventsTrainingRoot() {

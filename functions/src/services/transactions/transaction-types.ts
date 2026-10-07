@@ -158,6 +158,21 @@ export interface Transaction {
    */
   salesStockApplied?: boolean;
   riderContainerDueDiligence?: import("./delivery-rider-due-diligence").RiderContainerDueDiligence;
+  /** Rules-only predicted vs actual score from the nightly Forecast matcher. */
+  forecastAccuracy?: {
+    suggestionId: string;
+    predictedDate: string;
+    kind: "delivery" | "collection";
+    predictedQty: number;
+    predictedItems: Array<{ type: string; qty: number }>;
+    actualQty: number;
+    actualItems?: Array<{ type: string; qty: number }>;
+    dateDeltaDays: number;
+    qtyScore: number;
+    productScore: number;
+    overallScore: number;
+    scoredAt: string;
+  };
 }
 
 export type AddTransactionResult = {

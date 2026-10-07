@@ -1,5 +1,10 @@
 import type { Response } from "express";
 import { SubscriptionService } from "../services/subscriptions/subscription-service";
+import {
+  computeDatesView,
+  fetchRecentSubscriptionRows,
+  pickEffectiveEntitling,
+} from "../services/subscriptions/subscription-effective";
 
 export function isScalePlanCode(planCode: string | undefined): boolean {
   const code = String(planCode || "starter").toLowerCase();
@@ -22,6 +27,23 @@ export function resolveScalePlatformAccess(sub: {
     return true;
   }
   return status === "active" || status === "grace_period";
+}
+
+/** Owner Alerts (push, utang reminders, morning briefs) — Scale / Enterprise / Scale trial. */
+export async function isBusinessEligibleForStationAlerts(
+  businessId: string,
+  now = new Date(),
+): Promise<boolean> {
+  const rows = await fetchRecentSubscriptionRows(businessId);
+  const effective = pickEffectiveEntitling(rows, now);
+  if (!effective) return false;
+  const view = computeDatesView(effective.data, now);
+  return resolveScalePlatformAccess({
+    planCode: String(effective.data.planCode || ""),
+    status: view.status,
+    billingCycle: String(effective.data.billingCycle || ""),
+    isExpired: view.isExpired,
+  });
 }
 
 export async function assertScalePlatformAccess(

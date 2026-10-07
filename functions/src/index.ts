@@ -37,11 +37,14 @@ export { smartrefillV3ApiDev } from "./dev/smartrefill-v3-api-dev";
 
 export { purgeExpiredProactiveScheduleWeekSnapshots } from
   "./jobs/purge-proactive-schedule-snapshots";
+export { generateForecastScheduleWeek } from "./jobs/generate-forecast-schedule-week";
+export { scoreForecastScheduleWeek } from "./jobs/score-forecast-schedule-week";
 export { purgeExpiredTeamChats } from "./jobs/purge-expired-team-chats";
 export { backfillCustomerLastFulfilled } from "./jobs/backfill-customer-last-fulfilled";
 export { reconcileAnalyticsSnapshots } from "./jobs/reconcile-analytics-snapshots";
 export { dormantDigestNotification } from "./jobs/dormant-digest-notification";
 export { morningOwnerIntelligence } from "./jobs/morning-owner-intelligence";
+export { inactiveAccountDeactivation } from "./jobs/inactive-account-deactivation";
 export { proactiveInsightPushNotification } from "./jobs/proactive-insight-push-notification";
 export { pmRecurrenceScheduler } from "./jobs/pm-recurrence-scheduler";
 export { subscriptionAutoRenewScheduler } from "./jobs/subscription-auto-renew-scheduler";

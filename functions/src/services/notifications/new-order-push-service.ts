@@ -3,6 +3,7 @@ import { logger } from "../observability/logging/logger";
 import { CustomerService } from "../customers/customer-service";
 import type { RawSubmissionType } from "../portal/raw-submission-types";
 import { resolveNotificationPreferencesFromUiConfig } from "../../utils/notification-preferences";
+import { isBusinessEligibleForStationAlerts } from "../../utils/scale-plan-access";
 import {
   deleteOwnerDevicesByTokens,
   listOwnerDevices,
@@ -102,6 +103,9 @@ export async function sendNewOrderPushForSubmission(
   },
 ): Promise<{ sent: boolean }> {
   if (!submissionTypeNeedsReviewPush(opts.submissionType)) {
+    return { sent: false };
+  }
+  if (!(await isBusinessEligibleForStationAlerts(businessId))) {
     return { sent: false };
   }
 

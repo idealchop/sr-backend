@@ -6,6 +6,7 @@ import {
   derivedWaterTypesFromProducts,
   duplicateNameExists,
   otherDefaultProductIds,
+  applyProductKindRules,
   parseProductWrite,
   ProductValidationError,
   defaultStarterProducts,
@@ -65,9 +66,9 @@ export class ProductService {
     }
     await batch.commit();
     logger.info(
-      fromWaterTypes.length > 0
-        ? `Seeded ${seeds.length} products from waterTypes`
-        : `Seeded ${seeds.length} starter products`,
+      fromWaterTypes.length > 0 ?
+        `Seeded ${seeds.length} products from waterTypes` :
+        `Seeded ${seeds.length} starter products`,
       { businessId },
     );
     return this.listItems(businessId);
@@ -102,6 +103,7 @@ export class ProductService {
   ): Promise<string> {
     await this.ensureSeeded(businessId);
     const parsed = parseProductWrite(input, { requireName: true });
+    applyProductKindRules(parsed);
     const existing = await this.listItems(businessId);
     if (parsed.name && duplicateNameExists(existing, parsed.name)) {
       throw new ProductValidationError("A product with this name already exists.");
@@ -127,6 +129,13 @@ export class ProductService {
       itemOnly: parsed.itemOnly === true,
       iconId: parsed.iconId || DEFAULT_PRODUCT_ICON_ID,
       components: parsed.components ?? [],
+      ...(parsed.kind ? { kind: parsed.kind } : {}),
+      ...(parsed.family ? { family: parsed.family } : {}),
+      ...(parsed.variantLabel ? { variantLabel: parsed.variantLabel } : {}),
+      ...(parsed.containerItemId ? { containerItemId: parsed.containerItemId } : {}),
+      ...(parsed.sourceInventoryItemId ?
+        { sourceInventoryItemId: parsed.sourceInventoryItemId } :
+        {}),
       ...(parsed.legacyWaterName ? { legacyWaterName: parsed.legacyWaterName } : {}),
       sortOrder: parsed.sortOrder ?? maxSort + 1,
       createdAt: FieldValue.serverTimestamp(),
@@ -149,6 +158,10 @@ export class ProductService {
       throw new ProductValidationError("Product not found.");
     }
     const parsed = parseProductWrite(input);
+    if (parsed.kind && parsed.components === undefined) {
+      parsed.components = current.components;
+    }
+    applyProductKindRules(parsed);
     if (parsed.name) {
       const existing = await this.listItems(businessId);
       if (duplicateNameExists(existing, parsed.name, productId)) {
@@ -169,10 +182,24 @@ export class ProductService {
     }
 
     const existing = wantsDefault ? await this.listItems(businessId) : [];
-    await this.collection(businessId).doc(productId).update({
-      ...parsed,
+    const patch: Record<string, unknown> = {
       updatedAt: FieldValue.serverTimestamp(),
-    });
+    };
+    for (const [key, value] of Object.entries(parsed)) {
+      if (value === undefined) continue;
+      if (
+        value === "" &&
+        (key === "containerItemId" ||
+          key === "sourceInventoryItemId" ||
+          key === "family" ||
+          key === "variantLabel")
+      ) {
+        patch[key] = FieldValue.delete();
+        continue;
+      }
+      patch[key] = value;
+    }
+    await this.collection(businessId).doc(productId).update(patch);
     if (wantsDefault) {
       await this.clearOtherDefaults(businessId, productId, existing);
     }

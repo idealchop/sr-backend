@@ -1,6 +1,10 @@
 import type { DocumentReference } from "firebase-admin/firestore";
 import { db, FieldValue, Timestamp } from "../../config/firebase-admin";
 import { logger } from "../observability/logging/logger";
+import {
+  isFreePlan,
+  isStarterPlan as isPaidStarterPlan,
+} from "../../utils/subscription-plan-codes";
 
 export type SubscriptionDocRow = {
   id: string;
@@ -34,9 +38,10 @@ export function isPaidBillingCycle(cycle: string): boolean {
   return cycle === "monthly" || cycle === "yearly";
 }
 
+export { isFreePlan };
+
 export function isStarterPlan(planCode: string): boolean {
-  const code = String(planCode || "").toLowerCase();
-  return code === "starter" || code === "free";
+  return isPaidStarterPlan(planCode);
 }
 
 export function isSuperseded(data: Record<string, unknown>): boolean {
@@ -145,7 +150,7 @@ export function isEntitlingRow(data: Record<string, unknown>, now: Date): boolea
   }
 
   const code = String(data.planCode || "").toLowerCase();
-  if (isStarterPlan(code)) {
+  if (isFreePlan(code)) {
     return persisted === "active";
   }
 
@@ -209,7 +214,7 @@ export function pickPendingPaidUpgrade(
     const ps = String(row.data.paymentStatus || "");
     if (ps === "failed") continue;
     if (!isPaidBillingCycle(String(row.data.billingCycle || ""))) continue;
-    if (isStarterPlan(String(row.data.planCode || ""))) continue;
+    if (isFreePlan(String(row.data.planCode || ""))) continue;
 
     if (st === "pending" && ps === "pending_verification") {
       return row;
@@ -218,7 +223,7 @@ export function pickPendingPaidUpgrade(
     if (
       st === "active" &&
       ps === "pending_verification" &&
-      !isStarterPlan(String(row.data.planCode || ""))
+      !isFreePlan(String(row.data.planCode || ""))
     ) {
       return row;
     }
@@ -379,7 +384,7 @@ export function shouldDeferRenewalToPeriodEnd(
   if (now >= view.expiresAt) return null;
 
   if (action === "UPGRADE") {
-    if (isStarterPlan(String(current.data.planCode || ""))) return null;
+    if (isFreePlan(String(current.data.planCode || ""))) return null;
     return view.expiresAt;
   }
 
@@ -451,9 +456,15 @@ export async function promoteDueScheduledSubscriptions(
         "../customers/customer-active-limit-service"
       );
       await deactivateAllNonOwnerWorkspaceMembers(businessId);
-      await CustomerActiveLimitService.applyPlanDowngradeActivePolicyForBusiness(
-        businessId,
-      );
+      if (isFreePlan(String(row.data.planCode || ""))) {
+        await CustomerActiveLimitService.deactivateAllActiveCustomersForFreePlan(
+          businessId,
+        );
+      } else {
+        await CustomerActiveLimitService.applyPlanDowngradeActivePolicyForBusiness(
+          businessId,
+        );
+      }
     }
 
     promoted = true;

@@ -9,7 +9,10 @@ import {
   type CustomerContainerPolicy,
 } from "./container-policy";
 import { normalizeRefillBonus } from "./refill-bonus";
-import { isUnpaidReceivableTransaction } from "../../utils/unpaid-receivable";
+import {
+  isUnpaidReceivableTransaction,
+  outstandingBalanceDue,
+} from "../../utils/unpaid-receivable";
 
 /** Containers-on: explicit toggle or WRS rotation policy (lend gallons). */
 function customerPersistsContainerTracking(
@@ -132,6 +135,8 @@ export interface Customer {
   /** Denormalized 0–100 suki health (API write-path + nightly backfill). */
   healthScore?: number;
   healthScoreUpdatedAt?: any;
+  /** Rolling last-4 Forecast accuracy by delivery/collection. */
+  forecastAccuracyRollup?: import("../../utils/forecast-accuracy").ForecastAccuracyRollup;
   /** ISO timestamp when owner logged a payment reminder call (BL-39). */
   lastRemindedAt?: any;
   /** ISO timestamp — hide suki from dormant win-back until this date (BL-12). */
@@ -421,8 +426,9 @@ export class CustomerService {
         if (data.type !== "expense") {
           totalOrders++;
           totalRevenue += data.totalAmount || 0;
-          if (isUnpaidReceivableTransaction({ id: doc.id, ...data })) {
-            balanceDue += data.balanceDue || 0;
+          const tx = { id: doc.id, ...data };
+          if (isUnpaidReceivableTransaction(tx)) {
+            balanceDue += outstandingBalanceDue(tx);
           }
 
           const scheduledAt = data.scheduledAt?.toDate ?

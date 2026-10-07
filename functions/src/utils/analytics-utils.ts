@@ -2,7 +2,11 @@ import type { DormantCustomerRow } from "../utils/dormant-customers";
 import type { Customer } from "../services/customers/customer-service";
 import type { Transaction } from "../services/transactions/transaction-service";
 import { isActivePayment } from "../services/transactions/payment-status";
-import { isTransactionFulfilledForReceivable, isUnpaidReceivableTransaction } from "./unpaid-receivable";
+import {
+  isTransactionFulfilledForReceivable,
+  isUnpaidReceivableTransaction,
+  outstandingBalanceDue,
+} from "./unpaid-receivable";
 
 export type DebtAgingBucketId = "current" | "days_31_60" | "days_61_90" | "over_90";
 
@@ -116,7 +120,7 @@ export function computeDebtAgingBreakdown(
     };
     const anchor =
       parseTxDate(tx.scheduledAt) || parseTxDate(tx.createdAt) || today;
-    cur.amount += Number(tx.balanceDue) || 0;
+    cur.amount += outstandingBalanceDue(tx);
     cur.transactionCount += 1;
     if (!cur.oldest || anchor < cur.oldest) cur.oldest = anchor;
     byCustomer.set(tx.customerId, cur);

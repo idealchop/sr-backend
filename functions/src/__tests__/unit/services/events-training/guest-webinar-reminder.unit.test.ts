@@ -81,10 +81,12 @@ describe("buildGuestWebinarReminderEmail", () => {
       timezone: "Asia/Manila",
       joinUrl: "https://smartrefill.io/join",
       cancelUrl: "https://smartrefill.io/cancel",
+      feedbackUrl: "https://smartrefill.io/feedback",
     });
     expect(tpl.subject).toContain("Ops Masterclass");
     expect(tpl.html).toContain("https://smartrefill.io/join");
-    expect(tpl.html).toContain("https://smartrefill.io/cancel");
+    expect(tpl.html).toContain("https://smartrefill.io/feedback");
+    expect(tpl.html).toContain("Provide ratings and feedback");
     expect(tpl.brevoTag).toBe("guest_webinar_reminder");
   });
 });

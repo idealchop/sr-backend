@@ -1,7 +1,10 @@
 import express from "express";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
-import { validateBusinessAccess } from "../middleware/business-middleware"; import {
+import { validateBusinessAccess } from "../middleware/business-middleware";
+import {
   getProactiveScheduleWeekSnapshot,
+  postProactiveScheduleWeekGenerate,
+  postProactiveScheduleWeekSuggestionCall,
   putProactiveScheduleWeekSnapshot,
 } from "../handlers/proactive-schedule-week-handler";
 import { postProactiveWeekAiGenerate } from "../handlers/proactive-week-ai-handler";
@@ -19,6 +22,18 @@ router.put(
   validateFirebaseIdToken,
   validateBusinessAccess,
   putProactiveScheduleWeekSnapshot,
+);
+router.post(
+  "/generate",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  postProactiveScheduleWeekGenerate,
+);
+router.post(
+  "/suggestions/:suggestionId/call",
+  validateFirebaseIdToken,
+  validateBusinessAccess,
+  postProactiveScheduleWeekSuggestionCall,
 );
 router.post(
   "/generate-ai",

@@ -65,7 +65,6 @@ export function resolveFulfilledActivity(
 
   const at =
     parseFirestoreDate(tx.deliveredAt) ||
-    parseFirestoreDate(tx.updatedAt) ||
     parseFirestoreDate(tx.scheduledAt) ||
     parseFirestoreDate(tx.createdAt);
   if (!at) return null;

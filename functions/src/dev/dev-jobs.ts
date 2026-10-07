@@ -10,6 +10,8 @@ import { logger } from "firebase-functions";
 import { isDevJobsEnabled } from "../config/dev-tier";
 import { runPurgeExpiredProactiveScheduleWeekSnapshots } from
   "../jobs/purge-proactive-schedule-snapshots";
+import { runGenerateForecastScheduleWeek } from "../jobs/generate-forecast-schedule-week";
+import { runScoreForecastScheduleWeek } from "../jobs/score-forecast-schedule-week";
 import { runPurgeExpiredTeamChats } from "../jobs/purge-expired-team-chats";
 import { runBackfillCustomerLastFulfilled } from
   "../jobs/backfill-customer-last-fulfilled";
@@ -17,6 +19,8 @@ import { runReconcileAnalyticsSnapshots } from
   "../jobs/reconcile-analytics-snapshots";
 import { runDormantDigestNotification } from "../jobs/dormant-digest-notification";
 import { runMorningOwnerIntelligence } from "../jobs/morning-owner-intelligence";
+import { runInactiveAccountDeactivation } from
+  "../jobs/inactive-account-deactivation";
 import { runProactiveInsightPushNotification } from
   "../jobs/proactive-insight-push-notification";
 import { runPmRecurrenceScheduler } from "../jobs/pm-recurrence-scheduler";
@@ -48,6 +52,28 @@ export const purgeExpiredProactiveScheduleWeekSnapshotsDev = onSchedule(
     "purgeExpiredProactiveScheduleWeekSnapshotsDev",
     runPurgeExpiredProactiveScheduleWeekSnapshots,
   ),
+);
+
+export const generateForecastScheduleWeekDev = onSchedule(
+  {
+    schedule: "every sunday 21:00",
+    timeZone: "Asia/Manila",
+    region: "asia-southeast1",
+    memory: "1GiB",
+    timeoutSeconds: 540,
+  },
+  () => runGated("generateForecastScheduleWeekDev", runGenerateForecastScheduleWeek),
+);
+
+export const scoreForecastScheduleWeekDev = onSchedule(
+  {
+    schedule: "every day 23:30",
+    timeZone: "Asia/Manila",
+    region: "asia-southeast1",
+    memory: "1GiB",
+    timeoutSeconds: 540,
+  },
+  () => runGated("scoreForecastScheduleWeekDev", runScoreForecastScheduleWeek),
 );
 
 export const purgeExpiredTeamChatsDev = onSchedule(
@@ -104,6 +130,18 @@ export const morningOwnerIntelligenceDev = onSchedule(
     secrets: ["SMARTREFILL_BREVO_API_KEY", "GEMINI_API_KEY"],
   },
   () => runGated("morningOwnerIntelligenceDev", runMorningOwnerIntelligence),
+);
+
+export const inactiveAccountDeactivationDev = onSchedule(
+  {
+    schedule: "every day 08:00",
+    timeZone: "Asia/Manila",
+    region: "asia-southeast1",
+    memory: "512MiB",
+    timeoutSeconds: 540,
+    secrets: ["SMARTREFILL_BREVO_API_KEY"],
+  },
+  () => runGated("inactiveAccountDeactivationDev", runInactiveAccountDeactivation),
 );
 
 export const proactiveInsightPushNotificationDev = onSchedule(

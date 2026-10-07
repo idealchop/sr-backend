@@ -71,6 +71,7 @@ describe("buildGuestWebinarInviteEmail", () => {
       timezone: "Asia/Manila",
       joinUrl: "https://smartrefill.io/resources/webinars/join?t=abc",
       cancelUrl: "https://smartrefill.io/resources/webinars/cancel?t=abc",
+      feedbackUrl: "https://smartrefill.io/resources/webinars/feedback?t=abc",
       requiresApproval: false,
     });
     expect(tpl.subject).toContain("Ops Masterclass");
@@ -78,10 +79,11 @@ describe("buildGuestWebinarInviteEmail", () => {
       "https://smartrefill.io/resources/webinars/join?t=abc",
     );
     expect(tpl.html).toContain(
-      "https://smartrefill.io/resources/webinars/cancel?t=abc",
+      "https://smartrefill.io/resources/webinars/feedback?t=abc",
     );
+    expect(tpl.html).toContain("Provide ratings and feedback");
     expect(tpl.text).toContain("Join:");
-    expect(tpl.text).toContain("Cancel:");
+    expect(tpl.text).toContain("Rate & feedback:");
     expect(tpl.brevoTag).toBe("guest_webinar_invite");
   });
 
@@ -93,6 +95,7 @@ describe("buildGuestWebinarInviteEmail", () => {
       timezone: "Asia/Manila",
       joinUrl: "https://smartrefill.io/resources/webinars/join?t=abc",
       cancelUrl: "https://smartrefill.io/resources/webinars/cancel?t=abc",
+      feedbackUrl: "https://smartrefill.io/resources/webinars/feedback?t=abc",
       requiresApproval: true,
     });
     expect(tpl.subject.startsWith("Registration received")).toBe(true);

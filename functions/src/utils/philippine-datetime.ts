@@ -142,3 +142,61 @@ export function isManilaSunday(now = new Date()): boolean {
 export function manilaDateKey(now = new Date()): string {
   return now.toLocaleDateString("en-CA", { timeZone: PHILIPPINE_TIMEZONE });
 }
+
+/**
+ * Add calendar days to a Manila `yyyy-MM-dd` key (Philippines has no DST).
+ * @param {string} dateKey Manila civil date.
+ * @param {number} days Days to add (may be negative).
+ * @return {string} Shifted `yyyy-MM-dd`.
+ */
+export function addManilaDateKey(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const utc = Date.UTC(year, month - 1, day + days);
+  return new Date(utc).toISOString().slice(0, 10);
+}
+
+/**
+ * Whole calendar-day difference (b - a) using Manila date keys.
+ * @param {string} fromKey Start `yyyy-MM-dd`.
+ * @param {string} toKey End `yyyy-MM-dd`.
+ * @return {number} Signed day count.
+ */
+export function manilaDateKeyDiff(fromKey: string, toKey: string): number {
+  const [y1, m1, d1] = fromKey.split("-").map(Number);
+  const [y2, m2, d2] = toKey.split("-").map(Number);
+  const a = Date.UTC(y1, m1 - 1, d1);
+  const b = Date.UTC(y2, m2 - 1, d2);
+  return Math.round((b - a) / 86400000);
+}
+
+const PREFERRED_DAY_BY_WEEKDAY: Record<string, number> = {
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+  Sun: 7,
+};
+
+/**
+ * Customer `preferredDays` numbering: 1 = Monday … 7 = Sunday (Manila weekday).
+ * @param {Date} instant Instant to convert.
+ * @return {number} 1–7.
+ */
+export function manilaPreferredDayNum(instant = new Date()): number {
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: PHILIPPINE_TIMEZONE,
+    weekday: "short",
+  }).format(instant);
+  return PREFERRED_DAY_BY_WEEKDAY[weekday] ?? 1;
+}
+
+/**
+ * Instant at 12:00 Asia/Manila for a civil date key (stable weekday lookup).
+ * @param {string} dateKey `yyyy-MM-dd`.
+ * @return {Date} UTC instant near Manila noon that day.
+ */
+export function manilaNoonFromDateKey(dateKey: string): Date {
+  return new Date(`${dateKey}T04:00:00.000Z`);
+}

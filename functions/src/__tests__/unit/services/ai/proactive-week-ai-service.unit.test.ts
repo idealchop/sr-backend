@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   mergeProactiveWeekSuggestions,
+  summarizeCustomerOrderHabits,
   validateLlmProactiveWeekRow,
 } from "../../../../services/ai/proactive-week-ai-service";
 import type { ProactiveScheduleSuggestionInput } from "../../../../services/proactive-schedule/proactive-schedule-week-snapshot-service";
@@ -49,6 +50,28 @@ describe("proactive-week-ai-service", () => {
     expect(merged).toHaveLength(1);
     expect(merged[0].refillItems[0].qty).toBe(3);
     expect(merged[0].reason).toBe("Usually orders mid-week");
+    expect(merged[0].source).toBe("history");
+  });
+
+  it("adds a habit-only customer the preferred-day seed did not include", () => {
+    const merged = mergeProactiveWeekSuggestions(
+      seed,
+      [
+        {
+          id: "ai-c2-delivery",
+          customerId: "c2",
+          customerName: "Ben",
+          scheduledDate: "2026-06-24",
+          kind: "delivery",
+          refillItems: [{ type: "Purified", qty: 4 }],
+          returnContainers: [],
+          rationale: "Usually orders Wednesdays",
+        },
+      ],
+      mergeOpts,
+    );
+    expect(merged.map((row) => row.customerId).sort()).toEqual(["c1", "c2"]);
+    expect(merged.find((row) => row.customerId === "c2")?.source).toBe("history");
   });
 
   it("rejects unknown customer ids from LLM output", () => {
@@ -87,5 +110,46 @@ describe("proactive-week-ai-service", () => {
       mergeOpts,
     );
     expect(row).toBeNull();
+  });
+
+  it("summarizes weekday habit from recent orders, not only preferredDays", () => {
+    const habit = summarizeCustomerOrderHabits(
+      {
+        id: "c1",
+        name: "Ana",
+        isDeliveryEnabled: true,
+        deliveryConfig: { preferredDays: [1] },
+        lastFulfilledAt: "2026-06-24T04:00:00.000Z",
+        lastFulfilledType: "delivery",
+        forecastAccuracyRollup: {
+          delivery: { hitCount: 3, missCount: 1 },
+        },
+      },
+      [
+        {
+          customerId: "c1",
+          type: "delivery",
+          scheduledAt: "2026-06-03T04:00:00.000Z",
+          waterRefills: [{ quantity: 2 }],
+        },
+        {
+          customerId: "c1",
+          type: "delivery",
+          scheduledAt: "2026-06-10T04:00:00.000Z",
+          waterRefills: [{ quantity: 2 }],
+        },
+        {
+          customerId: "c1",
+          type: "delivery",
+          scheduledAt: "2026-06-17T04:00:00.000Z",
+          waterRefills: [{ quantity: 4 }],
+        },
+      ],
+    );
+    expect(habit?.preferredDeliveryDays).toEqual([1]);
+    expect(habit?.orderWeekdays["3"]).toBe(3);
+    expect(habit?.typicalQty).toBe(2);
+    expect(habit?.forecastHitRate).toBe(75);
+    expect(habit?.lastFulfilledAt).toBe("2026-06-24");
   });
 });

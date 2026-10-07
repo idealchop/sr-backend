@@ -1,5 +1,7 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
+import { webinarEmailActionButtonsHtml } from "./webinar-email-cta";
 import {
+  buildSmartRefillEmailFooterPlainText,
   smartRefillEmailWhenHtml,
   wrapSmartRefillLetterHtml,
 } from "./smartrefill-email-html";
@@ -11,6 +13,7 @@ export type GuestWebinarInviteEmailInput = {
   timezone: string;
   joinUrl: string;
   cancelUrl: string;
+  feedbackUrl?: string;
   requiresApproval: boolean;
 };
 
@@ -32,11 +35,19 @@ export function buildGuestWebinarInviteEmail(
     title: eventName,
     headline: eventName,
     greetingName: name,
+    includeSignOff: false,
     bodyHtml: `
       <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#253858;">
         ${escapeHtmlForEmail(statusLine)}
       </p>
       ${smartRefillEmailWhenHtml(input.startsAtLabel, input.timezone)}
+      ${input.feedbackUrl ?
+    webinarEmailActionButtonsHtml({
+      primaryUrl: input.joinUrl,
+      primaryLabel: "Join webinar",
+      feedbackUrl: input.feedbackUrl,
+    }) :
+    ""}
       <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#5e6c84;">
         Join opens about 30 minutes before start. Keep this email — the link is personal to your registration.
       </p>
@@ -44,7 +55,7 @@ export function buildGuestWebinarInviteEmail(
         Need to cancel? <a href="${escapeHtmlForEmail(input.cancelUrl)}" style="color:#0052cc;">Cancel registration</a>
       </p>
     `,
-    cta: { label: "Join webinar", url: input.joinUrl },
+    cta: input.feedbackUrl ? null : { label: "Join webinar", url: input.joinUrl },
   });
 
   const text = [
@@ -56,9 +67,10 @@ export function buildGuestWebinarInviteEmail(
     `When: ${input.startsAtLabel} (${input.timezone})`,
     "",
     `Join: ${input.joinUrl}`,
+    input.feedbackUrl ? `Rate & feedback: ${input.feedbackUrl}` : "",
     "",
     `Cancel: ${input.cancelUrl}`,
-  ].join("\n");
+  ].filter(Boolean).join("\n") + "\n\n" + buildSmartRefillEmailFooterPlainText();
 
   return {
     subject,
@@ -75,6 +87,7 @@ export type GuestWebinarReminderEmailInput = {
   timezone: string;
   joinUrl: string;
   cancelUrl: string;
+  feedbackUrl?: string;
 };
 
 /** T-1h reminder for opted-in guests. */
@@ -89,16 +102,24 @@ export function buildGuestWebinarReminderEmail(
     title: subject,
     headline: `${eventName} starts in about an hour`,
     greetingName: name,
+    includeSignOff: false,
     bodyHtml: `
       <p style="margin:0 0 16px;font-size:15px;line-height:1.65;color:#253858;">
         This is your reminder for today’s webinar.
       </p>
       ${smartRefillEmailWhenHtml(input.startsAtLabel, input.timezone)}
+      ${input.feedbackUrl ?
+    webinarEmailActionButtonsHtml({
+      primaryUrl: input.joinUrl,
+      primaryLabel: "Join webinar",
+      feedbackUrl: input.feedbackUrl,
+    }) :
+    ""}
       <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#5e6c84;">
         <a href="${escapeHtmlForEmail(input.cancelUrl)}" style="color:#0052cc;">Cancel registration</a>
       </p>
     `,
-    cta: { label: "Join webinar", url: input.joinUrl },
+    cta: input.feedbackUrl ? null : { label: "Join webinar", url: input.joinUrl },
   });
 
   const text = [
@@ -110,8 +131,9 @@ export function buildGuestWebinarReminderEmail(
     `When: ${input.startsAtLabel} (${input.timezone})`,
     "",
     `Join: ${input.joinUrl}`,
+    input.feedbackUrl ? `Rate & feedback: ${input.feedbackUrl}` : "",
     `Cancel: ${input.cancelUrl}`,
-  ].join("\n");
+  ].filter(Boolean).join("\n") + "\n\n" + buildSmartRefillEmailFooterPlainText();
 
   return {
     subject,

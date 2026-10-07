@@ -1,5 +1,7 @@
 import { escapeHtmlForEmail } from "./auth-transactional-email";
+import { webinarEmailActionButtonsHtml } from "./webinar-email-cta";
 import {
+  buildSmartRefillEmailFooterPlainText,
   smartRefillEmailWhenHtml,
   wrapSmartRefillLetterHtml,
 } from "./smartrefill-email-html";
@@ -12,6 +14,7 @@ export type WebinarTransactionalEmailInput = {
   hubUrl?: string | null;
   joinUrl?: string | null;
   cancelUrl?: string | null;
+  feedbackUrl?: string | null;
   requiresApproval?: boolean;
 };
 
@@ -21,18 +24,29 @@ function shell(opts: {
   bodyHtml: string;
   ctaLabel?: string;
   ctaUrl?: string | null;
+  feedbackUrl?: string | null;
   footerHtml?: string;
 }): string {
+  const actionHtml =
+    opts.ctaUrl && opts.ctaLabel && opts.feedbackUrl ?
+      webinarEmailActionButtonsHtml({
+        primaryUrl: opts.ctaUrl,
+        primaryLabel: opts.ctaLabel,
+        feedbackUrl: opts.feedbackUrl,
+      }) :
+      "";
   return wrapSmartRefillLetterHtml({
     title: opts.title,
     headline: opts.title,
+    includeSignOff: false,
     bodyHtml: `
       <p style="margin:0 0 12px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#5e6c84;">${escapeHtmlForEmail(opts.eyebrow)}</p>
       ${opts.bodyHtml}
+      ${actionHtml}
       ${opts.footerHtml || ""}
     `,
     cta:
-      opts.ctaUrl && opts.ctaLabel ?
+      opts.ctaUrl && opts.ctaLabel && !opts.feedbackUrl ?
         { label: opts.ctaLabel, url: opts.ctaUrl } :
         null,
   });
@@ -61,6 +75,7 @@ export function buildMemberWebinarConfirmationEmail(
     ${smartRefillEmailWhenHtml(input.startsAtLabel, input.timezone)}`,
     ctaLabel: "Open webinars hub",
     ctaUrl: input.hubUrl,
+    feedbackUrl: input.feedbackUrl,
   });
 
   const text = [
@@ -71,7 +86,8 @@ export function buildMemberWebinarConfirmationEmail(
     "",
     `When: ${input.startsAtLabel} (${input.timezone})`,
     input.hubUrl ? `Hub: ${input.hubUrl}` : "",
-  ].filter(Boolean).join("\n");
+    input.feedbackUrl ? `Rate & feedback: ${input.feedbackUrl}` : "",
+  ].filter(Boolean).join("\n") + "\n\n" + buildSmartRefillEmailFooterPlainText();
 
   return { subject, html, text, brevoTag: "member_webinar_confirm" };
 }
@@ -96,8 +112,9 @@ export function buildWebinarApprovedEmail(
     ${smartRefillEmailWhenHtml(input.startsAtLabel, input.timezone)}`,
     ctaLabel: input.joinUrl ? "Join webinar" : "Open webinars hub",
     ctaUrl: input.joinUrl || input.hubUrl,
+    feedbackUrl: input.feedbackUrl,
     footerHtml: input.cancelUrl ?
-      `<p style="margin:12px 0 0;font-size:12px;line-height:1.5;color:#94a3b8;">Need to cancel? <a href="${escapeHtmlForEmail(input.cancelUrl)}" style="color:#64748b;">Cancel registration</a></p>` :
+      `<p style="margin:12px 0 0;font-size:12px;line-height:1.5;color:#5e6c84;">Need to cancel? <a href="${escapeHtmlForEmail(input.cancelUrl)}" style="color:#0052cc;">Cancel registration</a></p>` :
       "",
   });
 
@@ -110,7 +127,8 @@ export function buildWebinarApprovedEmail(
     `When: ${input.startsAtLabel} (${input.timezone})`,
     input.joinUrl ? `Join: ${input.joinUrl}` : "",
     input.hubUrl ? `Hub: ${input.hubUrl}` : "",
-  ].filter(Boolean).join("\n");
+    input.feedbackUrl ? `Rate & feedback: ${input.feedbackUrl}` : "",
+  ].filter(Boolean).join("\n") + "\n\n" + buildSmartRefillEmailFooterPlainText();
 
   return { subject, html, text, brevoTag: "webinar_approved" };
 }
@@ -132,6 +150,7 @@ export function buildMemberWebinarReminderEmail(
     ${smartRefillEmailWhenHtml(input.startsAtLabel, input.timezone)}`,
     ctaLabel: "Open webinars hub",
     ctaUrl: input.hubUrl,
+    feedbackUrl: input.feedbackUrl,
   });
 
   const text = [
@@ -140,7 +159,8 @@ export function buildMemberWebinarReminderEmail(
     `Hi ${name}, reminder — ${eventName} starts in about an hour.`,
     `When: ${input.startsAtLabel} (${input.timezone})`,
     input.hubUrl ? `Hub: ${input.hubUrl}` : "",
-  ].filter(Boolean).join("\n");
+    input.feedbackUrl ? `Rate & feedback: ${input.feedbackUrl}` : "",
+  ].filter(Boolean).join("\n") + "\n\n" + buildSmartRefillEmailFooterPlainText();
 
   return { subject, html, text, brevoTag: "member_webinar_reminder" };
 }

@@ -7,11 +7,30 @@ import {
 
 const TRIAL_MS = 15 * 24 * 60 * 60 * 1000;
 
-function isScaleTrialRow(data: Record<string, unknown>): boolean {
-  return (
-    String(data.planCode || "").toLowerCase() === "scale" &&
-    String(data.billingCycle || "") === "trial"
-  );
+function isTrialRow(data: Record<string, unknown>): boolean {
+  return String(data.billingCycle || "") === "trial";
+}
+
+/**
+ * True when any subscription row already used the one Scale trial.
+ * @param {Array<{data: Record<string, unknown>}>} rows Recent subscription docs.
+ * @return {boolean} Whether a trial billing cycle exists.
+ */
+export function subscriptionRowsIncludeTrial(
+  rows: Array<{ data: Record<string, unknown> }>,
+): boolean {
+  return rows.some((r) => isTrialRow(r.data));
+}
+
+/**
+ * False once a trial row exists — no second Start free trial CTA.
+ * @param {Array<{data: Record<string, unknown>}>} rows Recent subscription docs.
+ * @return {boolean} Whether the station may start a Scale trial.
+ */
+export function isTrialEligibleFromSubscriptionRows(
+  rows: Array<{ data: Record<string, unknown> }>,
+): boolean {
+  return !subscriptionRowsIncludeTrial(rows);
 }
 
 function trialBudgetExpiresAt(data: Record<string, unknown>): Date | null {
@@ -32,7 +51,7 @@ function trialState(data: Record<string, unknown>): string {
 }
 
 function findLatestTrialRow(rows: Awaited<ReturnType<typeof fetchRecentSubscriptionRows>>) {
-  return rows.find((r) => isScaleTrialRow(r.data)) ?? null;
+  return rows.find((r) => isTrialRow(r.data)) ?? null;
 }
 
 export class TrialLifecycleService {
@@ -158,7 +177,7 @@ export class TrialLifecycleService {
     if (!trial) {
       const audit = await fetchRecentSubscriptionRows(businessId);
       void audit;
-      return rows.some((r) => isScaleTrialRow(r.data));
+      return rows.some((r) => isTrialRow(r.data));
     }
     const budgetEnd = trialBudgetExpiresAt(trial.data);
     if (!budgetEnd) return true;

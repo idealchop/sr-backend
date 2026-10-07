@@ -46,7 +46,7 @@ describe("customer-facing email templates", () => {
     expect(tpl.html).toContain("Water ko to");
     expect(tpl.html).toContain("https://cdn.example/logo.png");
     expect(tpl.html).toContain("Powered by Smart Refill");
-    expect(tpl.html).toContain("River Tech Inc.");
+    expect(tpl.html).toContain("Privacy Policy");
     expect(tpl.text).toContain("Powered by Smart Refill");
   });
 
@@ -62,6 +62,6 @@ describe("customer-facing email templates", () => {
     expect(tpl.html).toContain("River Station");
     expect(tpl.html).toContain("Track order");
     expect(tpl.html).toContain("Powered by Smart Refill");
-    expect(tpl.html).toContain("River Tech Inc.");
+    expect(tpl.html).toContain("Privacy Policy");
   });
 });
