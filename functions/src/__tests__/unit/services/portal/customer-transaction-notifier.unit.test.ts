@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   mapDeliveryStatusToEvent,
   mapPaymentUpdateNotifyKey,
+  shouldEmailCustomerTxnEvent,
 } from "../../../../services/portal/customer-transaction-notifier";
 import type { Transaction } from "../../../../services/transactions/transaction-service";
 
@@ -22,6 +23,16 @@ describe("mapDeliveryStatusToEvent", () => {
 
   it("returns null when status unchanged", () => {
     expect(mapDeliveryStatusToEvent("delivered", "delivered")).toBeNull();
+  });
+});
+
+describe("shouldEmailCustomerTxnEvent", () => {
+  it("emails only the completed receipt", () => {
+    expect(shouldEmailCustomerTxnEvent("completed")).toBe(true);
+    expect(shouldEmailCustomerTxnEvent("order_accepted")).toBe(false);
+    expect(shouldEmailCustomerTxnEvent("in_transit")).toBe(false);
+    expect(shouldEmailCustomerTxnEvent("cancelled")).toBe(false);
+    expect(shouldEmailCustomerTxnEvent("payment_paid")).toBe(false);
   });
 });
 

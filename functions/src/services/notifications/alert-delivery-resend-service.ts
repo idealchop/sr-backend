@@ -141,6 +141,8 @@ export type AlertDeliveryEmailPreview = {
   category: string;
   referenceId: string;
   toEmail: string;
+  pdfBase64?: string;
+  pdfFileName?: string;
 };
 
 /**
@@ -209,6 +211,8 @@ export async function previewAlertDeliveryLogEntry(
       category: "portal_completion_receipt",
       referenceId,
       toEmail: toEmail || String(customer.email || ""),
+      pdfBase64: artifacts.pdfBuffer.toString("base64"),
+      pdfFileName: artifacts.pdfFileName,
     };
   }
 

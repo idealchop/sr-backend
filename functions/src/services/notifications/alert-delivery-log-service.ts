@@ -32,6 +32,7 @@ export type ListAlertDeliveryLogOptions = {
   referenceIds?: string[];
   channel?: AlertDeliveryChannel;
   audience?: "owner" | "customer";
+  categories?: string[];
 };
 
 function collection(businessId: string) {
@@ -173,6 +174,9 @@ export class AlertDeliveryLogService {
     return rows
       .filter((row) => {
         if (channel && row.channel !== channel) return false;
+        if (options.categories?.length && !options.categories.includes(row.category)) {
+          return false;
+        }
         if (options.audience && row.audience && row.audience !== options.audience) {
           return false;
         }
