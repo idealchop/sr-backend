@@ -87,7 +87,12 @@ function assignableRolesForPlan(planCode: string): AssignableRoleDto[] {
       { value: "rider", label: "Rider / Operator" },
     ];
   }
-  if (code === "pro" || code === "grow" || code.includes("grow")) {
+  if (
+    code === "starter" ||
+    code === "pro" ||
+    code === "grow" ||
+    code.includes("grow")
+  ) {
     return [{ value: "rider", label: "Rider / Operator" }];
   }
   return [];
@@ -256,8 +261,8 @@ function assertTeamHubEligible(sub: {
 }): string | null {
   const plan = (sub.planCode || "starter").toLowerCase();
   const cycle = (sub.billingCycle || "").toLowerCase();
-  if (plan === "starter" || plan === "free") {
-    return "Team invitations are not available on Free or Starter.";
+  if (plan === "free") {
+    return "Team invitations are not available on the Free plan.";
   }
   if (cycle === "trial" || sub.status === "trial") {
     return "Team invitations are not available during the trial period.";

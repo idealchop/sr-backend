@@ -84,9 +84,9 @@ describe("Team Hub API Endpoints", () => {
       expect(res.body.data.staffLimit).toBe(5);
     });
 
-    it("should return 403 for starter plan", async () => {
+    it("should return 403 for free plan", async () => {
       (SubscriptionService.getSubscriptionStatus as any).mockResolvedValue({
-        planCode: "starter",
+        planCode: "free",
         billingCycle: "monthly",
         status: "active",
       });
@@ -94,7 +94,27 @@ describe("Team Hub API Endpoints", () => {
       const res = await request(app).get("/business/test-biz/team");
 
       expect(res.status).toBe(403);
-      expect(res.body.error).toMatch(/Free or Starter/i);
+      expect(res.body.error).toMatch(/Free plan/i);
+    });
+
+    it("should allow Team Hub on Starter for the included rider app", async () => {
+      (SubscriptionService.getSubscriptionStatus as any).mockResolvedValue({
+        planCode: "starter",
+        billingCycle: "monthly",
+        status: "active",
+      });
+      (getTeamHubOverview as any).mockResolvedValue({
+        members: [],
+        pendingInvites: [],
+        recordOnlyRiders: [],
+        staffLimit: 1,
+        currentStaffCount: 0,
+      });
+
+      const res = await request(app).get("/business/test-biz/team");
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.staffLimit).toBe(1);
     });
 
     it("should allow Team Hub during Scale trial", async () => {

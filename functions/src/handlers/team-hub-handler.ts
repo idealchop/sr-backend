@@ -24,13 +24,13 @@ function assertTeamHubEligibleOrSend(
   sub: Awaited<ReturnType<typeof SubscriptionService.getSubscriptionStatus>>,
 ): boolean {
   const plan = (sub.planCode || "starter").toLowerCase();
-  if (plan === "starter" || plan === "free") {
+  if (plan === "free") {
     res
       .status(403)
-      .json({ error: "Team Hub is not available on Free or Starter." });
+      .json({ error: "Team Hub is not available on the Free plan." });
     return false;
   }
-  // Scale trial (billingCycle trial) includes Team Hub; seats deactivate on trial → Starter.
+  // Scale trial (billingCycle trial) includes Team Hub; extra seats deactivate on trial → Starter.
   if (sub.status !== "active" && sub.status !== "grace_period") {
     res
       .status(403)
