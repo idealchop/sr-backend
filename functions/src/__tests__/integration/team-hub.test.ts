@@ -121,7 +121,7 @@ describe("Team Hub API Endpoints", () => {
       (SubscriptionService.getSubscriptionStatus as any).mockResolvedValue({
         planCode: "scale",
         billingCycle: "trial",
-        status: "active",
+        status: "trial",
       });
       (getTeamHubOverview as any).mockResolvedValue({
         members: [],
