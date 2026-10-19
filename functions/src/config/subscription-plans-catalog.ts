@@ -53,7 +53,7 @@ export const SUBSCRIPTION_PLAN_CATALOG_ROWS: Record<
       aiTools: { max: 0, frequency: "monthly" },
       online_orders: { frequency: "daily", max: 10 },
       channels: CHANNELS_DISABLED,
-      staff: { admin: 0, rider: 0 },
+      staff: { admin: 0, rider: 1 },
       support: SUPPORT_CHAT_ONLY,
     },
   },

@@ -75,6 +75,7 @@ export function defaultCapabilitiesForPlanCode(
   if (code === "starter") {
     return {
       ...DEFAULT_FREE,
+      teamHub: true,
       qrPortal: true,
     };
   }

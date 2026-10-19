@@ -96,10 +96,10 @@ describe("Feature: Team Hub Management Flow", () => {
     });
   });
 
-  describe("Scenario: Team Hub access is denied for Starter plans", () => {
-    it("Step 1: Given the business has a starter plan", async () => {
+  describe("Scenario: Team Hub access is denied for Free plans", () => {
+    it("Step 1: Given the business has a free plan", async () => {
       (SubscriptionService.getSubscriptionStatus as any).mockResolvedValue({
-        planCode: "starter",
+        planCode: "free",
         billingCycle: "monthly",
         status: "active",
       });
@@ -108,7 +108,7 @@ describe("Feature: Team Hub Management Flow", () => {
     it("Step 2: When the owner tries to access the Team Hub overview", async () => {
       const res = await request(app).get("/business/test-biz-123/team");
       expect(res.status).toBe(403);
-      expect(res.body.error).toMatch(/not available on Free or Starter/i);
+      expect(res.body.error).toMatch(/not available on the Free plan/i);
     });
   });
 });
