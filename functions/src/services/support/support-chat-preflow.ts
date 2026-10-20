@@ -295,7 +295,7 @@ const HOWTO_RULES: HowtoRule[] = [
         },
         {
           title: "Pay with GCash or Maya",
-          body: "O i-expand ang Pay manually instead para sa bank transfer + proof.",
+          body: "Kung may voucher na ₱0 ang due, i-apply ang code — hindi kailangan ng PayMongo.",
           priority: "high",
           tags: ["Account"],
         },

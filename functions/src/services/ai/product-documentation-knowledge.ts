@@ -302,7 +302,7 @@ export const SUPPORT_PRODUCT_DOC_ENTRIES: Array<{
       "Kung hindi available ang wallet linking, makakatanggap ka ng in-app reminder na may payment link bago matapos ang period. " +
       "Sa renew, kasama na ang **add-ons** ng current plan — pwedeng i-off o bawasan sa checkout. " +
       "Kung nabayaran mo na ang susunod na buwan, ang bagong renew ay **sunod na period** (hindi duplicate month). " +
-      "Manual transfer: i-expand ang **Pay manually instead** at mag-upload ng proof. " +
+      "May voucher? I-apply sa checkout. Kung ₱0 na ang due, mag-a-activate ang plan nang hindi dumaan sa PayMongo. " +
       "Online checkout ay **subscription lang** — hindi para sa portal order payments o ledger collections.",
   },
   {

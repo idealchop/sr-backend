@@ -26,6 +26,7 @@ import {
 } from "../utils/subscription-addon-plan-limits";
 import { subscriptionRowEligibleForInvoicePdf } from "../utils/subscription-invoice-eligibility";
 import { loadPublicSubscriptionCatalog } from "../services/subscriptions/subscription-catalog-query";
+import { validateStoredCheckoutVoucher } from "../services/subscriptions/checkout-voucher";
 import { formatFirestorePhilippineDate } from "../utils/philippine-datetime";
 
 /**
@@ -821,15 +822,6 @@ export const listCatalogAddons = async (req: Request, res: Response) => {
   }
 };
 
-const asDate = (v: any): Date | null => {
-  if (!v) return null;
-  if (v instanceof Date) return v;
-  if (typeof v.toDate === "function") return v.toDate();
-  if (typeof v === "string") return new Date(v);
-  if (typeof v.seconds === "number") return new Date(v.seconds * 1000);
-  return null;
-};
-
 /**
  * Validates a voucher code from `vouchers_affiliates` for checkout.
  * @param {Request} req The express request object.
@@ -849,113 +841,18 @@ export const validateCheckoutVoucher = async (req: Request, res: Response) => {
   try {
     const { hasAccess } = await checkBusinessAccess(user.uid, businessId);
     if (!hasAccess) return res.status(403).json({ error: "Forbidden" });
-    if (!code) {
-      return res
-        .status(400)
-        .json({ data: { valid: false, message: "Code is required." } });
-    }
-    if (!Number.isFinite(subtotal) || subtotal < 0) {
-      return res
-        .status(400)
-        .json({ data: { valid: false, message: "Invalid subtotal." } });
-    }
-
-    const q = await db
-      .collection("vouchers_affiliates")
-      .where("kind", "==", "voucher")
-      .where("code", "==", code)
-      .limit(1)
-      .get();
-
-    if (q.empty) {
-      return res.json({
-        data: { valid: false, message: "This code is not valid." },
-      });
-    }
-
-    const doc = q.docs[0];
-    const v: any = doc.data();
-    if (v.isActive === false) {
-      return res.json({
-        data: { valid: false, message: "This voucher is inactive." },
-      });
-    }
-
-    const now = new Date();
-    const from = asDate(v.validFrom);
-    const until = asDate(v.validUntil);
-    if (from && now < from) {
-      return res.json({
-        data: { valid: false, message: "This voucher is not active yet." },
-      });
-    }
-    if (until && now > until) {
-      return res.json({
-        data: { valid: false, message: "This voucher has expired." },
-      });
-    }
-
-    let planCodes: string[] = [];
-    if (Array.isArray(v.applicablePlanCodes)) {
-      planCodes = v.applicablePlanCodes.map((c: string) =>
-        String(c).toLowerCase(),
-      );
-    }
-    if (planCodes.length > 0 && (!planCode || !planCodes.includes(planCode))) {
-      return res.json({
-        data: {
-          valid: false,
-          message: "This voucher does not apply to your selected plan.",
-        },
-      });
-    }
-
-    let cycles: string[] = [];
-    if (Array.isArray(v.applicableBillingCycles)) {
-      cycles = v.applicableBillingCycles.map(String);
-    }
-    if (cycles.length > 0 && !cycles.includes(billingCycle)) {
-      return res.json({
-        data: {
-          valid: false,
-          message: "This voucher does not apply to this billing cycle.",
-        },
-      });
-    }
-
-    const minSub = typeof v.minSubtotal === "number" ? v.minSubtotal : null;
-    if (minSub !== null && subtotal < minSub) {
-      return res.json({
-        data: {
-          valid: false,
-          message: `Minimum subtotal of ₱${minSub.toLocaleString()} required for this voucher.`,
-        },
-      });
-    }
-
-    const maxRed =
-      typeof v.maxRedemptions === "number" ? v.maxRedemptions : null;
-    const used = typeof v.redemptionCount === "number" ? v.redemptionCount : 0;
-    if (maxRed !== null && used >= maxRed) {
-      return res.json({
-        data: {
-          valid: false,
-          message: "This voucher has reached its redemption limit.",
-        },
-      });
-    }
-
-    const dtype = String(v.discountType || "fixed_amount");
-    const dval = Number(v.discountValue) || 0;
-    let discountAmount = 0;
-    if (dtype === "percentage") {
-      discountAmount = Math.floor((subtotal * dval) / 100);
-    } else if (dtype === "fixed_amount") {
-      discountAmount = Math.min(dval, subtotal);
-    } else {
-      return res.json({
-        data: { valid: false, message: "Unsupported discount type." },
-      });
+    const evaluated = await validateStoredCheckoutVoucher({
+      code,
+      planCode,
+      billingCycle,
+      subtotal,
+    });
+    if (!evaluated.valid) {
+      const status = evaluated.message === "Code is required." ||
+          evaluated.message === "Invalid subtotal." ?
+        400 :
+        200;
+      return res.status(status).json({ data: evaluated });
     }
 
     logAuditEvent("SUBSCRIPTION_VOUCHER_VALIDATED", {
@@ -965,13 +862,7 @@ export const validateCheckoutVoucher = async (req: Request, res: Response) => {
     });
 
     return res.json({
-      data: {
-        valid: true,
-        discountAmount,
-        discountType: dtype,
-        voucherId: doc.id,
-        message: "Voucher applied.",
-      },
+      data: evaluated,
     });
   } catch (error: any) {
     logger.error("validateCheckoutVoucher", error);
