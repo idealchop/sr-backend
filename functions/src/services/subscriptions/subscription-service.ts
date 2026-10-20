@@ -38,6 +38,11 @@ import {
   type SupportAiUsageSnapshot,
 } from "../../utils/support-ai-plan-limits";
 import { isLegacyUnpaidStarterRow } from "../../utils/subscription-plan-codes";
+import {
+  amountDueAfterVoucher,
+  incrementVoucherRedemption,
+  validateStoredCheckoutVoucher,
+} from "./checkout-voucher";
 import { formatPhilippineDate } from "../../utils/philippine-datetime";
 import {
   capabilitiesFromRowOrPlan,
@@ -558,8 +563,62 @@ export class SubscriptionService {
   }
 
   /**
-   * Handles subscription transitions (renew/upgrade/downgrade).
+   * Re-validates a checkout voucher and refuses a ₱0 paid plan without one.
+   * PayMongo cannot charge ₱0 — a covering voucher activates immediately.
    */
+  static async applyCheckoutVoucher(
+    paymentDetails: Partial<SubscriptionRecord>,
+    targetPlanCode: string,
+    billingCycle: "monthly" | "yearly",
+    catalogPrice: number,
+  ): Promise<Partial<SubscriptionRecord>> {
+    const addonsTotal = Number(
+      (paymentDetails as { addonsTotal?: number }).addonsTotal || 0,
+    );
+    const original = Number(paymentDetails.originalPrice);
+    const subtotal =
+      Number.isFinite(original) && original >= 0 ?
+        original :
+        catalogPrice + (Number.isFinite(addonsTotal) ? addonsTotal : 0);
+    const code = String(paymentDetails.voucherCode || "").trim().toUpperCase();
+    const requestedPrice = Number(paymentDetails.price);
+
+    if (!code) {
+      if (
+        !isFreePlan(targetPlanCode) &&
+        Number.isFinite(requestedPrice) &&
+        requestedPrice <= 0
+      ) {
+        throw new Error("VOUCHER_REQUIRED_FOR_ZERO");
+      }
+      return paymentDetails;
+    }
+
+    const evaluated = await validateStoredCheckoutVoucher({
+      code,
+      planCode: targetPlanCode,
+      billingCycle,
+      subtotal,
+    });
+    if (!evaluated.valid) {
+      throw new Error(evaluated.message);
+    }
+
+    const due = amountDueAfterVoucher(subtotal, evaluated.discountAmount);
+    const next: Partial<SubscriptionRecord> = {
+      ...paymentDetails,
+      voucherCode: code,
+      originalPrice: subtotal,
+      discountAmount: evaluated.discountAmount,
+      price: due,
+    };
+    if (due <= 0) {
+      next.paymentStatus = "verified";
+      await incrementVoucherRedemption(evaluated.voucherId);
+    }
+    return next;
+  }
+
   /**
    * Handles subscription transitions (renew/upgrade/downgrade).
    * @param {string} businessId The business ID.
@@ -603,6 +662,21 @@ export class SubscriptionService {
     const cycle: "monthly" | "yearly" =
       String(rawCycle || "").toLowerCase() === "yearly" ? "yearly" : "monthly";
 
+    const catalogPrice =
+      cycle === "yearly" ?
+        Number(planData?.pricing?.yearly) || 0 :
+        Number(planData?.pricing?.monthly) || 0;
+    const checkoutPayment = await this.applyCheckoutVoucher(
+      paymentDetails,
+      targetPlanCode,
+      cycle,
+      catalogPrice,
+    );
+    const price =
+      typeof checkoutPayment.price === "number" ?
+        checkoutPayment.price :
+        catalogPrice;
+
     const deferUntil =
       action === "RENEW" ?
         resolveRenewalDeferUntil(
@@ -628,7 +702,7 @@ export class SubscriptionService {
       null;
 
     const paymentPending =
-      String(paymentDetails.paymentStatus || "").toLowerCase() ===
+      String(checkoutPayment.paymentStatus || "").toLowerCase() ===
       "pending_verification";
     const upgradingFromFree =
       action === "UPGRADE" &&
@@ -648,11 +722,6 @@ export class SubscriptionService {
       .doc(businessId)
       .collection("subscriptions")
       .doc();
-
-    const price =
-      cycle === "yearly" ?
-        Number(planData?.pricing?.yearly) || 0 :
-        Number(planData?.pricing?.monthly) || 0;
 
     const dates: Record<string, unknown> = {};
     if (!deferPeriodDates) {
@@ -716,8 +785,8 @@ export class SubscriptionService {
     }
 
     const paymentMetadata =
-      paymentDetails.metadata && typeof paymentDetails.metadata === "object" ?
-        paymentDetails.metadata :
+      checkoutPayment.metadata && typeof checkoutPayment.metadata === "object" ?
+        checkoutPayment.metadata :
         {};
     const mergedMetadata =
       action === "DOWNGRADE" ?
@@ -732,7 +801,7 @@ export class SubscriptionService {
       price,
       createdAt: FieldValue.serverTimestamp(),
       ...this.snapshotFieldsForPlan(planData),
-      ...paymentDetails,
+      ...checkoutPayment,
       ...(Object.keys(mergedMetadata).length > 0 ?
         { metadata: mergedMetadata } :
         {}),

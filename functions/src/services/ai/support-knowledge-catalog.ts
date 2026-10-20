@@ -271,8 +271,7 @@ export const SUPPORT_FAQ_ENTRIES: SupportKnowledgeEntry[] = [
     topic: "Pay subscription with GCash or Maya",
     content:
       "From Pricing or Account → Subscription, open checkout and choose **Pay with GCash or Maya**. " +
-      "Your plan activates when payment is confirmed. Manual QR/bank transfer is still available under " +
-      "**Pay manually instead**.",
+      "Your plan activates when payment is confirmed. Apply a voucher at checkout; if the voucher brings the total to ₱0, the plan activates without PayMongo.",
   },
   {
     id: "subscription-auto-renew",
