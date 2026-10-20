@@ -23,6 +23,7 @@ import {
   TEAM_DIRECTORY_RECORDS,
 } from "./staff-seat-usage";
 import { mergeGrantedSmartrefillAppAccess } from "./workspace-member-access";
+import { teamHubInviteDeniedReason } from "./team-hub-eligibility";
 
 export type TeamMemberRole = "owner" | "admin" | "staff" | "rider" | string;
 
@@ -259,18 +260,7 @@ function assertTeamHubEligible(sub: {
   planCode?: string;
   billingCycle?: string;
 }): string | null {
-  const plan = (sub.planCode || "starter").toLowerCase();
-  const cycle = (sub.billingCycle || "").toLowerCase();
-  if (plan === "free") {
-    return "Team invitations are not available on the Free plan.";
-  }
-  if (cycle === "trial" || sub.status === "trial") {
-    return "Team invitations are not available during the trial period.";
-  }
-  if (sub.status !== "active" && sub.status !== "grace_period") {
-    return "Team invitations require an active subscription.";
-  }
-  return null;
+  return teamHubInviteDeniedReason(sub);
 }
 
 /**

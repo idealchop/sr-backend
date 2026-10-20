@@ -17,27 +17,20 @@ import {
 } from "../services/team/team-hub-service";
 import { normalizeSeatRole } from "../services/team/team-seat-roles";
 import { SubscriptionService } from "../services/subscriptions/subscription-service";
+import { teamHubInviteDeniedReason } from "../services/team/team-hub-eligibility";
 import { parseAppBaseUrlFromBody } from "../utils/app-base-url";
 
 function assertTeamHubEligibleOrSend(
   res: Response,
   sub: Awaited<ReturnType<typeof SubscriptionService.getSubscriptionStatus>>,
 ): boolean {
-  const plan = (sub.planCode || "starter").toLowerCase();
-  if (plan === "free") {
-    res
-      .status(403)
-      .json({ error: "Team Hub is not available on the Free plan." });
-    return false;
-  }
-  // Scale trial (billingCycle trial) includes Team Hub; extra seats deactivate on trial → Starter.
-  if (sub.status !== "active" && sub.status !== "grace_period") {
-    res
-      .status(403)
-      .json({ error: "Team Hub requires an active subscription." });
-    return false;
-  }
-  return true;
+  const reason = teamHubInviteDeniedReason(sub);
+  if (!reason) return true;
+  const error = reason.startsWith("Team invitations are not")
+    ? "Team Hub is not available on the Free plan."
+    : "Team Hub requires an active subscription.";
+  res.status(403).json({ error });
+  return false;
 }
 
 /**
