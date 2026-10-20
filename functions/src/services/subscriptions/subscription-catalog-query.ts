@@ -1,6 +1,7 @@
 import { db } from "../../config/firebase-admin";
 import { isCatalogLiveForNewSales } from "../../utils/catalog-publication";
 import { isSelfServePricingPlan } from "../../utils/plan-capabilities";
+import { overlayCanonicalStaffLimitations } from "../../config/subscription-plans-catalog";
 import { parsePlanLimitations } from "../../utils/subscription-addon-plan-limits";
 import { loadEffectiveTrialPolicy } from "./trial-policy-service";
 import type { TrialPolicy } from "./trial-policy";
@@ -36,7 +37,13 @@ function readPricing(data: Record<string, unknown>): { monthly: number; yearly: 
 export function featureBulletsFromPlan(
   data: Record<string, unknown>,
 ): string[] {
-  const quotas = parsePlanLimitations(data.limitations);
+  const limitations = overlayCanonicalStaffLimitations(
+    String(data.code || ""),
+    data.limitations && typeof data.limitations === "object" ?
+      (data.limitations as Record<string, unknown>) :
+      undefined,
+  );
+  const quotas = parsePlanLimitations(limitations);
   const bullets: string[] = [];
   if (!quotas) return bullets;
   bullets.push(

@@ -4,6 +4,7 @@ import {
   shouldRefreshFreeCatalogSnapshot,
   buildPlanCatalogSnapshot,
   limitationsFromRowOrPlan,
+  capabilitiesFromRowOrPlan,
 } from "../../../../services/subscriptions/plan-snapshot";
 
 describe("plan-snapshot", () => {
@@ -61,6 +62,28 @@ describe("plan-snapshot", () => {
         { limitations: { customers: "full" } },
       ),
     ).toEqual({ customers: { max: 100 } });
+  });
+
+  it("overlays git catalog staff so paid Starter gets 1 rider even if the snapshot is 0", () => {
+    const limitations = limitationsFromRowOrPlan(
+      {
+        planCode: "starter",
+        planLimitationsSnapshot: { staff: { admin: 0, rider: 0 } },
+      },
+      { code: "starter", limitations: { staff: { admin: 0, rider: 0 } } },
+    );
+    expect(limitations?.staff).toEqual({ admin: 0, rider: 1 });
+  });
+
+  it("keeps Team Hub on for paid Starter even if the snapshot froze it off", () => {
+    const caps = capabilitiesFromRowOrPlan(
+      {
+        planCode: "starter",
+        planCapabilitiesSnapshot: { teamHub: false, map: "locate_only" },
+      },
+      { code: "starter" },
+    );
+    expect(caps.teamHub).toBe(true);
   });
 
   it("detects missing initial snapshots", () => {

@@ -131,6 +131,29 @@ export const SUBSCRIPTION_PLAN_CATALOG_ROWS: Record<
   },
 };
 
+function catalogRowForPlanCode(
+  planCode: string | undefined | null,
+): (typeof SUBSCRIPTION_PLAN_CATALOG_ROWS)[string] | undefined {
+  const code = String(planCode || "").toLowerCase().trim();
+  if (SUBSCRIPTION_PLAN_CATALOG_ROWS[code]) return SUBSCRIPTION_PLAN_CATALOG_ROWS[code];
+  if (code === "pro") return SUBSCRIPTION_PLAN_CATALOG_ROWS.grow;
+  return undefined;
+}
+
+/**
+ * Live Firestore / frozen snapshots can still have Starter `staff.rider: 0`
+ * (Sales Portal published docs are skipped by sync). Overlay git catalog staff
+ * so Team Hub invites match the ₱399 Starter rider seat.
+ */
+export function overlayCanonicalStaffLimitations(
+  planCode: string | undefined | null,
+  limitations: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  const catalogStaff = catalogRowForPlanCode(planCode)?.limitations?.staff;
+  if (!catalogStaff || typeof catalogStaff !== "object") return limitations;
+  return { ...(limitations || {}), staff: catalogStaff };
+}
+
 export const SUBSCRIPTION_PLAN_LIMITATION_PATCHES: Record<
   string,
   Record<string, unknown>

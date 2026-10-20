@@ -45,5 +45,12 @@ describe("featureBulletsFromPlan", () => {
         capabilities: defaultCapabilitiesForPlanCode("starter"),
       }),
     ).toContain("1 Rider App");
+    expect(
+      featureBulletsFromPlan({
+        code: "starter",
+        limitations: { staff: { admin: 0, rider: 0 } },
+        capabilities: { map: "locate_only" },
+      }),
+    ).toContain("1 Rider App");
   });
 });
