@@ -4,9 +4,11 @@ import {
   parseCatalogDate,
 } from "../../utils/catalog-publication";
 import {
+  defaultCapabilitiesForPlanCode,
   parsePlanCapabilities,
   type PlanCapabilities,
 } from "../../utils/plan-capabilities";
+import { overlayCanonicalStaffLimitations } from "../../config/subscription-plans-catalog";
 
 export type PlanCatalogSnapshot = {
   planLimitationsSnapshot: Record<string, unknown>;
@@ -77,29 +79,30 @@ export function limitationsFromRowOrPlan(
   livePlan: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> | undefined {
   const snapshot = sub.planLimitationsSnapshot;
+  let raw: Record<string, unknown> | undefined;
   if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)) {
-    return snapshot as Record<string, unknown>;
+    raw = snapshot as Record<string, unknown>;
+  } else if (livePlan?.limitations && typeof livePlan.limitations === "object") {
+    raw = livePlan.limitations as Record<string, unknown>;
   }
-  if (livePlan?.limitations && typeof livePlan.limitations === "object") {
-    return livePlan.limitations as Record<string, unknown>;
-  }
-  return undefined;
+  return overlayCanonicalStaffLimitations(
+    String(sub.planCode || livePlan?.code || ""),
+    raw,
+  );
 }
 
 export function capabilitiesFromRowOrPlan(
   sub: Record<string, unknown>,
   livePlan: Record<string, unknown> | null | undefined,
 ): PlanCapabilities {
-  if (sub.planCapabilitiesSnapshot) {
-    return parsePlanCapabilities(
-      sub.planCapabilitiesSnapshot,
-      String(sub.planCode || livePlan?.code || ""),
-    );
-  }
-  return parsePlanCapabilities(
-    livePlan?.capabilities,
-    String(sub.planCode || livePlan?.code || ""),
-  );
+  const code = String(sub.planCode || livePlan?.code || "");
+  const parsed = sub.planCapabilitiesSnapshot ?
+    parsePlanCapabilities(sub.planCapabilitiesSnapshot, code) :
+    parsePlanCapabilities(livePlan?.capabilities, code);
+  return {
+    ...parsed,
+    teamHub: defaultCapabilitiesForPlanCode(code).teamHub,
+  };
 }
 
 /**

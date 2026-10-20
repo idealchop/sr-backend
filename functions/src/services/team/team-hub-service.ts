@@ -13,6 +13,7 @@ import {
   emptyAddonLimitBoosts,
   type AddonLimitBoosts,
 } from "../../utils/subscription-addon-limit-boosts";
+import { overlayCanonicalStaffLimitations } from "../../config/subscription-plans-catalog";
 import { SubscriptionService } from "../subscriptions/subscription-service";
 import { resolveScalePlatformAccess } from "../../utils/scale-plan-access";
 import { RiderService } from "../riders/rider-service";
@@ -56,7 +57,11 @@ async function resolveEffectiveSeatQuotasForPlan(
   addonBoosts?: AddonLimitBoosts,
 ): Promise<ParsedPlanQuotas | null> {
   const planResolved = await SubscriptionService.lookupPlanRowForCode(planCode);
-  const base = parsePlanLimitations(planResolved?.planData?.limitations);
+  const limitations = overlayCanonicalStaffLimitations(
+    planCode,
+    planResolved?.planData?.limitations as Record<string, unknown> | undefined,
+  );
+  const base = parsePlanLimitations(limitations);
   return applyAddonBoostsToQuotas(
     base,
     addonBoosts ?? emptyAddonLimitBoosts(),

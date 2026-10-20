@@ -15,10 +15,9 @@ export function isStarterPlan(planCode: string | undefined | null): boolean {
   return normalizePlanCode(planCode) === "starter";
 }
 
-/** Owner-only workspace: no Team Hub / rider / admin seats. */
+/** Owner-only workspace: Free has no Team Hub / rider seats. Paid Starter includes 1 rider. */
 export function isOwnerOnlyPlan(planCode: string | undefined | null): boolean {
-  const code = normalizePlanCode(planCode);
-  return code === "free" || code === "starter";
+  return isFreePlan(planCode);
 }
 
 export function isGrowPlan(planCode: string | undefined | null): boolean {
