@@ -38,6 +38,9 @@ export interface TeamMemberDto {
   /** When inactive, whether the owner can reactivate without exceeding seat caps. */
   canActivate?: boolean;
   activationBlockReason?: string | null;
+  /** Owner-shared no-login link is on (rider seats only). Never the token or hash. */
+  staffLinkActive?: boolean;
+  staffLinkExpiresAt?: number | null;
 }
 
 export interface AssignableRoleDto {
@@ -291,6 +294,9 @@ export async function listTeamMembers(
       email: (d.email || "") as string,
       role: (d.role || "rider") as TeamMemberRole,
       isActive,
+      staffLinkActive: typeof d.staffLinkHash === "string" && !!d.staffLinkHash,
+      staffLinkExpiresAt:
+        typeof d.staffLinkExpiresAt === "number" ? d.staffLinkExpiresAt : null,
     };
   });
 }
