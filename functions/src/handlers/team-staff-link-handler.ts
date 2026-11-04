@@ -8,6 +8,7 @@ import {
   exchangeStaffLink,
   revokeStaffLink,
 } from "../services/team/team-staff-link-service";
+import { addLinkStaffMember } from "../services/team/team-add-staff-service";
 
 type AuthedReq = Request & { user?: { uid: string } };
 
@@ -78,5 +79,38 @@ export const postExchangeStaffLink = async (req: Request, res: Response) => {
     // Never log the token itself.
     logger.error("postExchangeStaffLink failed", e instanceof Error ? e.message : e);
     res.status(500).json({ error: "Could not open this link. Try again." });
+  }
+};
+
+/** POST /business/:businessId/team/staff (owner) — Barbers.ph-style add staff + link. */
+export const postAddStaff = async (req: Request, res: Response) => {
+  const { businessId } = req.params;
+  const uid = (req as AuthedReq).user?.uid;
+  if (!businessId || !uid) {
+    res.status(400).json({ error: "Invalid request" });
+    return;
+  }
+  const { name, phone } = (req.body || {}) as { name?: unknown; phone?: unknown };
+  try {
+    const r = await addLinkStaffMember({
+      businessId,
+      ownerUid: uid,
+      name: typeof name === "string" ? name : "",
+      phone: typeof phone === "string" ? phone : undefined,
+    });
+    if (!r.ok) {
+      res.status(r.status).json({ error: r.message });
+      return;
+    }
+    await logAuditEvent(
+      "TEAM_LINK_STAFF_ADDED",
+      { businessId, userId: uid, memberId: r.member.id },
+      null,
+      { expiresAt: r.expiresAt },
+    );
+    res.status(201).json({ data: r });
+  } catch (e) {
+    logger.error("postAddStaff failed", e);
+    res.status(500).json({ error: "Could not add this staff member" });
   }
 };

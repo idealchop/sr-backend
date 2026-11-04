@@ -18,7 +18,11 @@ import {
   postTeamChatMessageReaction,
   postTeamChatRead,
 } from "../handlers/team-chat-handler";
-import { deleteStaffLink, postStaffLink } from "../handlers/team-staff-link-handler";
+import {
+  deleteStaffLink,
+  postAddStaff,
+  postStaffLink,
+} from "../handlers/team-staff-link-handler";
 import { requireBusinessOwner } from "../middleware/business-middleware";
 
 // eslint-disable-next-line new-cap -- Express Router factory
@@ -44,6 +48,7 @@ router.post("/members/:memberId/staff-link", requireBusinessOwner, postStaffLink
 router.delete("/members/:memberId/staff-link", requireBusinessOwner, deleteStaffLink);
 router.post("/invites", requireBusinessOwner, postTeamInvite);
 router.post("/accounts", requireBusinessOwner, postTeamAccount);
+router.post("/staff", requireBusinessOwner, postAddStaff);
 router.post("/records", requireBusinessOwner, postTeamRecord);
 router.post(
   "/invites/:inviteId/resend",
