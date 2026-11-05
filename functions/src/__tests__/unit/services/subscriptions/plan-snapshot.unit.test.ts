@@ -64,7 +64,7 @@ describe("plan-snapshot", () => {
     ).toEqual({ customers: { max: 100 } });
   });
 
-  it("overlays git catalog staff so paid Starter gets 1 rider even if the snapshot is 0", () => {
+  it("overlays git catalog staff so every plan gets unlimited seats even if the snapshot is 0", () => {
     const limitations = limitationsFromRowOrPlan(
       {
         planCode: "starter",
@@ -72,7 +72,7 @@ describe("plan-snapshot", () => {
       },
       { code: "starter", limitations: { staff: { admin: 0, rider: 0 } } },
     );
-    expect(limitations?.staff).toEqual({ admin: 0, rider: 1 });
+    expect(limitations?.staff).toEqual({ admin: "full", rider: "full" });
   });
 
   it("keeps Team Hub on for paid Starter even if the snapshot froze it off", () => {

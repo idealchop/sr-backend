@@ -3,6 +3,7 @@ import { parsePlanLimitations } from "../../../utils/subscription-addon-plan-lim
 import {
   applyStaffSeatAddonBoosts,
   computeStaffSeatLimitFromRoleQuotas,
+  UNLIMITED_STAFF_SEAT_LIMIT,
 } from "../../../utils/staff-seat-limit";
 import { isActiveStaffMemberForLimit } from "../../../services/team/workspace-member-access";
 
@@ -23,6 +24,18 @@ describe("staff seat limit (owner excluded)", () => {
   it("adds staff rider/admin add-on boosts to the base cap", () => {
     const base = computeStaffSeatLimitFromRoleQuotas(1, 0);
     expect(applyStaffSeatAddonBoosts(base, 1, 0)).toBe(2);
+  });
+
+  it("keeps an unlimited base unlimited even with staff add-ons", () => {
+    expect(applyStaffSeatAddonBoosts(UNLIMITED_STAFF_SEAT_LIMIT, 2, 1)).toBe(
+      UNLIMITED_STAFF_SEAT_LIMIT,
+    );
+  });
+
+  it("parses 'full' staff as unlimited per role", () => {
+    const q = parsePlanLimitations({ staff: { rider: "full", admin: "full" } });
+    expect(q?.staffRiderMax).toBeNull();
+    expect(q?.staffAdminMax).toBeNull();
   });
 
   it("does not count the owner toward occupied staff seats", () => {

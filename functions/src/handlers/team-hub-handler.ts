@@ -26,9 +26,9 @@ function assertTeamHubEligibleOrSend(
 ): boolean {
   const reason = teamHubInviteDeniedReason(sub);
   if (!reason) return true;
-  const error = reason.startsWith("Team invitations are not")
-    ? "Team Hub is not available on the Free plan."
-    : "Team Hub requires an active subscription.";
+  const error = reason.startsWith("Team invitations are not") ?
+    "Team Hub is not available on the Free plan." :
+    "Team Hub requires an active subscription.";
   res.status(403).json({ error });
   return false;
 }

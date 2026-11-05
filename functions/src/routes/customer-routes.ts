@@ -13,7 +13,10 @@ import { acceptContainerCustodyAgreement } from "../handlers/customers/container
 import { syncPossessionFromOrders } from "../handlers/customers/sync-possession-from-orders-handler";
 import { statementShareHandler } from "../handlers/customers/statement-share-handler";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
-import { validateBusinessAccess } from "../middleware/business-middleware";
+import {
+  requireNonRiderSeat,
+  validateBusinessAccess,
+} from "../middleware/business-middleware";
 
 const router = express.Router({ mergeParams: true }); // eslint-disable-line new-cap
 
@@ -72,6 +75,7 @@ router.delete(
   "/:customerId",
   validateFirebaseIdToken,
   validateBusinessAccess,
+  requireNonRiderSeat,
   deleteCustomer,
 );
 
