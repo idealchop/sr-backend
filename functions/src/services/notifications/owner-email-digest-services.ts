@@ -17,7 +17,6 @@ import { listLowStockItems } from "../../utils/inventory-reorder-alert";
 import { buildSubscriptionLifecycleSnapshot } from "../../utils/subscription-lifecycle-alert";
 import { ProductionShiftService } from "../plant/production-shift-service";
 import { escapeHtmlForEmail } from "../../utils/auth-transactional-email";
-import { wrapSmartRefillLetterHtml } from "../../utils/smartrefill-email-html";
 import {
   buildSmartRefillEmailFooterHtml,
   buildSmartRefillEmailFooterPlainText,
