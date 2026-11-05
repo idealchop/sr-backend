@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { auth, db } from "../../config/firebase-admin";
+import { completeStaffOnboarding } from "./team-invite-accept-service";
 
 /**
  * Staff access links (Barbers.ph-style "share to staff", Jimboy 2026-11-03).
@@ -167,6 +168,10 @@ export async function exchangeStaffLink(
     .limit(1)
     .get();
   if (!owns.empty) return gone;
+  // Link-only staff (added by name, no email) never see the profile step.
+  if (member.data()?.linkOnly === true) {
+    await completeStaffOnboarding(link.memberUid, link.businessId).catch(() => undefined);
+  }
   const customToken = await auth.createCustomToken(link.memberUid, {
     staffLink: true,
     staffLinkBusinessId: link.businessId,

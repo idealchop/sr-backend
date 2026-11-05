@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { sets, provision, link } = vi.hoisted(() => ({
+const { sets, provision, link, onboard } = vi.hoisted(() => ({
+  onboard: vi.fn(async () => undefined),
   sets: [] as Array<{ path: string; data: Record<string, unknown> }>,
   provision: vi.fn(),
   link: vi.fn(),
@@ -26,6 +27,9 @@ vi.mock("../../../../services/team/team-hub-service", () => ({
   createProvisionedTeamMemberForHub: provision,
 }));
 vi.mock("../../../../services/team/team-staff-link-service", () => ({ createStaffLink: link }));
+vi.mock("../../../../services/team/team-invite-accept-service", () => ({
+  completeStaffOnboarding: onboard,
+}));
 
 import {
   addLinkStaffMember,
@@ -54,6 +58,7 @@ describe("addLinkStaffMember", () => {
     expect(r).toMatchObject({ ok: true, token: "t".repeat(43), member: { id: "u1", name: "Juan" } });
     const arg = provision.mock.calls[0][0];
     expect(arg.role).toBe("rider");
+    expect(onboard).toHaveBeenCalledWith("u1", "b");
     expect(isLinkStaffEmail(arg.email)).toBe(true);
     expect(arg.password.length).toBeGreaterThanOrEqual(40);
     expect(sets.find((s) => s.path === "businesses/b/members/u1")?.data).toMatchObject({
