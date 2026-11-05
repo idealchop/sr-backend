@@ -10,6 +10,7 @@ vi.mock("../../middleware/auth-middleware", () => ({
 }));
 
 vi.mock("../../middleware/business-middleware", () => ({
+  requireNonRiderSeat: vi.fn((req: any, res: any, next: any) => next()),
   validateBusinessAccess: vi.fn((_req: any, _res: any, next: any) => next()),
   requireBusinessOwner: vi.fn((_req: any, _res: any, next: any) => next()),
 }));
