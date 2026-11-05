@@ -3,6 +3,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../../config/firebase-admin";
 import { createProvisionedTeamMemberForHub } from "./team-hub-service";
 import { createStaffLink } from "./team-staff-link-service";
+import { completeStaffOnboarding } from "./team-invite-accept-service";
 
 /**
  * Barbers.ph-style "Add staff" (Jimboy 2026-11-04): the owner types a name (and an
@@ -59,6 +60,9 @@ export async function addLinkStaffMember(params: {
     },
     { merge: true },
   );
+  // The owner already named this staff member, so skip the "confirm your profile"
+  // step: opening the link lands straight in My Deliveries.
+  await completeStaffOnboarding(uid, params.businessId);
   if (phone) {
     const riders = await businessRef
       .collection("riders").where("userId", "==", uid).limit(1).get();
