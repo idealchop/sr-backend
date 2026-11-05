@@ -1,7 +1,10 @@
 import express from "express";
 import { transactionHandler } from "../handlers/transactions/transaction-handler";
 import { validateFirebaseIdToken } from "../middleware/auth-middleware";
-import { validateBusinessAccess } from "../middleware/business-middleware";
+import {
+  requireNonRiderSeat,
+  validateBusinessAccess,
+} from "../middleware/business-middleware";
 
 const router = express.Router({ mergeParams: true }); // eslint-disable-line new-cap
 
@@ -64,6 +67,7 @@ router.delete(
   "/:id",
   validateFirebaseIdToken,
   validateBusinessAccess,
+  requireNonRiderSeat,
   transactionHandler.deleteTransaction,
 );
 
