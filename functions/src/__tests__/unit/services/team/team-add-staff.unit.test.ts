@@ -10,7 +10,9 @@ const { sets, provision, link, onboard } = vi.hoisted(() => ({
 function ref(path: string): Record<string, unknown> {
   return {
     path,
-    set: async (data: Record<string, unknown>) => { sets.push({ path, data }); },
+    set: async (data: Record<string, unknown>) => {
+      sets.push({ path, data });
+    },
     collection: (c: string) => col(`${path}/${c}`),
   };
 }
