@@ -388,12 +388,25 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Staff-link bearer tokens. Client SDKs must not read or write these.
+    // The privileged catch-all below would otherwise include this collection.
+    // Cloud Functions use the Admin SDK, which does not consult these rules.
+    match /staffAccessLinks/{linkId} {
+      allow read, write: if false;
+
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
     // -------------------------------------------------------------------------
     // DataForge bypass / default deny
     // -------------------------------------------------------------------------
 
     match /{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == 'ueDUKLIVdWS4zI7rFsGfQgEZgGj2';
+      allow read, write: if request.auth != null
+        && request.auth.uid == 'ueDUKLIVdWS4zI7rFsGfQgEZgGj2'
+        && request.path[3] != 'staffAccessLinks';
     }
   }
 }
