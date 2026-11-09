@@ -66,7 +66,28 @@ vi.mock("../../config/firebase-admin", () => ({
                       ],
                     };
                     return {
-                      get: vi.fn().mockResolvedValue({ docs: riderActiveTxDocs }),
+                      // Read-cost: active stops use a filtered + capped query
+                      // (riderId ==, deliveryStatus in [...], limit). An
+                      // unbounded riderId get() is no longer allowed.
+                      get: vi.fn().mockRejectedValue(
+                        new Error("unbounded riderId get() is not allowed"),
+                      ),
+                      where: vi.fn(
+                        (statusField: string, op: string, values: string[]) => {
+                          expect(statusField).toBe("deliveryStatus");
+                          expect(op).toBe("in");
+                          const filtered = riderActiveTxDocs.filter((d) =>
+                            values.includes(String(d.data().deliveryStatus)),
+                          );
+                          return {
+                            limit: vi.fn((n: number) => ({
+                              get: vi.fn().mockResolvedValue({
+                                docs: filtered.slice(0, n),
+                              }),
+                            })),
+                          };
+                        },
+                      ),
                       limit: vi.fn(() => ({
                         get: vi.fn().mockResolvedValue(riderIdDocs),
                       })),
