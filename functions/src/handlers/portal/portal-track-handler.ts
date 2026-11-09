@@ -6,6 +6,7 @@ import { QrCustomerService } from "../../services/customers/qr-customer-service"
 import { transactionHasCustomerRating } from "../../services/portal/portal-rating-updates";
 import { RiderTrackingService } from "../../services/riders/rider-tracking-service";
 import { resolvePortalRiderTrackProfile } from "../../services/portal/portal-rider-track-profile";
+import { countRiderOtherActiveStops } from "../../services/portal/portal-rider-active-stops";
 import { searchPortalTrackOrders } from "../../services/portal/portal-track-search";
 
 function parseQueryString(v: unknown): string | undefined {
@@ -25,31 +26,6 @@ function serializePortalTimestamp(value: unknown): string | null {
     return (value as { toDate: () => Date }).toDate().toISOString();
   }
   return null;
-}
-
-/**
- * Other active stops assigned to the same rider (excludes current transaction).
- * @param {string} businessId Business tenant id.
- * @param {string} riderId Rider document id.
- * @param {string} excludeTxId Transaction to exclude from the count.
- * @return {Promise<number>} Count of other pending/placed/in-transit stops.
- */
-async function countRiderOtherActiveStops(
-  businessId: string,
-  riderId: string,
-  excludeTxId: string,
-): Promise<number> {
-  const snap = await db
-    .collection("businesses")
-    .doc(businessId)
-    .collection("transactions")
-    .where("riderId", "==", riderId)
-    .get();
-  return snap.docs.filter((doc) => {
-    if (doc.id === excludeTxId) return false;
-    const s = String(doc.data()?.deliveryStatus || "");
-    return s === "in-transit" || s === "pending" || s === "placed";
-  }).length;
 }
 
 function customerDestinationFromData(
