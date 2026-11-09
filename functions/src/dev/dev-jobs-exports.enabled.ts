@@ -7,6 +7,7 @@ export {
   purgeExpiredTeamChatsDev,
   backfillCustomerLastFulfilledDev,
   reconcileAnalyticsSnapshotsDev,
+  processAnalyticsMaterializeQueueDev,
   dormantDigestNotificationDev,
   morningOwnerIntelligenceDev,
   inactiveAccountDeactivationDev,

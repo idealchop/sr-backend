@@ -42,6 +42,8 @@ export { scoreForecastScheduleWeek } from "./jobs/score-forecast-schedule-week";
 export { purgeExpiredTeamChats } from "./jobs/purge-expired-team-chats";
 export { backfillCustomerLastFulfilled } from "./jobs/backfill-customer-last-fulfilled";
 export { reconcileAnalyticsSnapshots } from "./jobs/reconcile-analytics-snapshots";
+export { processAnalyticsMaterializeQueue } from
+  "./jobs/process-analytics-materialize-queue";
 export { dormantDigestNotification } from "./jobs/dormant-digest-notification";
 export { morningOwnerIntelligence } from "./jobs/morning-owner-intelligence";
 export { inactiveAccountDeactivation } from "./jobs/inactive-account-deactivation";

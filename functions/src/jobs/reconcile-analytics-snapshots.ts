@@ -1,8 +1,10 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import { db } from "../config/firebase-admin";
-import { AnalyticsMaterializerService } from
-  "../services/analytics/analytics-materializer-service";
+import {
+  ANALYTICS_MATERIALIZE_QUEUE_COLLECTION,
+  AnalyticsMaterializerService,
+} from "../services/analytics/analytics-materializer-service";
 
 const BUSINESSES_PER_RUN = 20;
 
@@ -21,6 +23,20 @@ export async function runReconcileAnalyticsSnapshots(): Promise<void> {
   const selected = new Map<string, "dirty" | "recent">();
   for (const doc of dirtySnap?.docs ?? []) {
     selected.set(doc.id, "dirty");
+  }
+
+  // Ledger mutations now land on the coalescing queue instead of the business doc.
+  if (selected.size < BUSINESSES_PER_RUN) {
+    const queueSnap = await db
+      .collection(ANALYTICS_MATERIALIZE_QUEUE_COLLECTION)
+      .orderBy("lastMutationAt", "desc")
+      .limit(BUSINESSES_PER_RUN)
+      .get()
+      .catch(() => null);
+    for (const doc of queueSnap?.docs ?? []) {
+      if (selected.size >= BUSINESSES_PER_RUN) break;
+      if (!selected.has(doc.id)) selected.set(doc.id, "dirty");
+    }
   }
 
   if (selected.size < BUSINESSES_PER_RUN) {
