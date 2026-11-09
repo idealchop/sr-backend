@@ -18,8 +18,8 @@ import {
   PHILIPPINE_TIMEZONE,
 } from "../../utils/philippine-datetime";
 
-const CUSTOMER_LIMIT = 400;
-const INVENTORY_LIMIT = 120;
+export const CUSTOMER_LIMIT = 400;
+export const INVENTORY_LIMIT = 120;
 const TX_SCHEDULED_LIMIT = 200;
 const TX_RECENT_LIMIT = 120;
 
@@ -213,12 +213,13 @@ export async function buildOfflineSnapshot(
   const biz = bizSnap.data() ?? {};
 
   const [customers, inventory, scheduledTx, recentTx] = await Promise.all([
-    CustomerService.getCustomersByBusiness(businessId).then((rows) =>
-      rows.slice(0, CUSTOMER_LIMIT),
-    ),
-    InventoryService.listItems(businessId).then((rows) =>
-      rows.slice(0, INVENTORY_LIMIT),
-    ),
+    // Read-cost: cap at the query (was: read all, slice in memory).
+    CustomerService.getCustomersByBusiness(businessId, {
+      limit: CUSTOMER_LIMIT,
+    }).then((rows) => rows.slice(0, CUSTOMER_LIMIT)),
+    InventoryService.listItems(businessId, {
+      scanLimit: INVENTORY_LIMIT,
+    }).then((rows) => rows.slice(0, INVENTORY_LIMIT)),
     TransactionService.getTransactionsByBusiness(businessId, {
       limit: TX_SCHEDULED_LIMIT,
       orderBy: "scheduledAt",
