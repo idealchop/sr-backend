@@ -180,9 +180,10 @@ export const getDashboardAnalyticsSnapshot = async (req: Request, res: Response)
       return;
     }
 
+    // Manual refresh and first-time misses do a full recount (reseeds incremental state).
     if (refresh) {
       await AnalyticsMaterializerService.materialize(businessId, {
-        mode: "incremental",
+        mode: "full",
         reason: "api_refresh",
       });
     }
@@ -190,7 +191,7 @@ export const getDashboardAnalyticsSnapshot = async (req: Request, res: Response)
     let snapshot = await AnalyticsMaterializerService.getDashboardSnapshot(businessId);
     if (!snapshot) {
       await AnalyticsMaterializerService.materialize(businessId, {
-        mode: "incremental",
+        mode: "full",
         reason: "api_miss",
       });
       snapshot = await AnalyticsMaterializerService.getDashboardSnapshot(businessId);
@@ -241,7 +242,8 @@ export const getAnalyticsDailySum = async (req: Request, res: Response) => {
 export const postAnalyticsMaterialize = async (req: Request, res: Response) => {
   const { businessId } = req.params;
   const user = (req as any).user;
-  const mode = String(req.body?.mode || "incremental") === "full" ? "full" : "incremental";
+  // Manual rebuild defaults to a full recount; pass mode=incremental to opt out.
+  const mode = String(req.body?.mode || "full") === "incremental" ? "incremental" : "full";
 
   try {
     const { hasAccess, role } = await checkBusinessAccess(user.uid, businessId);

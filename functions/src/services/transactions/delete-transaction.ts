@@ -78,7 +78,9 @@ export async function deleteTransaction(
       }
     }
 
-    AnalyticsMaterializerService.scheduleMaterialize(businessId);
+    AnalyticsMaterializerService.scheduleMaterialize(businessId, {
+      deletedTransactionId: transactionId,
+    });
   } catch (error) {
     logger.error(`Error deleting transaction ${transactionId}`, error);
     throw error;
