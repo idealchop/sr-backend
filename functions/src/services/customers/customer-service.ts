@@ -178,17 +178,26 @@ export class CustomerService {
   }
 
   /**
-   * Retrieves all customers for a specific business.
+   * Retrieves customers for a specific business (newest createdAt first).
+   * Pass `options.limit` on request paths so the read is capped at the source.
    * @param {string} businessId The business ID.
+   * @param {{ limit?: number }} [options] Optional query cap.
    */
-  static async getCustomersByBusiness(businessId: string): Promise<Customer[]> {
+  static async getCustomersByBusiness(
+    businessId: string,
+    options?: { limit?: number },
+  ): Promise<Customer[]> {
     try {
-      const snapshot = await db
+      let query = db
         .collection("businesses")
         .doc(businessId)
         .collection("customers")
-        .orderBy("createdAt", "desc")
-        .get();
+        .orderBy("createdAt", "desc");
+      const cap = options?.limit;
+      if (typeof cap === "number" && Number.isFinite(cap) && cap > 0) {
+        query = query.limit(Math.floor(cap));
+      }
+      const snapshot = await query.get();
 
       return snapshot.docs.map((doc: any) => ({
         id: doc.id,
