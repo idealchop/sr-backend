@@ -17,6 +17,8 @@ import { runBackfillCustomerLastFulfilled } from
   "../jobs/backfill-customer-last-fulfilled";
 import { runReconcileAnalyticsSnapshots } from
   "../jobs/reconcile-analytics-snapshots";
+import { runProcessAnalyticsMaterializeQueue } from
+  "../jobs/process-analytics-materialize-queue";
 import { runDormantDigestNotification } from "../jobs/dormant-digest-notification";
 import { runMorningOwnerIntelligence } from "../jobs/morning-owner-intelligence";
 import { runInactiveAccountDeactivation } from
@@ -107,6 +109,20 @@ export const reconcileAnalyticsSnapshotsDev = onSchedule(
     timeoutSeconds: 540,
   },
   () => runGated("reconcileAnalyticsSnapshotsDev", runReconcileAnalyticsSnapshots),
+);
+
+export const processAnalyticsMaterializeQueueDev = onSchedule(
+  {
+    schedule: "every 2 minutes",
+    timeZone: "Asia/Manila",
+    region: "asia-southeast1",
+    memory: "1GiB",
+    timeoutSeconds: 120,
+  },
+  () =>
+    runGated("processAnalyticsMaterializeQueueDev", async () => {
+      await runProcessAnalyticsMaterializeQueue();
+    }),
 );
 
 export const dormantDigestNotificationDev = onSchedule(
