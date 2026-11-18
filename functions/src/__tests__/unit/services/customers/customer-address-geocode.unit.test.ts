@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("../../../../services/maps/geocoding-service", () => ({
   GeocodingService: {
@@ -6,12 +6,7 @@ vi.mock("../../../../services/maps/geocoding-service", () => ({
   },
 }));
 
-vi.mock("../../../../services/maps/maps-config", () => ({
-  getGoogleMapsApiKey: vi.fn(() => "test-maps-key"),
-}));
-
 import { GeocodingService } from "../../../../services/maps/geocoding-service";
-import { getGoogleMapsApiKey } from "../../../../services/maps/maps-config";
 import {
   enrichCustomerDraftsWithGeocoding,
   resolveCustomerLocationWithGeocode,
@@ -57,12 +52,7 @@ describe("resolveCustomerLocationWithGeocode", () => {
 
 describe("enrichCustomerDraftsWithGeocoding", () => {
   beforeEach(() => {
-    vi.mocked(getGoogleMapsApiKey).mockReturnValue("test-maps-key");
     vi.mocked(GeocodingService.geocodeAddress).mockReset();
-  });
-
-  afterEach(() => {
-    vi.mocked(getGoogleMapsApiKey).mockReturnValue("test-maps-key");
   });
 
   it("fills coordinates for rows with address only", async () => {
@@ -84,14 +74,14 @@ describe("enrichCustomerDraftsWithGeocoding", () => {
     expect(result.geocodedCount).toBe(1);
   });
 
-  it("warns when geocoding key is missing", async () => {
-    vi.mocked(getGoogleMapsApiKey).mockReturnValue("");
+  it("warns when an address has no geocode match", async () => {
+    vi.mocked(GeocodingService.geocodeAddress).mockResolvedValue(null);
 
     const result = await enrichCustomerDraftsWithGeocoding([
       { name: "A", phone: "1", address: "Some street" },
     ]);
 
     expect(result.geocodedCount).toBe(0);
-    expect(result.geocodeWarnings[0]).toMatch(/Google Maps API key not configured/);
+    expect(result.geocodeWarnings[0]).toMatch(/no match for 1 address/);
   });
 });

@@ -1,96 +1,87 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { GeocodingService } from "../../../../services/maps/geocoding-service";
-import {
-  GOOGLE_MAPS_SECRET_ID,
-  GOOGLE_MAPS_SERVER_SECRET_ID,
-} from "../../../../services/maps/maps-config";
+import { GEOCODER_USER_AGENT } from "../../../../services/maps/maps-config";
 
-function clearMapsApiKeyEnv(): void {
-  delete process.env.GOOGLE_MAPS_API_KEY;
-  delete process.env.GOOGLE_MAPS_SERVER_API_KEY;
-  delete process.env.SMARTREFILL_GOOGLE_MAPS_API_KEY;
-  delete process.env[GOOGLE_MAPS_SECRET_ID];
-  delete process.env[GOOGLE_MAPS_SERVER_SECRET_ID];
+function photon(features: unknown[]) {
+  return { ok: true, json: async () => ({ features }) };
 }
 
-describe("GeocodingService", () => {
+describe("GeocodingService (Photon / Nominatim, no Google)", () => {
   const originalFetch = global.fetch;
-  const originalKey = process.env.GOOGLE_MAPS_API_KEY;
 
   beforeEach(() => {
-    process.env.GOOGLE_MAPS_API_KEY = "test-maps-key";
+    GeocodingService.clearCache();
   });
 
   afterEach(() => {
     global.fetch = originalFetch;
-    if (originalKey === undefined) {
-      delete process.env.GOOGLE_MAPS_API_KEY;
-    } else {
-      process.env.GOOGLE_MAPS_API_KEY = originalKey;
-    }
   });
 
   it("returns null when address is blank", async () => {
     await expect(GeocodingService.geocodeAddress("   ")).resolves.toBeNull();
   });
 
-  it("returns coordinates from a successful Geocoding API response", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        status: "OK",
-        results: [
-          {
-            formatted_address: "123 Rizal St, Quezon City, Metro Manila, Philippines",
-            geometry: { location: { lat: 14.676, lng: 121.0437 } },
-          },
-        ],
-      }),
-    }) as typeof fetch;
+  it("geocodes with Photon, PH-biased, with an identifying User-Agent", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      photon([
+        {
+          geometry: { coordinates: [121.0437, 14.676] },
+          properties: { name: "123 Rizal St", city: "Quezon City", state: "Metro Manila" },
+        },
+      ]),
+    ) as typeof fetch;
 
-    const hit = await GeocodingService.geocodeAddress(
-      "123 Rizal St Quezon City",
-    );
+    const hit = await GeocodingService.geocodeAddress("123 Rizal St Quezon City");
     expect(hit).toEqual({
       latitude: 14.676,
       longitude: 121.0437,
-      formattedAddress:
-        "123 Rizal St, Quezon City, Metro Manila, Philippines",
+      formattedAddress: "123 Rizal St, Quezon City, Metro Manila, Philippines",
     });
-    const url = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+    const [url, init] = calls[0] as [string, RequestInit];
+    expect(url).toContain("photon.komoot.io");
     expect(url).toContain("Philippines");
+    expect(url).toContain("bbox=116.9");
+    expect(url).not.toContain("googleapis");
+    expect((init.headers as Record<string, string>)["User-Agent"]).toBe(GEOCODER_USER_AGENT);
   });
 
-  it("logs and returns null when maps API key is missing", async () => {
-    clearMapsApiKeyEnv();
-    await expect(
-      GeocodingService.geocodeAddress("123 Rizal St, Quezon City"),
-    ).resolves.toBeNull();
+  it("caches repeated lookups", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      photon([{ geometry: { coordinates: [121.0, 14.6] }, properties: { name: "X" } }]),
+    ) as typeof fetch;
+    await GeocodingService.geocodeAddress("Same place");
+    await GeocodingService.geocodeAddress("Same place");
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("returns null when API status is not OK", async () => {
+  it("falls back to Nominatim when Photon has no PH match", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(photon([]))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ lat: "14.5", lon: "121.1", display_name: "Pasig, Metro Manila, Philippines" }],
+      }) as typeof fetch;
+    const hit = await GeocodingService.geocodeAddress("Pasig");
+    expect(hit).toEqual({ latitude: 14.5, longitude: 121.1, formattedAddress: "Pasig, Metro Manila, Philippines" });
+    const url = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[1]?.[0] as string;
+    expect(url).toContain("nominatim.openstreetmap.org/search");
+    expect(url).toContain("countrycodes=ph");
+  });
+
+  it("returns null when nothing matches", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(photon([]))
+      .mockResolvedValueOnce({ ok: true, json: async () => [] }) as typeof fetch;
+    await expect(GeocodingService.geocodeAddress("Unknown place")).resolves.toBeNull();
+  });
+
+  it("reverse-geocodes coordinates via Nominatim", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ status: "ZERO_RESULTS", results: [] }),
-    }) as typeof fetch;
-
-    await expect(
-      GeocodingService.geocodeAddress("Unknown place"),
-    ).resolves.toBeNull();
-  });
-
-  it("reverse-geocodes coordinates via latlng query", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        status: "OK",
-        results: [
-          {
-            formatted_address: "SM North EDSA, Quezon City, Philippines",
-            geometry: { location: { lat: 14.656, lng: 121.031 } },
-          },
-        ],
-      }),
+      json: async () => ({ display_name: "SM North EDSA, Quezon City, Philippines" }),
     }) as typeof fetch;
 
     const hit = await GeocodingService.reverseGeocodeCoordinates(14.656, 121.031);
@@ -99,8 +90,8 @@ describe("GeocodingService", () => {
       longitude: 121.031,
       formattedAddress: "SM North EDSA, Quezon City, Philippines",
     });
-
     const url = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
-    expect(url).toContain("latlng=14.656%2C121.031");
+    expect(url).toContain("nominatim.openstreetmap.org/reverse");
+    expect(url).toContain("lat=14.656&lon=121.031");
   });
 });
