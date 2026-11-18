@@ -7,6 +7,8 @@ const FULFILLED_DELIVERY_STATUSES = new Set([
   "collected",
 ]);
 
+const UNSUCCESSFUL_DELIVERY_STATUSES = new Set(["cancelled", "failed"]);
+
 const OPEN_DELIVERY_STATUSES = new Set([
   "pending",
   "placed",
@@ -24,10 +26,14 @@ export function normalizeDeliveryStatus(status: unknown): string {
  * Pending / placed / in-transit deliveries are still on-going — not unpaid debt yet.
  */
 export function isTransactionFulfilledForReceivable(tx: Transaction): boolean {
-  if (tx.type === "walkin" || tx.type === "direct_sale") return true;
   if (tx.type === "expense") return false;
 
   const ds = normalizeDeliveryStatus(tx.deliveryStatus);
+
+  // Counter sales are fulfilled at the counter unless the ticket was cancelled / failed.
+  if (tx.type === "walkin" || tx.type === "direct_sale") {
+    return !UNSUCCESSFUL_DELIVERY_STATUSES.has(ds);
+  }
 
   if (tx.type === "collection") {
     if (!ds) return true;

@@ -3,6 +3,7 @@ import {
 } from "./sync-conflict";
 import { db, FieldValue } from "../../config/firebase-admin";
 import { logger, logAuditEvent } from "../observability/logging/logger";
+import { buildTransactionUpdateAuditValues } from "./transaction-update-audit-values";
 import { buildAuditActorFields } from "../../utils/audit-actor";
 import {
   InventoryService,
@@ -427,15 +428,16 @@ export async function updateTransaction(
       // Skip a redundant TRANSACTION_UPDATED when payment-only changes
       // already produced PAYMENT_RECORDED / PAYMENT_CORRECTED / PAYMENT_STATUS_CHANGED.
       if (nonPaymentChanges.length > 0 || !hasLoggedSpecific) {
-        const newValues: Record<string, unknown> = {};
-        for (const field of changedFields) {
-          newValues[field] = updates[field as keyof Transaction];
-        }
+        const { oldValues, newValues } = buildTransactionUpdateAuditValues(
+          current,
+          updates,
+          changedFields,
+        );
 
         await logAuditEvent(
           "TRANSACTION_UPDATED",
           { businessId, ...actor },
-          null,
+          oldValues,
           newValues,
           transactionId,
           changedFields,
