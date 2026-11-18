@@ -1,5 +1,4 @@
 import { GeocodingService } from "../maps/geocoding-service";
-import { getGoogleMapsApiKey } from "../maps/maps-config";
 import {
   isValidCustomerMapCoordinate,
   resolveCustomerLocationForWrite,
@@ -49,6 +48,7 @@ export async function enrichCustomerDraftsWithGeocoding<
 }> {
   const geocodeWarnings: string[] = [];
   let geocodedCount = 0;
+  let unresolvedCount = 0;
   const enriched: T[] = [];
 
   for (const row of rows) {
@@ -69,6 +69,8 @@ export async function enrichCustomerDraftsWithGeocoding<
         next.latitude = resolved.latitude;
         next.longitude = resolved.longitude;
         geocodedCount += 1;
+      } else {
+        unresolvedCount += 1;
       }
     } else if (hasCoords) {
       const normalized = resolveCustomerLocationForWrite({
@@ -84,18 +86,11 @@ export async function enrichCustomerDraftsWithGeocoding<
     enriched.push(next);
   }
 
-  if (!getGoogleMapsApiKey()) {
-    const needsGeocode = rows.some(
-      (row) =>
-        row.address.trim() &&
-        !isValidCustomerMapCoordinate(row.latitude, row.longitude),
+  if (unresolvedCount > 0) {
+    geocodeWarnings.push(
+      `Map pin lookup found no match for ${unresolvedCount} address${unresolvedCount === 1 ? "" : "es"}. ` +
+        "Those customers will import with address text only.",
     );
-    if (needsGeocode) {
-      geocodeWarnings.push(
-        "Map pin lookup is unavailable (Google Maps API key not configured on the API). " +
-          "Customers will import with address text only.",
-      );
-    }
   }
 
   return { rows: enriched, geocodedCount, geocodeWarnings };
