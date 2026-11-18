@@ -193,12 +193,14 @@ export class TransactionService {
    * Gets the audit history for a specific transaction.
    * @param {string} businessId The business ID.
    * @param {string} transactionId The transaction ID.
+   * @param {number} limit Max rows, newest first (clamped to 1..100).
    */
   static async getTransactionHistory(
     businessId: string,
     transactionId: string,
+    limit?: number,
   ): Promise<Array<Record<string, unknown>>> {
-    return getTransactionHistoryFn(businessId, transactionId);
+    return getTransactionHistoryFn(businessId, transactionId, limit);
   }
 
   /**

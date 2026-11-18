@@ -76,17 +76,30 @@ export async function getTransaction(
 /**
  * Gets the audit history for a specific transaction.
  */
+export const TRANSACTION_HISTORY_DEFAULT_LIMIT = 50;
+export const TRANSACTION_HISTORY_MAX_LIMIT = 100;
+
+/** Clamp a requested history page size (query string or number) to 1..100. */
+export function resolveTransactionHistoryLimit(raw: unknown): number {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n <= 0) return TRANSACTION_HISTORY_DEFAULT_LIMIT;
+  return Math.min(n, TRANSACTION_HISTORY_MAX_LIMIT);
+}
+
 export async function getTransactionHistory(
   businessId: string,
   transactionId: string,
+  limit: number = TRANSACTION_HISTORY_DEFAULT_LIMIT,
 ): Promise<Array<Record<string, unknown>>> {
   try {
+    // Newest first, capped. Served by the audit_logs (transactionId, timestamp desc) index.
     const snapshot = await db
       .collection("businesses")
       .doc(businessId)
       .collection("audit_logs")
       .where("transactionId", "==", transactionId)
       .orderBy("timestamp", "desc")
+      .limit(resolveTransactionHistoryLimit(limit))
       .get();
 
     const rows: Array<Record<string, unknown>> = snapshot.docs.map((doc) => {
