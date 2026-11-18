@@ -19,8 +19,6 @@ export const smartrefillV3Api = onRequest(
       "DOCS_ADMIN_TOKEN",
       "SMARTREFILL_BREVO_API_KEY",
       "GEMINI_API_KEY",
-      "SMARTREFILL_GOOGLE_MAPS_SERVER_API_KEY",
-      "smartrefill-firebase-google-maps-api-key",
       "META_COMMUNITY_VERIFY_TOKEN",
       "META_COMMUNITY_PAGE_ACCESS_TOKEN",
       "META_COMMUNITY_PAGE_ID",

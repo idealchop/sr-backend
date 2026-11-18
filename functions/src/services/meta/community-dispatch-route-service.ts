@@ -81,7 +81,6 @@ export async function routeCommunityDispatchRequest(params: {
       logger.warn("routeCommunityDispatchRequest geocode_failed", {
         requestId: params.requestId,
         location: params.fields.location.trim().slice(0, 120),
-        hasMapsApiKey: Boolean(GeocodingService.readApiKey()),
       });
     }
   }
