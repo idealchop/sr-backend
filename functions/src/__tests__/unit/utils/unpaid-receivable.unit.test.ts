@@ -7,6 +7,35 @@ import {
 import { computeDebtAgingBreakdown } from "../../../utils/analytics-utils";
 
 describe("unpaid-receivable", () => {
+  it("does not treat cancelled or failed counter sales as owed", () => {
+    for (const type of ["walkin", "direct_sale"]) {
+      for (const deliveryStatus of ["cancelled", "failed", "CANCELLED"]) {
+        const tx = {
+          type,
+          deliveryStatus,
+          paymentStatus: "unpaid",
+          totalAmount: 120,
+          amountPaid: 0,
+          balanceDue: 120,
+        } as any;
+        expect(isTransactionFulfilledForReceivable(tx)).toBe(false);
+        expect(isUnpaidReceivableTransaction(tx)).toBe(false);
+      }
+      for (const deliveryStatus of [undefined, "pending", "completed", "delivered"]) {
+        expect(
+          isUnpaidReceivableTransaction({
+            type,
+            deliveryStatus,
+            paymentStatus: "unpaid",
+            totalAmount: 120,
+            amountPaid: 0,
+            balanceDue: 120,
+          } as any),
+        ).toBe(true);
+      }
+    }
+  });
+
   it("treats placed / pending / in-transit deliveries as not fulfilled", () => {
     for (const deliveryStatus of ["placed", "pending", "in-transit", "PLACED"]) {
       expect(
