@@ -257,6 +257,24 @@ describe("SmartRefill V3 API Endpoints", () => {
     });
   });
 
+  describe("PUT /auth/change-email", () => {
+    it("should reject a missing current password", async () => {
+      const res = await request(app)
+        .put("/auth/change-email")
+        .send({ newEmail: "new@test.com" });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/current password/i);
+    });
+
+    it("should reject an invalid new email", async () => {
+      const res = await request(app)
+        .put("/auth/change-email")
+        .send({ currentPassword: "secret123", newEmail: "not-an-email" });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/valid email/i);
+    });
+  });
+
   describe("GET /auth/workspace-profile", () => {
     it("should return workspace member profile", async () => {
       const res = await request(app).get("/auth/workspace-profile");
