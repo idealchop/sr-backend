@@ -349,7 +349,7 @@ describe("Transaction API Endpoints", () => {
       expect(logAuditEvent).toHaveBeenCalledWith(
         "TRANSACTION_UPDATED",
         expect.objectContaining({ businessId: "test-biz" }),
-        null,
+        expect.objectContaining({ totalAmount: 100 }),
         expect.objectContaining({ notes: "Updated notes", totalAmount: 150 }),
         "test-tx-id",
         expect.arrayContaining(["notes", "totalAmount"]),
@@ -367,7 +367,7 @@ describe("Transaction API Endpoints", () => {
       expect(logAuditEvent).toHaveBeenCalledWith(
         "TRANSACTION_UPDATED",
         expect.objectContaining({ businessId: "test-biz" }),
-        null,
+        expect.objectContaining({ totalAmount: 100 }),
         expect.objectContaining({ totalAmount: 150, balanceDue: 150 }),
         "test-tx-id",
         expect.arrayContaining(["totalAmount", "balanceDue"]),
@@ -441,6 +441,14 @@ describe("Transaction API Endpoints", () => {
         "==",
         transactionId,
       );
+      expect(mockCollection.limit).toHaveBeenCalledWith(50);
+    });
+
+    it("caps the history page size from ?limit=", async () => {
+      await request(app).get("/business/test-biz/transactions/test-tx-id/history?limit=30");
+      expect(mockCollection.limit).toHaveBeenCalledWith(30);
+      await request(app).get("/business/test-biz/transactions/test-tx-id/history?limit=5000");
+      expect(mockCollection.limit).toHaveBeenCalledWith(100);
     });
   });
 });

@@ -20,6 +20,7 @@ import { countActiveStaffSeatsForBusiness } from "../team/staff-seat-usage";
 import {
   applyStaffSeatAddonBoosts,
   computeStaffSeatLimitFromRoleQuotas,
+  UNLIMITED_STAFF_SEAT_LIMIT,
 } from "../../utils/staff-seat-limit";
 import { OnlineOrderLimitService } from "../portal/online-order-limit-service";
 import { ContainerDailyLimitService } from "./container-daily-limit-service";
@@ -385,30 +386,19 @@ export class SubscriptionService {
     sub: Record<string, any>,
     planCodeRaw: string,
   ): Promise<number> {
-    const planCode = planCodeRaw.toLowerCase();
-    const staffLimits: Record<string, number> = {
-      starter: 1,
-      pro: 5,
-      scale: 50,
-    };
-    const legacy =
-      sub.billingCycle === "trial" ? 3 : staffLimits[planCode] || 1;
-
     const planRow = await this.fetchSubscriptionPlanRow(
       sub.planId,
-      sub.planCode,
+      sub.planCode || planCodeRaw,
     );
     const lim = limitationsFromRowOrPlan(sub, planRow) ?? planRow?.limitations;
-    if (!lim || typeof lim !== "object") return legacy;
-
-    const staff = (lim as Record<string, unknown>).staff;
-    if (!staff || typeof staff !== "object") return legacy;
-
-    const q = parsePlanLimitations(lim);
-    if (!q) return legacy;
-
-    const rider = typeof q.staffRiderMax === "number" ? q.staffRiderMax : 0;
-    const admin = typeof q.staffAdminMax === "number" ? q.staffAdminMax : 0;
+    const q = lim && typeof lim === "object" ? parsePlanLimitations(lim) : null;
+    // 0 = unlimited (enforcement only applies caps when `staffLimit > 0`).
+    if (!q) return UNLIMITED_STAFF_SEAT_LIMIT;
+    if (q.staffRiderMax === null || q.staffAdminMax === null) {
+      return UNLIMITED_STAFF_SEAT_LIMIT;
+    }
+    const rider = q.staffRiderMax;
+    const admin = q.staffAdminMax;
     return computeStaffSeatLimitFromRoleQuotas(rider, admin);
   }
 

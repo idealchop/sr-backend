@@ -146,12 +146,13 @@ export class InventoryService {
    * Lists inventory items for a business (newest createdAt first).
    * Optional `q` filters name/category/id/etc. after a capped scan.
    * @param {string} businessId The business ID.
-   * @param {{ q?: string, limit?: number }} [options] Search / scan options.
+   * @param {{ q?: string, limit?: number, scanLimit?: number }} [options]
+   *   Search / scan options. `scanLimit` caps the Firestore query itself.
    * @return {Promise<InventoryItem[]>}
    */
   static async listItems(
     businessId: string,
-    options?: { q?: string; limit?: number },
+    options?: { q?: string; limit?: number; scanLimit?: number },
   ): Promise<InventoryItem[]> {
     try {
       const needle = String(options?.q || "")
@@ -159,7 +160,15 @@ export class InventoryService {
         .toLowerCase();
       const isSearch = needle.length > 0;
       /** Cap scan when searching so catalog search stays bounded. */
-      const scanLimit = isSearch ? 2000 : undefined;
+      const requestedScan =
+        typeof options?.scanLimit === "number" &&
+        Number.isFinite(options.scanLimit) &&
+        options.scanLimit > 0 ?
+          Math.floor(options.scanLimit) :
+          undefined;
+      const scanLimit = isSearch ?
+        Math.min(2000, requestedScan ?? 2000) :
+        requestedScan;
       const resultLimit = isSearch ?
         Math.min(Math.max(1, options?.limit ?? 100), 100) :
         undefined;

@@ -12,6 +12,9 @@ const CHANNELS_DISABLED = {
   webhooks: { max: 0, frequency: "monthly" },
 } as const;
 
+/** Staff seats (admin + rider) are unlimited on every plan. */
+export const UNLIMITED_STAFF_SEATS = { admin: "full", rider: "full" } as const;
+
 const SUPPORT_CHAT_ONLY = {
   chat: { max: 0, frequency: "monthly" },
   attachments: false,
@@ -38,7 +41,7 @@ export const SUBSCRIPTION_PLAN_CATALOG_ROWS: Record<
       aiTools: { max: 0, frequency: "monthly" },
       online_orders: { frequency: "daily", max: 0 },
       channels: CHANNELS_DISABLED,
-      staff: { admin: 0, rider: 0 },
+      staff: UNLIMITED_STAFF_SEATS,
       support: SUPPORT_CHAT_ONLY,
     },
   },
@@ -53,7 +56,7 @@ export const SUBSCRIPTION_PLAN_CATALOG_ROWS: Record<
       aiTools: { max: 0, frequency: "monthly" },
       online_orders: { frequency: "daily", max: 10 },
       channels: CHANNELS_DISABLED,
-      staff: { admin: 0, rider: 1 },
+      staff: UNLIMITED_STAFF_SEATS,
       support: SUPPORT_CHAT_ONLY,
     },
   },
@@ -68,7 +71,7 @@ export const SUBSCRIPTION_PLAN_CATALOG_ROWS: Record<
       aiTools: { max: 0, frequency: "monthly" },
       online_orders: { frequency: "daily", max: 25 },
       channels: CHANNELS_DISABLED,
-      staff: { admin: 0, rider: 1 },
+      staff: UNLIMITED_STAFF_SEATS,
       support: SUPPORT_CHAT_ONLY,
     },
   },
@@ -83,7 +86,7 @@ export const SUBSCRIPTION_PLAN_CATALOG_ROWS: Record<
       aiTools: { max: 0, frequency: "monthly" },
       online_orders: { frequency: "daily", max: 25 },
       channels: CHANNELS_DISABLED,
-      staff: { admin: 0, rider: 1 },
+      staff: UNLIMITED_STAFF_SEATS,
       support: SUPPORT_CHAT_ONLY,
     },
   },
@@ -98,7 +101,7 @@ export const SUBSCRIPTION_PLAN_CATALOG_ROWS: Record<
       aiTools: "full",
       online_orders: "full",
       channels: CHANNELS_DISABLED,
-      staff: { admin: 1, rider: 2 },
+      staff: UNLIMITED_STAFF_SEATS,
       support: {
         chat: "full",
         attachments: true,
@@ -122,6 +125,7 @@ export const SUBSCRIPTION_PLAN_CATALOG_ROWS: Record<
       aiTools: "full",
       online_orders: "full",
       channels: CHANNELS_DISABLED,
+      staff: UNLIMITED_STAFF_SEATS,
       support: {
         chat: "full",
         attachments: true,

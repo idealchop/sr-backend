@@ -1,3 +1,6 @@
+/** `staffLimit` value meaning "no staff seat cap" (checks use `limit > 0`). */
+export const UNLIMITED_STAFF_SEAT_LIMIT = 0;
+
 /**
  * Staff seat cap from plan quotas (rider + admin).
  * The workspace owner is always free and is excluded from
@@ -25,5 +28,7 @@ export function applyStaffSeatAddonBoosts(
   addonStaffRider: number,
   addonStaffAdmin: number,
 ): number {
+  // Unlimited base stays unlimited; add-ons cannot introduce a cap.
+  if (baseStaffSeatLimit <= UNLIMITED_STAFF_SEAT_LIMIT) return UNLIMITED_STAFF_SEAT_LIMIT;
   return baseStaffSeatLimit + addonStaffRider + addonStaffAdmin;
 }

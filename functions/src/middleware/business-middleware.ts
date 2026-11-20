@@ -104,3 +104,21 @@ export const requireBusinessOwner = (
   }
   return next();
 };
+
+/**
+ * Blocks rider/staff seats (including no-login staff links) from destructive
+ * actions such as deleting customers or orders. Owners and admins pass.
+ */
+export const requireNonRiderSeat = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  const role = String((req as { businessRole?: string }).businessRole || "").toLowerCase();
+  if (role === "rider") {
+    return res.status(403).json({
+      error: "Staff can't delete records. Ask the owner or an admin.",
+    });
+  }
+  return next();
+};

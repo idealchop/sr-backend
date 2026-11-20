@@ -19,8 +19,6 @@ export const smartrefillV3Api = onRequest(
       "DOCS_ADMIN_TOKEN",
       "SMARTREFILL_BREVO_API_KEY",
       "GEMINI_API_KEY",
-      "SMARTREFILL_GOOGLE_MAPS_SERVER_API_KEY",
-      "smartrefill-firebase-google-maps-api-key",
       "META_COMMUNITY_VERIFY_TOKEN",
       "META_COMMUNITY_PAGE_ACCESS_TOKEN",
       "META_COMMUNITY_PAGE_ID",
@@ -42,6 +40,8 @@ export { scoreForecastScheduleWeek } from "./jobs/score-forecast-schedule-week";
 export { purgeExpiredTeamChats } from "./jobs/purge-expired-team-chats";
 export { backfillCustomerLastFulfilled } from "./jobs/backfill-customer-last-fulfilled";
 export { reconcileAnalyticsSnapshots } from "./jobs/reconcile-analytics-snapshots";
+export { processAnalyticsMaterializeQueue } from
+  "./jobs/process-analytics-materialize-queue";
 export { dormantDigestNotification } from "./jobs/dormant-digest-notification";
 export { morningOwnerIntelligence } from "./jobs/morning-owner-intelligence";
 export { inactiveAccountDeactivation } from "./jobs/inactive-account-deactivation";

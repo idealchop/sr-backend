@@ -33,24 +33,21 @@ describe("featureBulletsFromPlan", () => {
     expect(bullets).toContain("1 Rider App");
   });
 
-  it("gives Starter 1 rider app seat and Team Hub for that rider", () => {
-    const starter = SUBSCRIPTION_PLAN_CATALOG_ROWS.starter;
-    expect(starter.limitations.staff).toEqual({ admin: 0, rider: 1 });
-    expect(parsePlanLimitations(starter.limitations)?.staffRiderMax).toBe(1);
+  it("gives every catalog plan unlimited staff seats", () => {
+    for (const code of ["free", "starter", "grow", "pro", "scale", "enterprise"]) {
+      const row = SUBSCRIPTION_PLAN_CATALOG_ROWS[code];
+      expect(row.limitations.staff).toEqual({ admin: "full", rider: "full" });
+      const q = parsePlanLimitations(row.limitations);
+      expect(q?.staffRiderMax).toBeNull();
+      expect(q?.staffAdminMax).toBeNull();
+    }
     expect(defaultCapabilitiesForPlanCode("starter").teamHub).toBe(true);
-    expect(defaultCapabilitiesForPlanCode("starter").teamHubAdmins).toBe(false);
-    expect(
-      featureBulletsFromPlan({
-        limitations: starter.limitations,
-        capabilities: defaultCapabilitiesForPlanCode("starter"),
-      }),
-    ).toContain("1 Rider App");
     expect(
       featureBulletsFromPlan({
         code: "starter",
         limitations: { staff: { admin: 0, rider: 0 } },
         capabilities: { map: "locate_only" },
       }),
-    ).toContain("1 Rider App");
+    ).toContain("Unlimited Staff Apps");
   });
 });

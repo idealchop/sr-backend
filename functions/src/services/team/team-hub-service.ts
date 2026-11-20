@@ -15,6 +15,7 @@ import {
 } from "../../utils/subscription-addon-limit-boosts";
 import { overlayCanonicalStaffLimitations } from "../../config/subscription-plans-catalog";
 import { SubscriptionService } from "../subscriptions/subscription-service";
+import { UNLIMITED_STAFF_SEAT_LIMIT } from "../../utils/staff-seat-limit";
 import { resolveScalePlatformAccess } from "../../utils/scale-plan-access";
 import { RiderService } from "../riders/rider-service";
 import { purgeRemovedMemberWorkspaceData } from "./team-member-removal-cleanup";
@@ -38,6 +39,9 @@ export interface TeamMemberDto {
   /** When inactive, whether the owner can reactivate without exceeding seat caps. */
   canActivate?: boolean;
   activationBlockReason?: string | null;
+  /** Owner-shared no-login link is on (rider seats only). Never the token or hash. */
+  staffLinkActive?: boolean;
+  staffLinkExpiresAt?: number | null;
 }
 
 export interface AssignableRoleDto {
@@ -143,7 +147,7 @@ async function evaluateMemberActivationEligibility(
   const limitations =
     "limitations" in sub && sub.limitations ?
       sub.limitations :
-      { staffLimit: 1, currentStaffCount: 0 };
+      { staffLimit: UNLIMITED_STAFF_SEAT_LIMIT, currentStaffCount: 0 };
 
   const [pending, seatUsage] = await Promise.all([
     countPendingInvitesByRole(businessId),
@@ -291,6 +295,9 @@ export async function listTeamMembers(
       email: (d.email || "") as string,
       role: (d.role || "rider") as TeamMemberRole,
       isActive,
+      staffLinkActive: typeof d.staffLinkHash === "string" && !!d.staffLinkHash,
+      staffLinkExpiresAt:
+        typeof d.staffLinkExpiresAt === "number" ? d.staffLinkExpiresAt : null,
     };
   });
 }
@@ -465,7 +472,10 @@ export async function getTeamHubOverview(
   const limitations =
     "limitations" in sub && sub.limitations ?
       sub.limitations :
-      { staffLimit: 1, currentStaffCount: countActiveStaffMembers(rawMembers) };
+      {
+        staffLimit: UNLIMITED_STAFF_SEAT_LIMIT,
+        currentStaffCount: countActiveStaffMembers(rawMembers),
+      };
 
   const members = await Promise.all(
     rawMembers.map(async (m) => {
@@ -1280,7 +1290,7 @@ export async function createTeamInvite(
   const limitations =
     "limitations" in sub && sub.limitations ?
       sub.limitations :
-      { staffLimit: 1, currentStaffCount: membersSnap.size };
+      { staffLimit: UNLIMITED_STAFF_SEAT_LIMIT, currentStaffCount: membersSnap.size };
   const current = limitations.currentStaffCount;
   const limit = limitations.staffLimit;
 

@@ -6,6 +6,7 @@ import {
 import { ContainerDailyLimitError } from "../../services/subscriptions/container-daily-limit-service";
 import { SyncConflictError } from "../../services/transactions/sync-conflict";
 import { logger } from "../../services/observability/logging/logger";
+import { resolveTransactionHistoryLimit } from "../../services/transactions/transaction-queries";
 import { maybeSendCustomerTxnNotification } from "../../services/portal/customer-transaction-notifier";
 
 import {
@@ -357,6 +358,7 @@ export const transactionHandler = {
       const history = await TransactionService.getTransactionHistory(
         businessId,
         id,
+        resolveTransactionHistoryLimit(req.query.limit),
       );
       res.json({ data: history });
     } catch (error) {

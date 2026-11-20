@@ -71,8 +71,16 @@ export function featureBulletsFromPlan(
   bullets.push(
     caps?.map === "full" ? "Interactive Map Enabled" : "Interactive Map Limited",
   );
+  const rawStaff = limitations?.staff;
+  const staffUnlimited =
+    !!rawStaff &&
+    typeof rawStaff === "object" &&
+    quotas.staffRiderMax === null &&
+    quotas.staffAdminMax === null;
   const staff = quotas.staffRiderMax || quotas.staffAdminMax;
-  if (staff) {
+  if (staffUnlimited) {
+    bullets.push("Unlimited Staff Apps");
+  } else if (staff) {
     const rider = quotas.staffRiderMax ?? 0;
     const admin = quotas.staffAdminMax ?? 0;
     const parts: string[] = [];

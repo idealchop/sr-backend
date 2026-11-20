@@ -25,6 +25,7 @@ import {
   postAcceptTeamInvite,
   postDeclineTeamInvite,
 } from "../handlers/team-invite-public-handler";
+import { postExchangeStaffLink } from "../handlers/team-staff-link-handler";
 import {
   postInquiry,
   postPartnerApplication,
@@ -134,6 +135,15 @@ router.patch("/portal/profile", portalLimiter, patchPortalCustomerProfile);
 
 router.get("/plant/maintenance/tasks", portalLimiter, getPublicPlantMaintenanceTasks);
 router.post("/plant/maintenance/complete", portalLimiter, postPublicPlantMaintenanceComplete);
+
+const staffLinkLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  skip: (req) => req.method === "OPTIONS" || !!process.env.FUNCTIONS_EMULATOR,
+});
+router.post("/staff-link/exchange", staffLinkLimiter, postExchangeStaffLink);
 
 router.get("/team-invites/:token", getPublicTeamInvite);
 router.post(

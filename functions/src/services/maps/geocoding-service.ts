@@ -1,4 +1,5 @@
 import { logger } from "../observability/logging/logger";
+import { GEOCODER_USER_AGENT, PH_BBOX, nominatimBaseUrl, photonBaseUrl } from "./maps-config";
 
 export type GeocodeResult = {
   latitude: number;
@@ -6,118 +7,177 @@ export type GeocodeResult = {
   formattedAddress?: string;
 };
 
-import { getGoogleMapsApiKey } from "./maps-config";
-
-type GeocodeApiPayload = {
-  status?: string;
-  results?: Array<{
-    formatted_address?: string;
-    geometry?: { location?: { lat?: number; lng?: number } };
-  }>;
+type PhotonFeature = {
+  geometry?: { coordinates?: [number, number] };
+  properties?: Record<string, string | undefined>;
 };
+type NominatimHit = { lat?: string; lon?: string; display_name?: string };
+
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const CACHE_MAX = 1000;
+const cache = new Map<string, { at: number; hit: GeocodeResult | null }>();
+
+function cacheGet(key: string): GeocodeResult | null | undefined {
+  const c = cache.get(key);
+  if (!c) return undefined;
+  if (Date.now() - c.at > CACHE_TTL_MS) {
+    cache.delete(key);
+    return undefined;
+  }
+  return c.hit;
+}
+function cacheSet(key: string, hit: GeocodeResult | null): void {
+  if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value as string);
+  cache.set(key, { at: Date.now(), hit });
+}
+
+/** Nominatim policy: at most 1 request per second per app — serialize calls with a 1.1s gap. */
+let nominatimChain: Promise<unknown> = Promise.resolve();
+let lastNominatimAt = 0;
+function throttleNominatim<T>(fn: () => Promise<T>): Promise<T> {
+  const run = nominatimChain.then(async () => {
+    const wait = lastNominatimAt + 1100 - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    lastNominatimAt = Date.now();
+    return fn();
+  });
+  nominatimChain = run.catch(() => undefined);
+  return run;
+}
+
+function inPhilippines(lat: number, lng: number): boolean {
+  return lat >= 4.5 && lat <= 21.2 && lng >= 116.9 && lng <= 126.7;
+}
+
+function valid(lat: unknown, lng: unknown): lat is number {
+  return (
+    typeof lat === "number" && typeof lng === "number" &&
+    Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0)
+  );
+}
+
+function photonLabel(p: Record<string, string | undefined>): string {
+  const street = [p.housenumber, p.street].filter(Boolean).join(" ");
+  return [
+    p.name, street && street !== p.name ? street : "",
+    p.district || p.locality, p.city || p.county, p.state, "Philippines",
+  ]
+    .filter(Boolean)
+    .filter((v, i, a) => a.indexOf(v) === i)
+    .join(", ");
+}
+
+async function getJson<T>(url: string, timeoutMs: number): Promise<T | null> {
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": GEOCODER_USER_AGENT,
+      "Accept": "application/json",
+      "Accept-Language": "en",
+    },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!response.ok) {
+    logger.warn("GeocodingService http_error", { status: response.status, host: new URL(url).host });
+    return null;
+  }
+  return (await response.json()) as T;
+}
 
 /**
- * Resolves a free-text Philippines address to coordinates via Google Geocoding API.
- * Returns null when the API key is missing or no match is found.
+ * Resolves Philippines addresses / pins with open OpenStreetMap geocoders (no Google, no key):
+ * Photon (komoot) first, Nominatim as fallback
+ * (throttled to 1 req/s, identified User-Agent, cached).
  */
 export class GeocodingService {
-  static readApiKey(): string | null {
-    const key = getGoogleMapsApiKey();
-    return key || null;
+  /** Kept for callers/logs: open geocoding needs no key, so it is always available. */
+  static isAvailable(): boolean {
+    return true;
   }
 
-  private static parseGeocodePayload(payload: GeocodeApiPayload): GeocodeResult | null {
-    if (payload.status !== "OK" || !payload.results?.length) {
-      return null;
-    }
-
-    const hit = payload.results[0];
-    const lat = hit.geometry?.location?.lat;
-    const lng = hit.geometry?.location?.lng;
-    if (typeof lat !== "number" || typeof lng !== "number") return null;
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-    if (lat === 0 && lng === 0) return null;
-
+  private static async photonSearch(query: string): Promise<GeocodeResult | null> {
+    const url = `${photonBaseUrl()}/api/?q=${encodeURIComponent(query)}` +
+      `&limit=1&lang=en&bbox=${PH_BBOX}`;
+    const d = await getJson<{ features?: PhotonFeature[] }>(url, 4000);
+    const f = d?.features?.[0];
+    const [lng, lat] = f?.geometry?.coordinates ?? [];
+    if (!valid(lat, lng) || !inPhilippines(lat, lng as number)) return null;
     return {
       latitude: lat,
-      longitude: lng,
-      formattedAddress: hit.formatted_address,
+      longitude: lng as number,
+      formattedAddress: photonLabel(f?.properties ?? {}) || undefined,
     };
   }
 
-  private static async fetchGeocode(
-    params: Record<string, string>,
-    region = "ph",
-  ): Promise<GeocodeResult | null> {
-    const apiKey = getGoogleMapsApiKey();
-    if (!apiKey) return null;
-
-    try {
-      const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
-      for (const [key, value] of Object.entries(params)) {
-        url.searchParams.set(key, value);
-      }
-      url.searchParams.set("key", apiKey);
-      url.searchParams.set("region", region);
-
-      const response = await fetch(url.toString());
-      if (!response.ok) {
-        logger.warn("GeocodingService.fetchGeocode http_error", {
-          status: response.status,
-        });
-        return null;
-      }
-
-      const payload = (await response.json()) as GeocodeApiPayload;
-      if (payload.status !== "OK") {
-        logger.warn("GeocodingService.fetchGeocode api_status", {
-          status: payload.status,
-          address: params.address?.slice(0, 120),
-        });
-      }
-      return GeocodingService.parseGeocodePayload(payload);
-    } catch (error) {
-      logger.warn("GeocodingService.fetchGeocode failed", { error });
-      return null;
-    }
+  private static async nominatimSearch(query: string): Promise<GeocodeResult | null> {
+    const url = `${nominatimBaseUrl()}/search?q=${encodeURIComponent(query)}` +
+      "&format=jsonv2&countrycodes=ph&limit=1&accept-language=en";
+    const d = await throttleNominatim(() => getJson<NominatimHit[]>(url, 6000));
+    const hit = d?.[0];
+    const lat = Number(hit?.lat);
+    const lng = Number(hit?.lon);
+    if (!valid(lat, lng)) return null;
+    return { latitude: lat, longitude: lng, formattedAddress: hit?.display_name };
   }
 
   static async geocodeAddress(
     address: string,
-    region = "ph",
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _region = "ph",
   ): Promise<GeocodeResult | null> {
     const trimmed = address.trim();
     if (!trimmed) return null;
+    const query = /\bphilippines\b/i.test(trimmed) ? trimmed : `${trimmed}, Philippines`;
+    const key = `f:${query.toLowerCase()}`;
+    const cached = cacheGet(key);
+    if (cached !== undefined) return cached;
 
-    if (!GeocodingService.readApiKey()) {
-      logger.warn("GeocodingService.geocodeAddress skipped — maps API key missing");
-      return null;
+    let hit: GeocodeResult | null = null;
+    try {
+      hit = await GeocodingService.photonSearch(query);
+    } catch (error) {
+      logger.warn("GeocodingService.photon failed", { error: String(error) });
     }
-
-    let query = trimmed;
-    if (!/\bphilippines\b/i.test(query)) {
-      query = `${query}, Philippines`;
+    if (!hit) {
+      try {
+        hit = await GeocodingService.nominatimSearch(trimmed);
+      } catch (error) {
+        logger.warn("GeocodingService.nominatim failed", { error: String(error) });
+      }
     }
-
-    const primary = await GeocodingService.fetchGeocode({ address: query }, region);
-    if (primary) return primary;
-
-    return GeocodingService.fetchGeocode(
-      { address: trimmed, components: "country:PH" },
-      region,
-    );
+    if (!hit) {
+      logger.warn("GeocodingService.geocodeAddress no_match", { address: trimmed.slice(0, 120) });
+    }
+    cacheSet(key, hit);
+    return hit;
   }
 
-  /** Reverse-geocode Messenger location pins to a readable delivery address. */
+  /** Reverse-geocode Messenger location pins to a readable address (Nominatim, throttled). */
   static async reverseGeocodeCoordinates(
     latitude: number,
     longitude: number,
-    region = "ph",
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _region = "ph",
   ): Promise<GeocodeResult | null> {
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-    return GeocodingService.fetchGeocode(
-      { latlng: `${latitude},${longitude}` },
-      region,
-    );
+    const key = `r:${latitude.toFixed(5)},${longitude.toFixed(5)}`;
+    const cached = cacheGet(key);
+    if (cached !== undefined) return cached;
+    let hit: GeocodeResult | null = null;
+    try {
+      const url = `${nominatimBaseUrl()}/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}` +
+        "&zoom=18&addressdetails=0&accept-language=en";
+      const d = await throttleNominatim(() => getJson<{ display_name?: string }>(url, 6000));
+      if (d?.display_name) hit = { latitude, longitude, formattedAddress: d.display_name };
+    } catch (error) {
+      logger.warn("GeocodingService.reverse failed", { error: String(error) });
+    }
+    cacheSet(key, hit);
+    return hit;
+  }
+
+  /** Test hook. */
+  static clearCache(): void {
+    cache.clear();
+    lastNominatimAt = 0;
   }
 }
