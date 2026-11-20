@@ -602,6 +602,46 @@ export const updateAccount = async (req: Request, res: Response) => {
   }
 };
 
+const LOGIN_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+async function verifyCurrentPassword(
+  email: string,
+  currentPassword: string,
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const apiKey = process.env.SMARTREFILL_FIREBASE_API_KEY;
+  if (!apiKey) {
+    throw new Error("Server configuration error: Missing API Key");
+  }
+
+  const verifyResponse = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        password: currentPassword,
+        returnSecureToken: true,
+      }),
+    },
+  );
+
+  if (verifyResponse.ok) return { ok: true };
+
+  const errorData: any = await verifyResponse.json();
+  if (
+    errorData.error?.message === "INVALID_PASSWORD" ||
+    errorData.error?.message === "INVALID_LOGIN_CREDENTIALS"
+  ) {
+    return {
+      ok: false,
+      status: 401,
+      error: "The current password entered is incorrect",
+    };
+  }
+  throw new Error(errorData.error?.message || "Failed to verify current password");
+}
+
 export const changePassword = async (req: Request, res: Response) => {
   const user = (req as any).user;
   const { currentPassword, newPassword } = req.body;
@@ -619,42 +659,12 @@ export const changePassword = async (req: Request, res: Response) => {
   }
 
   try {
-    // 1. Verify current password via Google Identity Toolkit REST API
-    const apiKey = process.env.SMARTREFILL_FIREBASE_API_KEY;
-    if (!apiKey) {
-      throw new Error("Server configuration error: Missing API Key");
+    const verified = await verifyCurrentPassword(user.email, currentPassword);
+    if (!verified.ok) {
+      res.status(verified.status).json({ error: verified.error });
+      return;
     }
 
-    const verifyResponse = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: user.email,
-          password: currentPassword,
-          returnSecureToken: true,
-        }),
-      },
-    );
-
-    if (!verifyResponse.ok) {
-      const errorData: any = await verifyResponse.json();
-      if (
-        errorData.error?.message === "INVALID_PASSWORD" ||
-        errorData.error?.message === "INVALID_LOGIN_CREDENTIALS"
-      ) {
-        res
-          .status(401)
-          .json({ error: "The current password entered is incorrect" });
-        return;
-      }
-      throw new Error(
-        errorData.error?.message || "Failed to verify current password",
-      );
-    }
-
-    // 2. Update password via Admin SDK
     await auth.updateUser(user.uid, { password: newPassword });
 
     logAuditEvent("PASSWORD_CHANGED", {
@@ -667,6 +677,91 @@ export const changePassword = async (req: Request, res: Response) => {
     res
       .status(500)
       .json({ error: "Failed to update password", details: error.message });
+  }
+};
+
+export const changeEmail = async (req: Request, res: Response) => {
+  const user = (req as any).user;
+  const currentPassword = String(req.body?.currentPassword || "");
+  const newEmail = normalizeUserEmail(String(req.body?.newEmail || ""));
+
+  if (!currentPassword) {
+    res.status(400).json({ error: "Current password is required" });
+    return;
+  }
+  if (!LOGIN_EMAIL_RE.test(newEmail)) {
+    res.status(400).json({ error: "Enter a valid email address" });
+    return;
+  }
+
+  const currentEmail = normalizeUserEmail(String(user.email || ""));
+  if (!currentEmail) {
+    res.status(400).json({ error: "Your account has no login email to change" });
+    return;
+  }
+  if (newEmail === currentEmail) {
+    res.status(400).json({ error: "New email must be different from your current email" });
+    return;
+  }
+
+  try {
+    const verified = await verifyCurrentPassword(currentEmail, currentPassword);
+    if (!verified.ok) {
+      res.status(verified.status).json({ error: verified.error });
+      return;
+    }
+
+    try {
+      await auth.getUserByEmail(newEmail);
+      res.status(409).json({ error: "That email is already used to sign in" });
+      return;
+    } catch (lookupError: any) {
+      if (lookupError?.code !== "auth/user-not-found") {
+        throw lookupError;
+      }
+    }
+
+    await auth.updateUser(user.uid, { email: newEmail, emailVerified: false });
+    await upsertSmartrefillUserProfile({ uid: user.uid, email: newEmail });
+
+    const ownedSnap = await db
+      .collection("businesses")
+      .where("ownerId", "==", user.uid)
+      .limit(5)
+      .get();
+    for (const doc of ownedSnap.docs) {
+      const existingEmail = normalizeUserEmail(String(doc.data()?.email || ""));
+      if (!existingEmail || existingEmail === currentEmail) {
+        await doc.ref.set(
+          { email: newEmail, updatedAt: FieldValue.serverTimestamp() },
+          { merge: true },
+        );
+      }
+    }
+
+    const userSnap = await db.collection("users").doc(user.uid).get();
+    const memberRef = await resolveStaffWorkspaceMemberRef(user.uid, userSnap.data());
+    if (memberRef) {
+      await memberRef.set(
+        { email: newEmail, updatedAt: FieldValue.serverTimestamp() },
+        { merge: true },
+      );
+    }
+
+    logAuditEvent("LOGIN_EMAIL_CHANGED", {
+      userId: user.uid,
+    });
+
+    res.json({ success: true, message: "Login email updated successfully" });
+  } catch (error: any) {
+    logger.error(`Failed to update login email for ${user.uid}:`, error);
+    if (error?.code === "auth/email-already-exists") {
+      res.status(409).json({ error: "That email is already used to sign in" });
+      return;
+    }
+    res
+      .status(500)
+      .json({ error: "Failed to update login email", details: error.message });
   }
 };
 

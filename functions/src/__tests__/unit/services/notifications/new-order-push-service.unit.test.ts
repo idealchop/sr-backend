@@ -3,6 +3,7 @@ import {
   buildNewOrderPushCopy,
   submissionTypeNeedsReviewPush,
 } from "../../../../services/notifications/new-order-push-service";
+import { submissionTypeNeedsOwnerOrderEmail } from "../../../../services/notifications/new-order-owner-email-service";
 
 describe("new-order-push-service", () => {
   it("builds copy for portal orders", () => {
@@ -42,5 +43,11 @@ describe("new-order-push-service", () => {
     expect(submissionTypeNeedsReviewPush("PORTAL_TX_RATINGS")).toBe(false);
     expect(submissionTypeNeedsReviewPush("PLACE_ORDER")).toBe(true);
     expect(submissionTypeNeedsReviewPush("PORTAL_PAY_BALANCE")).toBe(true);
+  });
+
+  it("emails the owner only for placed online orders", () => {
+    expect(submissionTypeNeedsOwnerOrderEmail("PLACE_ORDER")).toBe(true);
+    expect(submissionTypeNeedsOwnerOrderEmail("REQUEST_COLLECTION")).toBe(false);
+    expect(submissionTypeNeedsOwnerOrderEmail("PROFILE_UPDATE")).toBe(false);
   });
 });

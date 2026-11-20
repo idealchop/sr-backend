@@ -9,6 +9,7 @@ import {
   recordLoginEvent,
   updateAccount,
   changePassword,
+  changeEmail,
   forgotPassword,
   postCustomToken,
 } from "../handlers/auth-handler";
@@ -57,6 +58,7 @@ router.post("/forgot-password", authLimiter, forgotPassword);
 router.post("/custom-token", customTokenLimiter, postCustomToken);
 router.put("/account", validateFirebaseIdToken, updateAccount);
 router.put("/change-password", validateFirebaseIdToken, changePassword);
+router.put("/change-email", validateFirebaseIdToken, changeEmail);
 router.post(
   "/staff-onboarding/complete",
   validateFirebaseIdToken,

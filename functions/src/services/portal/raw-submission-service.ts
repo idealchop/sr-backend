@@ -10,6 +10,7 @@ import {
 import { OnlineOrderLimitError, OnlineOrderLimitService } from "./online-order-limit-service";
 import { allocateWalkInQueueNumber } from "./walk-in-queue-service";
 import { sendNewOrderPushForSubmission } from "../notifications/new-order-push-service";
+import { sendNewOrderOwnerEmailForSubmission } from "../notifications/new-order-owner-email-service";
 import {
   notifyPortalRecognizedProfileUpdated,
   notifyPortalSubmissionCreated,
@@ -197,15 +198,23 @@ export class RawSubmissionService {
       referenceId,
     });
 
-    void sendNewOrderPushForSubmission(businessId, {
+    const newOrderNotify = {
       submissionId: ref.id,
       submissionType,
       customerId,
       customerDisplayName: resolvePortalCustomerDisplayName(undefined, payload),
       referenceId,
       portalOrderKind,
-    }).catch((err) => {
+    };
+    void sendNewOrderPushForSubmission(businessId, newOrderNotify).catch((err) => {
       logger.warn("new_order push failed", {
+        businessId,
+        submissionId: ref.id,
+        error: err,
+      });
+    });
+    void sendNewOrderOwnerEmailForSubmission(businessId, newOrderNotify).catch((err) => {
+      logger.warn("new_order owner email failed", {
         businessId,
         submissionId: ref.id,
         error: err,
