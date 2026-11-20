@@ -374,6 +374,20 @@ export const openApiSpec = {
         },
       },
     },
+    "/auth/change-email": {
+      put: {
+        tags: ["Auth"],
+        summary: "Change login email",
+        description:
+          "Re-checks the current password, then updates Firebase Auth email and workspace profile emails.",
+        responses: {
+          200: { description: "Login email updated." },
+          400: { description: "Missing password or invalid email." },
+          401: { description: "Missing token or incorrect password." },
+          409: { description: "Email already used to sign in." },
+        },
+      },
+    },
     "/business": {
       get: {
         tags: ["Business"],
